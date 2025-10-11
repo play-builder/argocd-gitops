@@ -1,0 +1,10 @@
+# Namespace - Logical isolation boundary
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app-dev
+  labels:
+    app.kubernetes.io/name: app
+    app.kubernetes.io/environment: dev
+    app.kubernetes.io/component: namespace
+    pod-security.kubernetes.io/enforce: restricted
