@@ -1,0 +1,16 @@
+# Service - Exposes pods as a single network endpoint
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-svc
+  labels:
+    app.kubernetes.io/name: app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
