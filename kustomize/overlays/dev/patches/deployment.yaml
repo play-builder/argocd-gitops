@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: PGSSLMODE
+              value: "no-verify"
+            - name: LOG_LEVEL
+              value: "debug"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
