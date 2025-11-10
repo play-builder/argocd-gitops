@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: exchange-settlement-prod
+namespace: app-prod
+resources:
+  - ../../base
+  - pdb.yaml
+  - hpa.yaml
+commonLabels:
+  environment: prod
+patches:
+  - path: patches/namespace.yaml
+  - path: patches/deployment.yaml
+  - path: patches/ingress.yaml
+  - path: patches/externalsecret.yaml
+  - path: patches/networkpolicy.yaml
+images:
+  - name: app
+    newName: 346135039532.dkr.ecr.us-east-1.amazonaws.com/exchange-settlement-app
+    newTag: prod-104ecd8
