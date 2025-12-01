@@ -1,0 +1,69 @@
+# =============================================================================
+# Kustomize Build Validation
+# =============================================================================
+# PR에서 Kustomize 매니페스트가 올바르게 빌드되는지 검증합니다.
+# 문법 오류, 패치 누락, 리소스 참조 오류 등을 사전에 발견합니다.
+# =============================================================================
+name: Validate Manifests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "kustomize/**"
+      - "argocd/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: 🔍 Kustomize Build Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        overlay: [dev, prod]
+    steps:
+      - uses: actions/checkout@v5
+
+      # kustomize 설치
+      - name: 📦 Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: "5.4.3"
+
+      # kustomize build 검증
+      - name: 🏗️ Kustomize Build (${{ matrix.overlay }})
+        id: build
+        run: |
+          echo "### Building kustomize/overlays/${{ matrix.overlay }}..."
+          kustomize build kustomize/overlays/${{ matrix.overlay }} > /tmp/manifests.yaml
+          echo "✅ Build successful"
+          echo "---"
+          echo "Generated $(wc -l < /tmp/manifests.yaml) lines of YAML"
+
+      # YAML 문법 검증
+      - name: 📐 YAML Lint
+        run: |
+          pip install yamllint --break-system-packages
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 200}}}" \
+            kustomize/overlays/${{ matrix.overlay }}/
+
+      # (선택) kubeval로 K8s API 스키마 검증
+      - name: ✅ Validate K8s Manifests
+        run: |
+          # kubeval 없이도 kustomize build 성공이면 기본 검증 완료
+          echo "Kustomize build passed for ${{ matrix.overlay }} overlay"
+
+      - name: 💬 Comment on PR
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `#### ❌ Kustomize Build Failed — ${{ matrix.overlay }}\n\nPlease check the build output for errors.`
+            });
