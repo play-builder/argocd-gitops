@@ -5,8 +5,6 @@ metadata:
 namespace: app-dev
 resources:
   - ../../base
-commonLabels:
-  environment: dev
 patches:
   - path: patches/namespace.yaml
   - path: patches/deployment.yaml
@@ -17,3 +15,7 @@ images:
   - name: app
     newName: 346135039532.dkr.ecr.us-east-1.amazonaws.com/exchange-settlement-app
     newTag: dev-39073a8304f2c6c59ae7b4e94f42c5c72a8627b1
+labels:
+  - includeSelectors: false
+    pairs:
+      environment: dev

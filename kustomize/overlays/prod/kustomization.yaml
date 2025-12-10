@@ -7,8 +7,6 @@ resources:
   - ../../base
   - pdb.yaml
   - hpa.yaml
-commonLabels:
-  environment: prod
 patches:
   - path: patches/namespace.yaml
   - path: patches/deployment.yaml
@@ -19,3 +17,7 @@ images:
   - name: app
     newName: 346135039532.dkr.ecr.us-east-1.amazonaws.com/exchange-settlement-app
     newTag: prod-104ecd8
+labels:
+  - includeSelectors: false
+    pairs:
+      environment: prod
