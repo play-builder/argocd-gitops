@@ -5,5 +5,4 @@ metadata:
   name: app
   labels:
     app.kubernetes.io/name: app
-    app.kubernetes.io/environment: dev
     pod-security.kubernetes.io/enforce: restricted
