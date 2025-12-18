@@ -125,8 +125,6 @@ spec:
             periodSeconds: 5
             failureThreshold: 3
           securityContext:
-            seccompProfile:
-              type: RuntimeDefault
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
