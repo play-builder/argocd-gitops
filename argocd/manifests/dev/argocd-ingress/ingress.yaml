@@ -12,6 +12,7 @@ spec:
   tls:
     - hosts:
         - argocd-dev.playbuilder.xyz
+      secretName: argocd-dev-tls
   rules:
     - host: argocd-dev.playbuilder.xyz
       http:

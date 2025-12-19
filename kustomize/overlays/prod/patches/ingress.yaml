@@ -8,6 +8,7 @@ spec:
         - playbuilder.xyz
         - custody.playbuilder.xyz
         - datalab.playbuilder.xyz
+      secretName: playbuilder-prod-tls
   rules:
     - host: playbuilder.xyz
       http:
