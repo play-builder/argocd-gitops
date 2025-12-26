@@ -4,7 +4,7 @@ metadata:
   name: argocd-server-ingress
   namespace: argocd
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/whitelist-source-range: "211.58.0.0/16" # TODO: Set actual office CIDR "[208.0.114.5/32]"
