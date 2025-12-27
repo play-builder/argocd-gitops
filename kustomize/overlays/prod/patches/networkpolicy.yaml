@@ -3,20 +3,6 @@ kind: NetworkPolicy
 metadata:
   name: app-network-policy
 spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: app
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 3000
   egress:
     - to:
         - namespaceSelector: {}
