@@ -4,8 +4,10 @@ metadata:
   name: exchange-settlement-prod
   namespace: argocd
   labels:
-    environment: prod
+    app.kubernetes.io/name: exchange-settlement
+    app.kubernetes.io/component: app
     app.kubernetes.io/part-of: exchange-settlement
+    environment: prod
   annotations:
     argocd.argoproj.io/sync-wave: "3"
   finalizers:
