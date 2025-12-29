@@ -2,7 +2,7 @@
 # argocd-gitops .gitignore
 # =============================================================================
 
-# ArgoCD credentials (절대 커밋 금지!)
+# ArgoCD credentials (NEVER commit!)
 argocd/repo-credentials.yaml
 
 # OS
