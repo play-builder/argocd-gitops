@@ -13,7 +13,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: default
+  project: exchange-settlement-dev
   source:
     repoURL: https://github.com/play-builder/argocd-gitops.git
     targetRevision: main

@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: exchange-settlement-prod
+  namespace: argocd
+  labels:
+    environment: prod
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "Prod environment for exchange-settlement platform"
+  sourceRepos:
+    - "https://github.com/play-builder/argocd-gitops.git"
+    - "https://charts.external-secrets.io"
+    - "https://kubernetes.github.io/ingress-nginx"
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: app-prod
+    - server: https://kubernetes.default.svc
+      namespace: argocd # argocd-ingress-prod가 이 NS에 배포
+    - server: https://kubernetes.default.svc
+      namespace: external-secrets
+    - server: https://kubernetes.default.svc
+      namespace: ingress-nginx
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: external-secrets.io
+      kind: ClusterSecretStore
+  orphanedResources:
+    warn: true
+  roles:
+    - name: read-only
+      description: "Read-only access to prod project"
+      policies:
+        - p, proj:exchange-settlement-prod:read-only, applications, get, exchange-settlement-prod/*, allow
+        - p, proj:exchange-settlement-prod:read-only, applications, sync, exchange-settlement-prod/*, deny
