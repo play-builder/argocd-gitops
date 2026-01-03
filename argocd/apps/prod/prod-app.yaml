@@ -27,9 +27,16 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
+      - Validate=true
+      - ApplyOutOfSyncOnly=true
     retry:
       limit: 5
       backoff:
         duration: 30s
         factor: 2
         maxDuration: 5m
+    info:
+      - name: "Environment"
+        value: "production"
+      - name: "Owner"
+        value: "platform-team"
