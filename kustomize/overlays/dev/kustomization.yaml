@@ -10,6 +10,7 @@ patches:
   - path: patches/deployment.yaml
   - path: patches/ingress.yaml
   - path: patches/externalsecret.yaml
+  - path: patches/networkpolicy.yaml
 images:
   - name: app
     newName: 346135039532.dkr.ecr.us-east-1.amazonaws.com/exchange-settlement-app
