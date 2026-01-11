@@ -26,6 +26,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: app-prod
+  info:
+    - name: "Environment"
+      value: "production"
+    - name: "Owner"
+      value: "platform-team"
   syncPolicy:
     automated: null
     syncOptions:
@@ -40,8 +45,3 @@ spec:
         duration: 30s
         factor: 2
         maxDuration: 5m
-    info:
-      - name: "Environment"
-        value: "production"
-      - name: "Owner"
-        value: "platform-team"
