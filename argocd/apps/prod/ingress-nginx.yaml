@@ -22,7 +22,7 @@ spec:
       releaseName: ingress-nginx
       values: |
         controller:
-          allowSnippetAnnotations: true
+          allowSnippetAnnotations: false
           replicaCount: 2
           service:
             type: LoadBalancer
