@@ -23,6 +23,8 @@ spec:
       values: |
         controller:
           allowSnippetAnnotations: false
+          config:
+            add-headers: "ingress-nginx/custom-headers"
           replicaCount: 2
           service:
             type: LoadBalancer
