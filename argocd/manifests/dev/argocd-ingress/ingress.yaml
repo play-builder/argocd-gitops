@@ -7,6 +7,8 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Add IP whitelist even for dev environment
+    nginx.ingress.kubernetes.io/whitelist-source-range: "211.58.0.0/16"
 spec:
   ingressClassName: nginx
   tls:
