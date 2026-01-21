@@ -16,8 +16,8 @@ spec:
   ignoreDifferences:
     - group: apps
       kind: Deployment
-      jsonPointers:
-        - /spec/replicas
+      jqPathExpressions:
+        - .spec.replicas
   project: exchange-settlement-prod
   source:
     repoURL: https://github.com/play-builder/argocd-gitops.git
