@@ -39,6 +39,7 @@ spec:
       - PruneLast=true
       - Validate=true
       - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
     retry:
       limit: 5
       backoff:
