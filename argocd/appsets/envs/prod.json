@@ -1,0 +1,21 @@
+{
+  "env": "prod",
+  "project": "exchange-settlement-prod",
+  "appNamespace": "app-prod",
+  "awsAccountId": "346135039532",
+  "awsRegion": "us-east-1",
+  "ecrRepo": "346135039532.dkr.ecr.us-east-1.amazonaws.com/exchange-settlement-app",
+  "esoIrsaRoleArn": "arn:aws:iam::346135039532:role/exchange-settlement-prod-external-secrets",
+  "esoVersion": "0.14.2",
+  "esoWebhook": true,
+  "esoCertController": true,
+  "ingressNginxVersion": "4.11.3",
+  "ingressNginxReplicas": 2,
+  "ingressNginxCpuReq": "200m",
+  "ingressNginxMemReq": "256Mi",
+  "ingressNginxCpuLim": "500m",
+  "ingressNginxMemLim": "512Mi",
+  "retryLimit": 5,
+  "retryDuration": "30s",
+  "retryMaxDuration": "5m"
+}
