@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bootstrap
+    app.kubernetes.io/part-of: exchange-settlement
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    # Source 1: ApplicationSet definitions
+    - repoURL: https://github.com/play-builder/argocd-gitops.git
+      targetRevision: main
+      path: argocd/appsets
+      directory:
+        recurse: false
+        include: "*.yaml"
+    # Source 2: AppProject definitions
+    - repoURL: https://github.com/play-builder/argocd-gitops.git
+      targetRevision: main
+      path: argocd/projects
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 2m
