@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: exchange-settlement
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: exchange-settlement
+    app.kubernetes.io/component: app
+    app.kubernetes.io/part-of: exchange-settlement
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/play-builder/argocd-gitops.git
+        revision: main
+        files:
+          - path: "argocd/appsets/envs/*.json"
+  template:
+    metadata:
+      name: "exchange-settlement-{{ .env }}"
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: exchange-settlement
+        app.kubernetes.io/component: app
+        app.kubernetes.io/part-of: exchange-settlement
+        environment: "{{ .env }}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "3"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: "{{ .project }}"
+      source:
+        repoURL: https://github.com/play-builder/argocd-gitops.git
+        targetRevision: main
+        path: "kustomize/overlays/{{ .env }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .appNamespace }}"
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jqPathExpressions:
+            - .spec.replicas
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+          - Validate=true
+          - ServerSideApply=true
+        retry:
+          limit: "{{ .retryLimit }}"
+          backoff:
+            duration: "{{ .retryDuration }}"
+            factor: 2
+            maxDuration: "{{ .retryMaxDuration }}"
+  templatePatch: |
+    {{- if eq .env "dev" }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+    {{- end }}
+    {{- if eq .env "prod" }}
+    spec:
+      syncPolicy:
+        automated: null
+      info:
+        - name: "Environment"
+          value: "production"
+        - name: "Owner"
+          value: "platform-team"
+    {{- end }}
