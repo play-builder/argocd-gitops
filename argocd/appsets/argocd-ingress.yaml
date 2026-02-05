@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-ingress
+    app.kubernetes.io/component: addon
+    app.kubernetes.io/part-of: exchange-settlement
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/play-builder/argocd-gitops.git
+        revision: main
+        files:
+          - path: "argocd/appsets/envs/*.json"
+  template:
+    metadata:
+      name: "argocd-ingress-{{ .env }}"
+      namespace: argocd
+      labels:
+        app.kubernetes.io/name: argocd-ingress
+        app.kubernetes.io/component: addon
+        app.kubernetes.io/part-of: exchange-settlement
+        environment: "{{ .env }}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "4"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: "{{ .project }}"
+      source:
+        repoURL: https://github.com/play-builder/argocd-gitops.git
+        targetRevision: main
+        path: "argocd/manifests/{{ .env }}/argocd-ingress"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: "{{ .retryLimit }}"
+          backoff:
+            duration: "{{ .retryDuration }}"
+            factor: 2
+            maxDuration: "{{ .retryMaxDuration }}"
