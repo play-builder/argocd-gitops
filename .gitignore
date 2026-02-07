@@ -19,5 +19,5 @@ Thumbs.db
 # Temp
 tmp/
 *.bak
-mod.sh
+scripts
 _BACKUP_SOURCE
