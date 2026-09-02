@@ -1,5 +1,5 @@
 schemaVersion: 1
-verifiedAt: "2026-09-02"
+verifiedAt: "2026-09-03"
 
 tooling:
   yq: "4.53.6"
@@ -16,3 +16,8 @@ delivery:
   gatewayApiTrafficRouterPluginDigest: "sha256:af5aaba7e34c2b8eb0d52128ac91cb913f065b710c7dea88db59d626a96c53c2"
   externalSecretsChart: "2.10.0"
   awsLoadBalancerController: "3.5.0"
+
+database:
+  postgres: "17.6-alpine"
+  imageIndexDigest: "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94"
+  storageClass: "course-gp3"

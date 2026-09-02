@@ -14,6 +14,7 @@ spec:
           - environment: dev
             namespace: app-dev
             valuesFile: envs/dev/values.yaml
+            statefulValuesFile: envs/dev/stateful-values.yaml
   template:
     metadata:
       name: "sample-app-{{ .environment }}"
@@ -29,6 +30,7 @@ spec:
           releaseName: sample-app
           valueFiles:
             - "../../{{ .valuesFile }}"
+            - "../../{{ .statefulValuesFile }}"
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ .namespace }}"

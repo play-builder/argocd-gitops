@@ -41,6 +41,28 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- .Values.image.digest | trimPrefix "sha256:" | trunc 12 -}}
 {{- end -}}
 
+{{- define "sample-app.databaseFullname" -}}
+{{- printf "%s-postgresql" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "sample-app.databaseImage" -}}
+{{- $repository := required "database.image.repository is required" .Values.database.image.repository -}}
+{{- $digest := required "database.image.digest is required; mutable tags are not accepted" .Values.database.image.digest -}}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
+{{- fail "database.image.digest must be sha256 followed by 64 lowercase hexadecimal characters" -}}
+{{- end -}}
+{{- printf "%s@%s" $repository $digest -}}
+{{- end -}}
+
+{{- define "sample-app.migrationImage" -}}
+{{- $repository := required "database.migrationImage.repository is required" .Values.database.migrationImage.repository -}}
+{{- $digest := required "database.migrationImage.digest is required; mutable tags are not accepted" .Values.database.migrationImage.digest -}}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
+{{- fail "database.migrationImage.digest must be sha256 followed by 64 lowercase hexadecimal characters" -}}
+{{- end -}}
+{{- printf "%s@%s" $repository $digest -}}
+{{- end -}}
+
 {{- define "sample-app.validateKind" -}}
 {{- if not (or (eq .Values.workload.kind "Deployment") (eq .Values.workload.kind "Rollout")) -}}
 {{- fail "workload.kind must be Deployment or Rollout" -}}
@@ -111,6 +133,20 @@ spec:
           value: {{ .Values.app.shutdownDelayMs | quote }}
         - name: SECRET_KEYS
           value: {{ .Values.app.secretKeys | quote }}
+        {{- if .Values.database.enabled }}
+        - name: DATABASE_ENABLED
+          value: "true"
+        - name: DB_HOST
+          value: {{ default (include "sample-app.databaseFullname" .) .Values.database.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.database.port | quote }}
+        - name: DB_NAME
+          value: {{ .Values.database.name | quote }}
+        - name: DB_USER
+          value: {{ .Values.database.user | quote }}
+        - name: DB_SSL
+          value: "false"
+        {{- end }}
       {{- if .Values.externalSecrets.enabled }}
       envFrom:
         - secretRef:

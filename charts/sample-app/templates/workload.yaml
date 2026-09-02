@@ -5,6 +5,8 @@ kind: Deployment
 metadata:
   name: {{ include "sample-app.fullname" . }}
   namespace: {{ include "sample-app.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     {{- include "sample-app.labels" . | nindent 4 }}
 spec:
@@ -28,6 +30,8 @@ kind: Rollout
 metadata:
   name: {{ include "sample-app.fullname" . }}
   namespace: {{ include "sample-app.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     {{- include "sample-app.labels" . | nindent 4 }}
 spec:
@@ -53,9 +57,6 @@ spec:
             namespace: {{ include "sample-app.namespace" . }}
       steps:
         {{- toYaml .Values.rollout.canary.steps | nindent 8 }}
-        {{- if .Values.rollout.canary.manualPromotion }}
-        - pause: {}
-        {{- end }}
   template:
     {{- include "sample-app.podTemplate" . | nindent 4 }}
 {{- end }}
