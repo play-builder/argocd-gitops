@@ -38,6 +38,8 @@ gateway:
   httpsEnabled: false
 
 rollout:
+  rollbackWindow:
+    revisions: 2
   analysis:
     enabled: true
     prometheusAddress: "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-REPLACE_ME"

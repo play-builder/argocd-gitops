@@ -98,6 +98,8 @@ gateway:
   httpsEnabled: false
 
 rollout:
+  rollbackWindow:
+    revisions: 0
   analysis:
     enabled: false
     prometheusAddress: ""

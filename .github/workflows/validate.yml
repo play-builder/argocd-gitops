@@ -56,3 +56,16 @@ jobs:
         run: |
           kubectl kustomize argocd/bootstrap/dev > /tmp/argocd-dev.yaml
           kubectl kustomize argocd/bootstrap/prod > /tmp/argocd-prod.yaml
+
+      - name: Verify production rollback window
+        run: |
+          awk '
+            /^kind: Rollout$/ { in_rollout = 1 }
+            in_rollout && /^  rollbackWindow:$/ { getline; if ($0 == "    revisions: 2") found = 1 }
+            END {
+              if (!found) {
+                print "Prod Rollout must render rollbackWindow.revisions=2" > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' /tmp/sample-app-prod.yaml

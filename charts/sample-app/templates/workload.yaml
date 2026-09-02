@@ -35,6 +35,10 @@ spec:
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   revisionHistoryLimit: 3
+  {{- if gt (int .Values.rollout.rollbackWindow.revisions) 0 }}
+  rollbackWindow:
+    revisions: {{ .Values.rollout.rollbackWindow.revisions }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "sample-app.selectorLabels" . | nindent 6 }}
