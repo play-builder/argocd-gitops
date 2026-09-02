@@ -11,10 +11,13 @@ digest만 사용합니다.
 charts/sample-app/              공통 Helm chart
 ├── templates/workload.yaml     Deployment 또는 Rollout
 ├── templates/gateway.yaml      AWS LBC Gateway API + HTTPRoute
-└── templates/analysistemplate.yaml
+├── templates/analysistemplate.yaml
+├── templates/database-statefulset.yaml
+└── templates/migration-job.yaml
 
 envs/dev/values.yaml            자동 배포, RollingUpdate
 envs/prod/values.yaml           승인된 PR, Canary + AMP 분석
+envs/*/stateful-values.yaml      Ch14 이후에만 true로 바꾸는 DB opt-in switch
 
 argocd/bootstrap/dev/           dev 클러스터만 읽는 root 구성
 argocd/bootstrap/prod/          prod 클러스터만 읽는 root 구성
@@ -59,6 +62,44 @@ kubectl kustomize argocd/bootstrap/prod > /tmp/bootstrap-prod.yaml
 정상 결과는 dev 렌더에 `Deployment`만, prod 렌더에 `Rollout`과 native `sigv4`가
 나오는 것입니다.
 
+Stateful 렌더 계약은 별도 테스트로 확인합니다.
+
+```bash
+bash tests/stateful-contract.sh
+```
+
+## Ch14 이후 Stateful Mini Commerce 활성화
+
+두 `stateful-values.yaml`은 ApplicationSet에 연결되어 있지만 초기값은 `false`입니다. 따라서 기존
+Ch01~Ch14는 PostgreSQL, PVC, migration Job 없이 Stateless로 진행됩니다. Stateful 보충 실습의
+Dev PR에서만 다음 값을 바꿉니다.
+
+```yaml
+database:
+  enabled: true
+```
+
+활성화 후 Argo CD는 다음 순서로 동기화합니다.
+
+```text
+wave -3  ExternalSecret
+wave -2  PostgreSQL Service + StatefulSet + course-gp3 PVC
+wave -1  node-pg-migrate Sync hook Job
+wave  0  Mini Commerce Deployment 또는 Rollout
+```
+
+PostgreSQL은 실습 비용과 schema migration 관찰을 위한 단일 replica 구성입니다. Multi-AZ,
+backup/PITR, failover를 제공하는 운영 DB 설계가 아니며 RDS/Aurora의 대체안으로 사용하지 않습니다.
+
+Application과 migration Job은 같은 ECR image를 사용할 수 있지만 desired state에는 digest를
+별도로 저장합니다. 정상 전진 배포와 Dev→Prod 승격은 두 digest를 함께 변경하고, schema migration
+후 긴급 Fix-Backward는 application digest만 되돌립니다. 이미 적용된 backward-compatible schema는
+내리지 않습니다.
+
+StatefulSet을 삭제해도 `volumeClaimTemplates`가 만든 PVC가 자동으로 정리된다고 가정하지 않습니다.
+최종 정리에서는 대상 namespace와 label을 확인한 뒤 PVC를 명시적으로 삭제하고 PV와 EBS volume
+삭제 완료까지 확인해야 합니다.
+
 ## 운영 계약
 
 - dev: application code PR merge → build/push → dev digest PR → validate → auto-merge → Argo CD auto-sync
@@ -68,6 +109,8 @@ kubectl kustomize argocd/bootstrap/prod > /tmp/bootstrap-prod.yaml
 - AMP 조회는 Rollouts native SigV4를 사용합니다. `aws-sigv4-proxy`는 설치하지 않습니다.
 - 분석은 Rollouts의 `podTemplateHashValue: Latest`를 받아 최신 ReplicaSet 지표만 조회합니다.
 - 카나리 request rate가 `minimumRequestRate`보다 작으면 성공률이 높더라도 승격하지 않습니다.
+- Prod 단계의 무기한 `pause: {}`는 `setWeight: 100` 앞에 있으므로 사람이 승인하기 전에 전체
+  traffic이 새 version으로 전환되지 않습니다.
 
 ## GitHub 보호 규칙
 

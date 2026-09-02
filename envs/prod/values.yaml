@@ -10,6 +10,12 @@ image:
   repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
   digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
+database:
+  enabled: false
+  migrationImage:
+    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
 workload:
   kind: Rollout
 
@@ -69,4 +75,5 @@ rollout:
       - setWeight: 50
       - pause:
           duration: 2m
+      - pause: {}
       - setWeight: 100

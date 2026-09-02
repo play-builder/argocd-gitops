@@ -1,0 +1,3 @@
+# Change only this flag to true in the post-Ch14 Stateful application lab.
+database:
+  enabled: false

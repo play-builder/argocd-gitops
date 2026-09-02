@@ -1,0 +1,70 @@
+{{- if .Values.database.enabled }}
+{{- $secretName := required "externalSecrets.targetSecretName is required when database is enabled" .Values.externalSecrets.targetSecretName }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sample-app.fullname" . }}-migration
+  namespace: {{ include "sample-app.namespace" . }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: sample-app-migration
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: sample-app
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: {{ .Values.database.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.database.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sample-app-migration
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: sample-app
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: {{ include "sample-app.migrationImage" . }}
+          imagePullPolicy: {{ .Values.database.migrationImage.pullPolicy }}
+          command: ["node", "scripts/migrate.mjs"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          env:
+            - name: DATABASE_ENABLED
+              value: "true"
+            - name: DB_HOST
+              value: {{ default (include "sample-app.databaseFullname" .) .Values.database.host | quote }}
+            - name: DB_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: DB_USER
+              value: {{ .Values.database.user | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ .Values.database.passwordSecretKey }}
+            - name: DB_SSL
+              value: "false"
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

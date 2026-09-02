@@ -85,6 +85,35 @@ externalSecrets:
   targetSecretName: sample-app-secrets
   refreshInterval: 1h
 
+# Lab-only PostgreSQL. Ch01~Ch14 remains Stateless because this is false by default.
+database:
+  enabled: false
+  host: ""
+  port: 5432
+  name: commerce
+  user: commerce
+  passwordSecretKey: DB_PASSWORD
+  storageClassName: course-gp3
+  storageSize: 5Gi
+  image:
+    repository: docker.io/library/postgres
+    digest: sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    pullPolicy: IfNotPresent
+  migrationImage:
+    repository: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  migration:
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 gateway:
   enabled: true
   className: aws-alb

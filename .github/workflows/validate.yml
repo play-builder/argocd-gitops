@@ -69,3 +69,6 @@ jobs:
               }
             }
           ' /tmp/sample-app-prod.yaml
+
+      - name: Verify Stateful application contract
+        run: bash tests/stateful-contract.sh
