@@ -78,7 +78,7 @@ topologySpread:
 
 externalSecrets:
   enabled: false
-  awsRegion: us-east-1
+  awsRegion: ""
   readerServiceAccount: external-secrets-reader
   readerRoleArn: ""
   remoteSecretName: ""
@@ -103,7 +103,7 @@ rollout:
   analysis:
     enabled: false
     prometheusAddress: ""
-    awsRegion: us-east-1
+    awsRegion: ""
     interval: 30s
     count: 5
     failureLimit: 3

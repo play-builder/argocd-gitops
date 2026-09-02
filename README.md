@@ -26,9 +26,12 @@ dev Argo CD가 실수로 prod values를 배포하거나, prod Argo CD가 dev 자
 
 ## 처음 한 번 바꿀 값
 
-다음 placeholder는 계정과 저장소가 만들어진 뒤 실제 값으로 교체합니다.
+다음 placeholder는 계정과 저장소가 만들어진 뒤 실제 값으로 교체합니다. `REPLACE_ME_REGION`은
+과정에서 검증한 `ap-northeast-2` 또는 `us-east-1` 중 EKS를 만든 Region과 같아야 합니다.
 
-- `123456789012`: AWS 계정 ID
+- `REPLACE_ME_ACCOUNT_ID`: AWS 계정 ID
+- `REPLACE_ME_REGION`: `ap-northeast-2` 또는 `us-east-1`
+- `REPLACE_ME_PROJECT`: Terraform의 `project_name`
 - `example.com`: Route53 도메인
 - `ws-REPLACE_ME`: 각 클러스터의 AMP workspace ID
 - `REPLACE_ME`: GitHub owner/team과 GitOps repository URL
@@ -37,7 +40,7 @@ dev Argo CD가 실수로 prod values를 배포하거나, prod Argo CD가 dev 자
 검색 명령:
 
 ```bash
-rg -n '123456789012|example\.com|REPLACE_ME|sha256:0{64}' .
+rg -n 'REPLACE_ME|example\.com|sha256:0{64}' .
 ```
 
 ## 로컬 검증

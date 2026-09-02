@@ -7,7 +7,7 @@ namespace:
     environment: prod
 
 image:
-  repository: "123456789012.dkr.ecr.us-east-1.amazonaws.com/playdevops/sample-app"
+  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
   digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 workload:
@@ -27,8 +27,8 @@ podDisruptionBudget:
 
 externalSecrets:
   enabled: true
-  awsRegion: us-east-1
-  readerRoleArn: "arn:aws:iam::123456789012:role/prod-playdevops-external-secrets-reader-role"
+  awsRegion: "REPLACE_ME_REGION"
+  readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/prod-REPLACE_ME_PROJECT-external-secrets-reader-role"
   remoteSecretName: "sample-app/prod/app-secrets"
 
 gateway:
@@ -42,8 +42,8 @@ rollout:
     revisions: 2
   analysis:
     enabled: true
-    prometheusAddress: "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-REPLACE_ME"
-    awsRegion: us-east-1
+    prometheusAddress: "https://aps-workspaces.REPLACE_ME_REGION.amazonaws.com/workspaces/ws-REPLACE_ME"
+    awsRegion: "REPLACE_ME_REGION"
     interval: 30s
     count: 5
     failureLimit: 3

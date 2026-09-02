@@ -7,7 +7,7 @@ namespace:
     environment: dev
 
 image:
-  repository: "123456789012.dkr.ecr.us-east-1.amazonaws.com/playdevops/sample-app"
+  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
   digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 workload:
@@ -24,8 +24,8 @@ podDisruptionBudget:
 
 externalSecrets:
   enabled: true
-  awsRegion: us-east-1
-  readerRoleArn: "arn:aws:iam::123456789012:role/dev-playdevops-external-secrets-reader-role"
+  awsRegion: "REPLACE_ME_REGION"
+  readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/dev-REPLACE_ME_PROJECT-external-secrets-reader-role"
   remoteSecretName: "sample-app/dev/app-secrets"
 
 gateway:
