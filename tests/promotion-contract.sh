@@ -72,9 +72,46 @@ case_promotion() {
   local count
   count=$(classify_rollback "$rollback") || fail "completed rollback ReplicaSet topology is invalid"
   rollback_json=$(yq -o=json '.' "$rollback")
+  jq -e '
+    . as $root |
+    $root.completedRollback as $r |
+    ($r.candidates | type == "array" and length > 0) and
+    all($r.candidates[];
+      (keys | sort) == ["gitRevertSha","imageDigest","podTemplateHash","productReadContract","rolloutRevision"] and
+      (.imageDigest | test("^sha256:[0-9a-f]{64}$")) and
+      .productReadContract == "v2prime" and
+      (.rolloutRevision | type == "number" and . >= 1) and
+      (.gitRevertSha | test("^[0-9a-f]{40}$")) and
+      .podTemplateHash == $r.targetHash and
+      .imageDigest == $root.releaseLineage.v2PrimeContractCompatible.indexDigest and
+      .gitRevertSha == $root.releaseLineage.v2PrimeContractCompatible.sourceSha
+    )
+  ' <<<"$rollback_json" >/dev/null || fail "rollback candidate must bind the target hash and v2Prime release lineage"
   (( count < $(jq -r '.completedRollback.rollbackWindow.revisions' <<<"$rollback_json") )) || fail "completed rollback target is outside rollbackWindow"
   jq -e '.releaseLineage.v2PrimeContractCompatible.sourceSha and .releaseLineage.v2PrimeContractCompatible.indexDigest' <<<"$rollback_json" >/dev/null || fail "rollback compatibility lacks the v2Prime release lineage"
   echo "PASS: promotion evidence, manual boundary, and completed rollback candidate are valid."
+}
+
+case_rollback_edges() {
+  local inside="$fixture_root/rollback/inside-window.json"
+  local outside="$fixture_root/rollback/outside-window.json"
+  local count window fixture
+
+  count=$(classify_rollback "$inside")
+  window=$(jq -r '.completedRollback.rollbackWindow.revisions' "$inside")
+  (( count < window )) || fail "inside-window rollback fixture must remain within rollbackWindow"
+
+  if count=$(classify_rollback "$outside"); then
+    window=$(jq -r '.completedRollback.rollbackWindow.revisions' "$outside")
+    (( count < window )) && fail "outside-window rollback fixture was accepted"
+  fi
+
+  for fixture in "$fixture_root"/rollback/{experiment-excluded,foreign-owner,foreign-uid,malformed-owned-replicaset,missing-stable,missing-target,non-controller-owner,revision-gap,target-newer-than-stable}.json; do
+    if classify_rollback "$fixture" >/dev/null 2>&1; then
+      fail "invalid rollback fixture was accepted: $(basename "$fixture")"
+    fi
+  done
+  echo "PASS: rollback candidates, ownership, and rollback-window edge cases fail closed."
 }
 
 case_render() {
@@ -111,6 +148,7 @@ case "$requested" in
   baseline-candidate-input|render-equivalence) case_render ;;
   promotion) case_promotion ;;
   in-progress-stable-reapply) jq -e '.inProgressStableReapply.requiresDesiredStateReconcile == true and .inProgressStableReapply.stableDigest != .inProgressStableReapply.candidateDigest' "$fixture_root/rollback/in-progress-stable-reapply.json" >/dev/null || fail "in-progress stable reapply requires desired-state reconciliation"; echo "PASS: stable reapply requires GitOps reconciliation." ;;
-  all) case_promotion; case_render ;;
+  rollback-edges) case_rollback_edges ;;
+  all) case_promotion; case_render; case_rollback_edges ;;
   *) case_promotion ;;
 esac

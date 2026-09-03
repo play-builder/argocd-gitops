@@ -21,9 +21,22 @@ case_all() {
   invalid_status=$?
   set -e
   [[ $invalid_status -ne 0 ]] && grep -Fq "incomplete incident lifecycle" <<<"$invalid_output" || fail "invalid provider deletion fixture was not rejected"
+  local cleanup_fixture cleanup_output cleanup_status
+  for cleanup_fixture in \
+    "$fixture_root/removal-unclassified-retained.json" \
+    "$fixture_root/removal-writer-active.json" \
+    "$fixture_root/provider-secret-digest-mismatch.json"; do
+    set +e
+    cleanup_output=$(bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --fixture "$cleanup_fixture" --eks-repo-root "$fixture_root" 2>&1)
+    cleanup_status=$?
+    set -e
+    [[ $cleanup_status -ne 0 ]] || fail "invalid cleanup fixture was accepted: $(basename "$cleanup_fixture")"
+  done
   jq -e '.courseCleanup.workloadsDisabled == true' "$repository_root/envs/dev/cleanup-values.yaml" >/dev/null 2>&1 || yq -e '.courseCleanup.workloadsDisabled == true' "$repository_root/envs/dev/cleanup-values.yaml" >/dev/null || fail "Dev cleanup values must disable workloads"
   yq -e '.courseCleanup.workloadsDisabled == true' "$repository_root/envs/prod/cleanup-values.yaml" >/dev/null || fail "Prod cleanup values must disable workloads"
   for file in "$fixture_root"/freeze-valid.json "$fixture_root"/removal-valid.json; do jq -e '.evidenceGrade == "CLOUD_RUNTIME"' "$file" >/dev/null || fail "$(basename "$file") is not CLOUD_RUNTIME"; done
+  bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --fixture "$fixture_root/freeze-valid.json" >/dev/null || fail "valid freeze evidence fixture was rejected"
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --fixture "$fixture_root/removal-valid.json" --eks-repo-root "$fixture_root" >/dev/null || fail "provider Secret projection validation failed"
   echo "PASS: cleanup ownership and evidence boundaries are valid."
 }

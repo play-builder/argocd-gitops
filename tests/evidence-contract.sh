@@ -88,6 +88,23 @@ case_expiry() {
   echo "PASS: SLO observedAt/expiresAt bounds are valid."
 }
 
+case_prod_slo_terminal() {
+  local valid="$fixture_root/prod-slo-valid.json"
+  local invalid="$fixture_root/prod-slo-analysis-failed.json"
+  local output
+
+  output=$(bash "$repository_root/scripts/capture-prod-slo-evidence.sh" --fixture "$valid")
+  grep -Fq '[STATIC] fake Prod SLO adapter validated' <<<"$output" ||
+    fail "valid Prod SLO fixture was not accepted by the runtime validator"
+
+  if output=$(bash "$repository_root/scripts/capture-prod-slo-evidence.sh" --fixture "$invalid" 2>&1); then
+    fail "failed AnalysisRun fixture was accepted as Prod SLO evidence"
+  fi
+  grep -Fq 'canonical metric or terminal-state validation' <<<"$output" ||
+    fail "failed AnalysisRun fixture was rejected for an unexpected reason"
+  echo "PASS: Prod SLO terminal AnalysisRun and finished measurement edge cases fail closed."
+}
+
 requested=all
 while (($#)); do
   case "$1" in
@@ -95,13 +112,14 @@ while (($#)); do
     --deployment) DEPLOYMENT=${2:?missing deployment}; shift 2 ;;
     --slo) SLO=${2:?missing slo}; shift 2 ;;
     --now) NOW=${2:?missing now}; shift 2 ;;
-    *) echo "Usage: $0 [--case raw|real-path|expiry|all] [--deployment path --slo path]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [--case raw|real-path|expiry|prod-slo-terminal|all] [--deployment path --slo path]" >&2; exit 2 ;;
   esac
 done
 case "$requested" in
   raw) case_raw ;;
   real-path) case_real_path ;;
   expiry) case_expiry ;;
-  all) case_raw; case_real_path; case_expiry ;;
+  prod-slo-terminal) case_prod_slo_terminal ;;
+  all) case_raw; case_real_path; case_expiry; case_prod_slo_terminal ;;
   *) echo "Usage: $0 [--case raw|real-path|expiry|all]" >&2; exit 2 ;;
 esac
