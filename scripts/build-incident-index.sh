@@ -283,7 +283,7 @@ def validate_db04(selected):
             fail(f"{label} repository must be the canonical sample repository")
         image_repository = value["imageRepository"]
         image_match = ecr_pattern.fullmatch(image_repository) if isinstance(image_repository, str) else None
-        if image_match is None or image_match.group("account") != account_id or image_match.group("region") != region or not 2 <= len(image_match.group("name")) <= 256:
+        if image_match is None or image_match.group("account") != account_id or image_match.group("region") != region or not 2 <= len(image_match.group("name")) <= 256 or re.search(r"(?:^|/)sample-app$", image_match.group("name")) is None:
             fail(f"{label} imageRepository must be a canonical ECR repository in the incident account and Region")
         if not isinstance(value["sourceSha"], str) or not re.fullmatch(sha_pattern, value["sourceSha"]):
             fail(f"{label} sourceSha must be a 40-character lowercase SHA")
@@ -323,6 +323,8 @@ def validate_db04(selected):
         for key in ("stable", "faulty"):
             release_identity(recovery.get(key), f"INC-DB-04/{scenario} {key}")
         release_identity(recovery.get("recovered"), f"INC-DB-04/{scenario} recovered", recovered=True)
+        if any(recovery[name]["imageRepository"] != recovery["stable"]["imageRepository"] for name in ("faulty", "recovered")):
+            fail(f"INC-DB-04/{scenario} image repositories must match the stable sample-app identity")
         if recovery["recovered"]["strategy"] != scenario:
             fail(f"INC-DB-04/{scenario} recovery strategy mismatch")
         workflow = recovery.get("workflow")
