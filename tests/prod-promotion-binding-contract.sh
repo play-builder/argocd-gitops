@@ -41,6 +41,14 @@ fi
 bash "$candidate/scripts/verify-prod-promotion-binding.sh" "$base_sha" >/dev/null ||
   fail "unchanged Prod values must not require the current evidence image"
 
+configuration_candidate="$work_root/configuration-candidate"
+prepare_repository "$configuration_candidate"
+configuration_base_sha=$(git -C "$configuration_candidate" rev-parse HEAD)
+rm "$configuration_candidate/envs/prod/promotion-evidence.yaml"
+yq -i '.telemetry.enabled = false' "$configuration_candidate/envs/prod/values.yaml"
+bash "$configuration_candidate/scripts/verify-prod-promotion-binding.sh" "$configuration_base_sha" >/dev/null ||
+  fail "non-image Prod configuration changes must not require DEV_READY evidence"
+
 export repository
 export digest
 repository=$(yq -r '.image.repository' "$candidate/envs/prod/promotion-evidence.yaml")
@@ -91,4 +99,4 @@ yq -o=json '.jobs.validate.steps[] | select(.name == "Checkout")' \
   "$repository_root/.github/workflows/validate.yml" |
   jq -e '.with["fetch-depth"] == 0' >/dev/null || fail "checkout must fetch the PR base commit"
 
-echo "PASS: changed Prod values remain bound to the current canonical DEV_READY evidence."
+echo "PASS: changed Prod image identity remains bound to the current canonical DEV_READY evidence."

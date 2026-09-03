@@ -12,15 +12,22 @@ base_sha=$1
 git -C "$repository_root" cat-file -e "$base_sha^{commit}" 2>/dev/null ||
   fail "BASE_SHA is not an available commit"
 
-if git -C "$repository_root" diff --quiet "$base_sha" -- envs/prod/values.yaml; then
-  echo "PASS: Prod values are unchanged; no promotion binding is required."
+values="$repository_root/envs/prod/values.yaml"
+image_identity_query='[.image.repository, .image.digest, .database.migrationImage.repository, .database.migrationImage.digest]'
+base_image_identity=$(git -C "$repository_root" show "${base_sha}:envs/prod/values.yaml" |
+  yq -o=json -I=0 "$image_identity_query" -) ||
+  fail "cannot read base Prod image identity"
+current_image_identity=$(yq -o=json -I=0 "$image_identity_query" "$values") ||
+  fail "cannot read current Prod image identity"
+
+if [[ "$base_image_identity" == "$current_image_identity" ]]; then
+  echo "PASS: Prod image identity is unchanged; no promotion binding is required."
   exit 0
 fi
 
-values="$repository_root/envs/prod/values.yaml"
 evidence="$repository_root/envs/prod/promotion-evidence.yaml"
 [[ -f "$evidence" && ! -L "$evidence" ]] ||
-  fail "changed Prod values require canonical non-symlink DEV_READY evidence"
+  fail "changed Prod image identity requires canonical non-symlink DEV_READY evidence"
 
 physical_parent=$(cd -- "$(dirname -- "$evidence")" && pwd -P) ||
   fail "cannot resolve canonical DEV_READY parent"
@@ -51,4 +58,4 @@ evidence_repository_name=${evidence_repository#*/}
 [[ "$application_digest" == "$evidence_digest" && "$migration_digest" == "$evidence_digest" ]] ||
   fail "Prod application and migration digests must match current DEV_READY"
 
-echo "PASS: changed Prod values match current canonical DEV_READY evidence."
+echo "PASS: changed Prod image identity matches current canonical DEV_READY evidence."
