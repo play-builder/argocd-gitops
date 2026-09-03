@@ -8,6 +8,11 @@ trap 'rm -rf -- "$tmp_root"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
+# Each case below supplies its own resolver inputs. Ignore cross-repository
+# selection inherited from a parent suite so the negative cases remain isolated.
+unset CROSS_REPO_CONTRACT_MODE SAMPLE_APP_REPO_ROOT SAMPLE_APP_EXPECTED_SHA
+unset SAMPLE_APP_VERIFIER_PATH SAMPLE_APP_VERIFIER_OPTIONAL
+
 [[ -x "$resolver" ]] || fail 'sample verifier resolver is missing or not executable'
 
 sample_root="$tmp_root/sample-app"
