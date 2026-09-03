@@ -160,7 +160,7 @@ set_release_repository "$two_character_runtime" '123456789012.dkr.ecr.ap-northea
 run_static "$two_character_runtime" "$tmp_root/ecr-two-character-output.json" >/dev/null ||
   fail 'Prod SLO runtime rejected a two-character ECR repository name'
 
-for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn promotion-ecr-double-slash promotion-ecr-name-too-short promotion-attestation-alpha promotion-owner-whitespace promotion-slo-evidence-id-whitespace promotion-slo-evidence-id-bom promotion-calendar-invalid; do
+for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse baseline-stable-whitespace baseline-stable-bom malformed-cluster-arn promotion-ecr-double-slash promotion-ecr-name-too-short promotion-attestation-alpha promotion-owner-whitespace promotion-slo-evidence-id-whitespace promotion-slo-evidence-id-bom promotion-calendar-invalid; do
   runtime="$tmp_root/runtime-$label"
   cp -R "$fake_runtime" "$runtime"
   case "$label" in
@@ -180,6 +180,8 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
     image-mismatch) jq '.spec.template.spec.containers[0].image |= sub("c{64}$";"d" * 64)' "$runtime/rollout.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/rollout.json" ;;
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$runtime/git-revision.txt" ;;
     baseline-reuse) yq -o=json '.' "$runtime/promotion.yaml" | jq '.image.indexDigest="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' | yq -P >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/promotion.yaml" ;;
+    baseline-stable-whitespace) jq '.rollout.stableHash=" "' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json" ;;
+    baseline-stable-bom) jq '.rollout.stableHash="\uFEFF"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json" ;;
     malformed-cluster-arn)
       jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
       jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"

@@ -166,6 +166,7 @@ jq -e --arg now "$clock_now" '
     . as $value |
     type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
     (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+  def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
   . as $root |
   (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
   (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
@@ -176,7 +177,7 @@ jq -e --arg now "$clock_now" '
   (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
   (.gitopsRevision | test("^[0-9a-f]{40}$")) and
   (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
-  (.rollout.stableHash | type == "string" and length > 0) and
+  (.rollout.stableHash | nonblank) and
   .rollout.revision == 1 and .rollout.trafficWeight == 100 and
   (.region | IN("ap-northeast-2","us-east-1")) and
   $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and

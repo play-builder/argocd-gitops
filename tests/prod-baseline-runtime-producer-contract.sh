@@ -21,6 +21,23 @@ fixture_log=$(bash "$script" --fixture "$fixture_root/baseline-valid.json")
 grep -Fq '[STATIC]' <<<"$fixture_log" || fail 'baseline fixture validator was not labelled STATIC'
 [[ "$before" == "$(fingerprint)" ]] || fail 'baseline fixture validator changed canonical runtime evidence'
 
+for whitespace in ascii-space bom; do
+  value=' '
+  [[ "$whitespace" == bom ]] && value=$(printf '\357\273\277')
+  invalid_fixture="$tmp_root/fixture-stable-hash-$whitespace.json"
+  jq --arg value "$value" '.rollout.stableHash=$value' "$fixture_root/baseline-valid.json" >"$invalid_fixture"
+  if bash "$script" --fixture "$invalid_fixture" >/dev/null 2>&1; then
+    fail "baseline fixture validator accepted $whitespace-only stableHash"
+  fi
+done
+for timestamp in 2026-09-03T00:29:59.123Z 2026-09-03T09:29:59+09:00 2026-02-31T00:29:59Z; do
+  invalid_fixture="$tmp_root/fixture-observed-at-${timestamp//[:+]/_}.json"
+  jq --arg value "$timestamp" '.observedAt=$value' "$fixture_root/baseline-valid.json" >"$invalid_fixture"
+  if bash "$script" --fixture "$invalid_fixture" >/dev/null 2>&1; then
+    fail "baseline fixture validator accepted noncanonical observedAt: $timestamp"
+  fi
+done
+
 for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-too-short ecr-name-too-long ecr-region-mismatch ecr-account-mismatch; do
   invalid_fixture="$tmp_root/fixture-$label.json"
   case "$label" in
@@ -94,6 +111,13 @@ set_runtime_repository() {
     "$source/replicasets.json" >"$source/mutated"
   mv "$source/mutated" "$source/replicasets.json"
 }
+
+for timestamp in 2026-09-03T00:30:00.123Z 2026-09-03T09:30:00+09:00 2026-02-31T00:30:00Z; do
+  if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+    bash "$script" --output "$tmp_root/invalid-clock.json" --now "$timestamp" >/dev/null 2>&1; then
+    fail "static baseline runtime accepted noncanonical capture clock: $timestamp"
+  fi
+done
 
 static_output="$tmp_root/baseline.json"
 static_log=$(run_static "$runtime" "$static_output") || fail 'valid static baseline runtime was rejected'

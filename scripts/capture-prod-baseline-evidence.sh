@@ -34,6 +34,11 @@ done
 validate_record() {
   local file=$1 expected_grade=${2:-CLOUD_RUNTIME} observed_limit=${3:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
   jq -e --arg grade "$expected_grade" --arg observedLimit "$observed_limit" '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == $grade and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
@@ -41,11 +46,12 @@ validate_record() {
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
-    (.rollout.stableHash | type == "string" and length > 0) and
+    (.rollout.stableHash | nonblank) and
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
     (.region as $region |
       (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
       ($region | IN("ap-northeast-2","us-east-1")) and
+      (.observedAt | canonical_utc_seconds) and ($observedLimit | canonical_utc_seconds) and
       (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601))
   ' "$file" >/dev/null || fail 'Prod baseline does not satisfy course.prod-baseline/v1'
 
@@ -80,7 +86,13 @@ else
   [[ "$output" == "$repository_root/evidence/prod/baseline.json" ]] ||
     fail 'runtime baseline output is fixed to evidence/prod/baseline.json'
 fi
-jq -en --arg now "$clock_now" '($now | fromdateiso8601) != null' >/dev/null ||
+jq -en --arg now "$clock_now" '
+  def canonical_utc_seconds:
+    . as $value |
+    type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+    (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+  $now | canonical_utc_seconds
+' >/dev/null ||
   fail 'capture clock must be RFC3339 UTC'
 
 for required in kubectl argocd aws git jq mktemp; do

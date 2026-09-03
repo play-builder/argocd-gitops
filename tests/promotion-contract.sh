@@ -174,6 +174,7 @@ case_promotion() {
       . as $value |
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
@@ -184,7 +185,7 @@ case_promotion() {
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
-    (.rollout.stableHash | type == "string" and length > 0) and
+    (.rollout.stableHash | nonblank) and
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
@@ -362,6 +363,18 @@ CASES
   bash "$0" --evidence "$valid" --rollback "$fixture_root/rollback/inside-window.json" \
     --baseline "$fixture_root/evidence/baseline-valid.json" --now "$now" >/dev/null ||
     fail "explicit promotion invocation did not accept and validate --baseline"
+  local whitespace value invalid_baseline
+  for whitespace in ascii-space bom; do
+    value=' '
+    [[ "$whitespace" == bom ]] && value=$(printf '\357\273\277')
+    invalid_baseline="$render_root/baseline-stable-hash-$whitespace.json"
+    jq --arg value "$value" '.rollout.stableHash=$value' \
+      "$fixture_root/evidence/baseline-valid.json" >"$invalid_baseline"
+    if bash "$0" --evidence "$valid" --rollback "$fixture_root/rollback/inside-window.json" \
+      --baseline "$invalid_baseline" --now "$now" >/dev/null 2>&1; then
+      fail "explicit promotion invocation accepted $whitespace-only baseline stableHash"
+    fi
+  done
   echo "PASS: DEV_READY workflow and platform identities fail closed."
 }
 
