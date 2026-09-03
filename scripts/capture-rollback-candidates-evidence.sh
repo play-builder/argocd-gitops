@@ -58,6 +58,15 @@ validate_source() {
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root | .completedRollback as $rollback |
+    ([ $rollback.replicaSetList.items[] |
+       select((.metadata.annotations["rollouts.argoproj.io/experiment-name"] // "") == "") |
+       {hash:.metadata.labels["rollouts-pod-template-hash"],
+        revision:(.metadata.annotations["rollout.argoproj.io/revision"] | tonumber),
+        observed:(.metadata.creationTimestamp | fromdateiso8601)} ]) as $eligible |
+    ([ $eligible[] | select(.hash == $rollback.stableHash) ]) as $stable |
+    ([ $eligible[] | select(.observed < $stable[0].observed) ] |
+      sort_by(.revision) | reverse | .[0:$rollback.rollbackWindow.revisions] |
+      map({hash,revision}) | sort_by(.revision)) as $expected |
     ((keys | sort) == ["completedRollback","releaseLineage"] or
      (keys | sort) == ["completedRollback","inProgressStableReapply","releaseLineage"]) and
     ($rollback | keys | sort) == ["candidates","replicaSetList","rollbackWindow","rolloutName","rolloutUid","stableHash","targetHash"] and
@@ -105,17 +114,8 @@ validate_source() {
     ([ $rollback.candidates[].podTemplateHash ] | unique | length) == ($rollback.candidates | length) and
     ([ $rollback.candidates[].rolloutRevision ] | unique | length) == ($rollback.candidates | length) and
     any($rollback.candidates[]; .podTemplateHash == $rollback.targetHash) and
-    ([ $rollback.replicaSetList.items[] |
-       select((.metadata.annotations["rollouts.argoproj.io/experiment-name"] // "") == "") |
-       {hash:.metadata.labels["rollouts-pod-template-hash"],
-        revision:(.metadata.annotations["rollout.argoproj.io/revision"] | tonumber),
-        observed:(.metadata.creationTimestamp | fromdateiso8601)} ]) as $eligible |
-    ([ $eligible[] | select(.hash == $rollback.stableHash) ]) as $stable |
     ($stable | length) == 1 and
     ([ $eligible[] | select(.hash == $rollback.targetHash) ] | length) == 1 and
-    ([ $eligible[] | select(.observed < $stable[0].observed) ] |
-      sort_by(.revision) | reverse | .[0:$rollback.rollbackWindow.revisions] |
-      map({hash,revision}) | sort_by(.revision)) as $expected |
     ([ $rollback.candidates[] | {hash:.podTemplateHash,revision:.rolloutRevision} ] | sort_by(.revision)) == $expected and
     ($root | if has("inProgressStableReapply") then
       (.inProgressStableReapply | keys | sort) == ["action","candidateDigest","requiresDesiredStateReconcile","stableDigest"] and
@@ -317,6 +317,7 @@ cleanup_configmap() {
       . as $value |
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    (.spec.template.spec.containers[] | select(.name == "migrate")) as $container |
     .metadata.name == "sample-app-migration" and .metadata.namespace == "app-prod" and
     .metadata.labels["app.kubernetes.io/component"] == "migration" and
     .metadata.labels["app.kubernetes.io/part-of"] == "sample-app" and
@@ -325,7 +326,6 @@ cleanup_configmap() {
     ((.status.completionTime | fromdateiso8601) > ($evidence.observedAt | fromdateiso8601)) and
     ((.status.completionTime | fromdateiso8601) < ($evidence.expiresAt | fromdateiso8601)) and
     ((.status.completionTime | fromdateiso8601) <= ($now | fromdateiso8601)) and
-    (.spec.template.spec.containers[] | select(.name == "migrate")) as $container |
     $container.command == ["node", "scripts/migrate.mjs"] and
     $container.args == ["--target", "003_contract_product_name"] and
     ([ $container.env[]? | select(.name | startswith("ROLLBACK_")) ] | length) == 0 and
