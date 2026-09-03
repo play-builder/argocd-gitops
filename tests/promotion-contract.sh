@@ -36,7 +36,7 @@ validate_ready() {
     (.image | (keys | sort) == ["indexDigest","platforms","repository"]) and
     .image.platforms == ["linux/amd64","linux/arm64"] and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-    ($ecr.name | length <= 256) and
+    (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     (.attestation | (keys | sort) == ["githubId","githubUrl","ociProvenanceDigest","ociSbomDigest"]) and
     (.attestation.githubId | type == "string" and test("^[0-9]+$")) and
     .attestation.githubUrl == ("https://github.com/" + $run.repository + "/attestations/" + .attestation.githubId) and
@@ -181,7 +181,7 @@ case_promotion() {
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.image.repository | type == "string" and length > 0) and
-    ($ecr.name | length <= 256) and
+    (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
     (.rollout.stableHash | type == "string" and length > 0) and
@@ -317,6 +317,9 @@ case_ready_edges() {
   local now=2026-09-03T01:00:00Z candidate label expression
   validate_ready "$valid" "$now"
   validate_ready "$fixture_root/promotion/valid-us-east-1.yaml" "$now"
+  candidate="$render_root/dev-ready-ecr-two-character.yaml"
+  yq '.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' "$valid" >"$candidate"
+  validate_ready "$candidate" "$now" || fail "DEV_READY rejected a two-character ECR repository name"
   while IFS='|' read -r label expression; do
     candidate="$render_root/dev-ready-$label.yaml"
     yq "$expression" "$valid" >"$candidate"
@@ -333,6 +336,7 @@ workflow-runurl-repository|.workflow.runUrl = "https://github.com/OWNER/other-ap
 workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl = "https://github.com/OWNER /cicd-course-sample-app/attestations/1001"
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
 ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"
+ecr-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"
 issued-at-calendar|.issuedAt = "2026-02-31T00:00:00Z"
 expires-at-calendar|.expiresAt = "2026-02-31T02:00:00Z"

@@ -22,6 +22,14 @@ prepare_repository() {
   git -C "$target" commit -qm baseline
 }
 
+set_bound_repository() {
+  local target=$1 value=$2
+  export bound_repository=$value
+  yq -i '.image.repository = strenv(bound_repository)' "$target/envs/prod/promotion-evidence.yaml"
+  yq -i '.image.repository = strenv(bound_repository) |
+    .database.migrationImage.repository = strenv(bound_repository)' "$target/envs/prod/values.yaml"
+}
+
 candidate="$work_root/candidate"
 prepare_repository "$candidate"
 base_sha=$(git -C "$candidate" rev-parse HEAD)
@@ -43,6 +51,15 @@ yq -i '.image.repository = strenv(repository) |
   .database.migrationImage.digest = strenv(digest)' "$candidate/envs/prod/values.yaml"
 bash "$candidate/scripts/verify-prod-promotion-binding.sh" "$base_sha" >/dev/null ||
   fail "changed Prod values matching canonical DEV_READY must pass"
+
+set_bound_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a'
+if bash "$candidate/scripts/verify-prod-promotion-binding.sh" "$base_sha" >/dev/null 2>&1; then
+  fail "promotion binding accepted a one-character ECR repository name"
+fi
+set_bound_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab'
+bash "$candidate/scripts/verify-prod-promotion-binding.sh" "$base_sha" >/dev/null ||
+  fail "promotion binding rejected a two-character ECR repository name"
+set_bound_repository "$candidate" "$repository"
 
 yq -i '.image.digest = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"' \
   "$candidate/envs/prod/values.yaml"

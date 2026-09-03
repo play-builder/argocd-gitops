@@ -33,11 +33,17 @@ done <<'CASES'
 source-repository|.source.repository = "play-builder/other-app"
 source-owner-whitespace|.source.repository = "play-builder /cicd-course-sample-app"
 image-account|.image.repository = "999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app"
+image-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 measurement-number|.metricResults[0].measurements[0].value = 12.5
 measurement-nan|.metricResults[0].measurements[0].value = "NaN"
 analysis-failed|.analysisRun.phase = "Failed"
 traffic-weight|.rollout.trafficWeight = 50
 CASES
+two_character_fixture="$tmp_root/ecr-two-character.json"
+jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
+  "$fixture_root/prod-slo-valid.json" >"$two_character_fixture"
+bash "$script" --fixture "$two_character_fixture" >/dev/null ||
+  fail 'Prod SLO fixture adapter rejected a two-character ECR repository name'
 
 [[ -x "$script" ]] || fail 'Prod SLO producer is not executable'
 head -1 "$script" | grep -Fqx '#!/usr/bin/env bash' || fail 'Prod SLO producer has the wrong shebang'
@@ -103,6 +109,18 @@ run_static() {
       --output "$output" --now 2026-09-03T01:22:00Z
 }
 
+set_release_repository() {
+  local runtime=$1 repository=$2
+  local candidate_digest='sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+  yq -i ".image.repository=\"$repository\"" "$runtime/promotion.yaml"
+  jq --arg repository "$repository" '.image.repository=$repository' \
+    "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
+  jq --arg image "$repository@$candidate_digest" '.spec.template.spec.containers[0].image=$image' \
+    "$runtime/rollout.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/rollout.json"
+  jq --arg image "$repository@$candidate_digest" '.items[0].spec.template.spec.containers[0].image=$image' \
+    "$runtime/replicasets.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/replicasets.json"
+}
+
 static_output="$tmp_root/static-output.json"
 static_log=$(run_static "$fake_runtime" "$static_output") || fail 'valid static runtime adapter was rejected'
 grep -Fq '[STATIC]' <<<"$static_log" || fail 'fake runtime execution was not labelled STATIC'
@@ -116,7 +134,13 @@ jq -e '
 ' "$static_output" >/dev/null || fail 'static runtime adapter did not preserve canonical live-selection output'
 [[ "$before" == "$(fingerprint)" ]] || fail 'static runtime adapter changed canonical runtime evidence'
 
-for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn promotion-ecr-double-slash promotion-attestation-alpha promotion-owner-whitespace promotion-calendar-invalid; do
+two_character_runtime="$tmp_root/runtime-ecr-two-character"
+cp -R "$fake_runtime" "$two_character_runtime"
+set_release_repository "$two_character_runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab'
+run_static "$two_character_runtime" "$tmp_root/ecr-two-character-output.json" >/dev/null ||
+  fail 'Prod SLO runtime rejected a two-character ECR repository name'
+
+for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn promotion-ecr-double-slash promotion-ecr-name-too-short promotion-attestation-alpha promotion-owner-whitespace promotion-calendar-invalid; do
   runtime="$tmp_root/runtime-$label"
   cp -R "$fake_runtime" "$runtime"
   case "$label" in
@@ -141,6 +165,7 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
       jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
       ;;
     promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"' "$runtime/promotion.yaml" ;;
+    promotion-ecr-name-too-short) set_release_repository "$runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"' "$runtime/promotion.yaml" ;;
     promotion-owner-whitespace) yq -i '.workflow.runUrl="https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl="https://github.com/OWNER /cicd-course-sample-app/attestations/1001"' "$runtime/promotion.yaml" ;;
     promotion-calendar-invalid) yq -i '.issuedAt="2026-02-31T00:00:00Z"' "$runtime/promotion.yaml" ;;

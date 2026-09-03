@@ -48,7 +48,7 @@ validate_record() {
     (.source | (keys | sort) == ["repository","sha"]) and (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-    ($ecr.name | length <= 256) and
+    (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.rollout | (keys | sort) == ["currentPodHash","name","phase","revision","stableHash","trafficWeight","uid"]) and
@@ -139,7 +139,7 @@ jq -e --arg now "$clock_now" '
   $run.id == $workflow.runId and
   (.image | (keys | sort) == ["indexDigest","platforms","repository"]) and
   (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-  ($ecr.name | length <= 256) and
+  (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
   .image.platforms == ["linux/amd64","linux/arm64"] and
   (.attestation | (keys | sort) == ["githubId","githubUrl","ociProvenanceDigest","ociSbomDigest"]) and
   (.attestation.githubId | type == "string" and test("^[0-9]+$")) and
@@ -167,7 +167,7 @@ jq -e --arg now "$clock_now" '
   .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
   (.image | (keys | sort) == ["indexDigest","repository"]) and
   (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-  ($ecr.name | length <= 256) and
+  (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
   (.gitopsRevision | test("^[0-9a-f]{40}$")) and
   (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
   (.rollout.stableHash | type == "string" and length > 0) and

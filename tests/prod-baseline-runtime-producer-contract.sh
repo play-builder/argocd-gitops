@@ -21,7 +21,7 @@ fixture_log=$(bash "$script" --fixture "$fixture_root/baseline-valid.json")
 grep -Fq '[STATIC]' <<<"$fixture_log" || fail 'baseline fixture validator was not labelled STATIC'
 [[ "$before" == "$(fingerprint)" ]] || fail 'baseline fixture validator changed canonical runtime evidence'
 
-for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-too-long ecr-region-mismatch ecr-account-mismatch; do
+for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-too-short ecr-name-too-long ecr-region-mismatch ecr-account-mismatch; do
   invalid_fixture="$tmp_root/fixture-$label.json"
   case "$label" in
     ecr-double-slash)
@@ -30,6 +30,8 @@ for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-to
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-trailing-space)
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app "' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+    ecr-name-too-short)
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-name-too-long)
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/" + ("a" * 257)' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-region-mismatch)
@@ -41,6 +43,11 @@ for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-to
     fail "baseline fixture validator accepted $label"
   fi
 done
+two_character_fixture="$tmp_root/fixture-ecr-two-character.json"
+jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
+  "$fixture_root/baseline-valid.json" >"$two_character_fixture"
+bash "$script" --fixture "$two_character_fixture" >/dev/null ||
+  fail 'baseline fixture validator rejected a two-character ECR repository name'
 
 for option in --output --now; do
   if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
@@ -95,7 +102,13 @@ jq -e '.evidenceGrade=="STATIC" and .rollout=={stableHash:"stable-v1",revision:1
   "$static_output" >/dev/null || fail 'fake baseline runtime output is not canonical STATIC evidence'
 [[ "$before" == "$(fingerprint)" ]] || fail 'fake baseline runtime changed canonical evidence'
 
-for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account image-region image-double-slash image-invalid-segment image-trailing-space image-name-too-long context-drift git-mismatch dirty-source argo-repository malformed-cluster-arn; do
+two_character_runtime="$tmp_root/runtime-ecr-two-character"
+cp -R "$runtime" "$two_character_runtime"
+set_runtime_repository "$two_character_runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab'
+run_static "$two_character_runtime" "$tmp_root/ecr-two-character.json" >/dev/null ||
+  fail 'static baseline runtime rejected a two-character ECR repository name'
+
+for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account image-region image-double-slash image-invalid-segment image-trailing-space image-name-too-short image-name-too-long context-drift git-mismatch dirty-source argo-repository malformed-cluster-arn; do
   candidate="$tmp_root/runtime-$label"
   cp -R "$runtime" "$candidate"
   case "$label" in
@@ -111,6 +124,7 @@ for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision no
     image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app' ;;
     image-invalid-segment) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-sample-app' ;;
     image-trailing-space) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app ' ;;
+    image-name-too-short) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     image-name-too-long) set_runtime_repository "$candidate" "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/$(printf 'a%.0s' {1..257})" ;;
     context-drift) jq '.clusters[0].cluster.server="https://foreign.eks.example"' "$candidate/kubeconfig.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/kubeconfig.json" ;;
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$candidate/git-revision.txt" ;;

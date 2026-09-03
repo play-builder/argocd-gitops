@@ -21,7 +21,7 @@ validate_deployment() {
   exact_keys "$file" '["repository","indexDigest"]' .image
   jq -e '
     . as $root |
-    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-deployment/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     .status == {sync:"Synced",health:"Healthy"} and
@@ -31,6 +31,7 @@ validate_deployment() {
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
+    (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601 != null)
   ' "$file" >/dev/null || fail "deployment evidence is not CLOUD_RUNTIME or has invalid identity"
@@ -43,13 +44,14 @@ validate_slo() {
   exact_keys "$file" '["repository","indexDigest"]' .image
   jq -e '
     . as $root |
-    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
     (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
+    (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)
   ' "$file" >/dev/null || fail "SLO evidence is not an unexpired PASS CLOUD_RUNTIME record"
@@ -59,7 +61,7 @@ validate_baseline() {
   local file=$1
   jq -e '
     . as $root |
-    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
@@ -71,6 +73,7 @@ validate_baseline() {
     (.rollout.stableHash | type == "string" and length > 0) and
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
     (.region | IN("ap-northeast-2","us-east-1")) and
+    (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601) <= now
   ' "$file" >/dev/null || fail "Prod baseline must prove stable ReplicaSet revision 1 at 100 percent"
@@ -88,15 +91,16 @@ case_raw() {
 }
 
 case_identity_edges() {
-  local invalid invalid_slo
+  local invalid invalid_slo invalid_baseline
   invalid=$(mktemp "${TMPDIR:-/tmp}/evidence-identity.XXXXXX")
   invalid_slo=$(mktemp "${TMPDIR:-/tmp}/evidence-slo-identity.XXXXXX")
+  invalid_baseline=$(mktemp "${TMPDIR:-/tmp}/evidence-baseline-identity.XXXXXX")
   jq '.source.repository="OWNER/other-app" | .image.repository="not-ecr" | .clusterArn="arn:aws:eks:us-east-1:999999999999:cluster/foreign"' \
     "$fixture_root/deployment-valid.json" >"$invalid"
   jq '.source.repository="OWNER/other-app" | .image.repository="not-ecr" | .clusterArn="arn:aws:eks:us-east-1:999999999999:cluster/foreign"' \
     "$fixture_root/slo-valid.json" >"$invalid_slo"
   if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$fixture_root/baseline-valid.json" case_raw) >/dev/null 2>&1; then
-    rm -f -- "$invalid" "$invalid_slo"
+    rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
     fail "raw deployment evidence accepted a noncanonical source/ECR/EKS identity"
   fi
   jq '.source.repository="OWNER /cicd-course-sample-app"' \
@@ -104,15 +108,35 @@ case_identity_edges() {
   jq '.source.repository="OWNER /cicd-course-sample-app"' \
     "$fixture_root/slo-valid.json" >"$invalid_slo"
   if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$fixture_root/baseline-valid.json" case_raw) >/dev/null 2>&1; then
-    rm -f -- "$invalid" "$invalid_slo"
+    rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
     fail "raw evidence accepted a source owner containing whitespace"
   fi
+  jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"' \
+    "$fixture_root/deployment-valid.json" >"$invalid"
+  jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"' \
+    "$fixture_root/slo-valid.json" >"$invalid_slo"
+  jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"' \
+    "$fixture_root/baseline-valid.json" >"$invalid_baseline"
+  if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$invalid_baseline" case_raw) >/dev/null 2>&1; then
+    rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
+    fail "raw evidence accepted a one-character ECR repository name"
+  fi
+  jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
+    "$fixture_root/deployment-valid.json" >"$invalid"
+  jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
+    "$fixture_root/slo-valid.json" >"$invalid_slo"
+  jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
+    "$fixture_root/baseline-valid.json" >"$invalid_baseline"
+  (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$invalid_baseline" case_raw) >/dev/null || {
+    rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
+    fail "raw evidence rejected a two-character ECR repository name"
+  }
   if (DEPLOYMENT="$fixture_root/deployment-valid.json" SLO="$fixture_root/slo-valid.json" \
     BASELINE="$fixture_root/baseline-valid.json" case_real_path) >/dev/null 2>&1; then
-    rm -f -- "$invalid" "$invalid_slo"
+    rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
     fail "real-path gate accepted fixture paths in place of canonical runtime evidence"
   fi
-  rm -f -- "$invalid" "$invalid_slo"
+  rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
   echo "PASS: raw evidence rejects noncanonical source, ECR, and EKS identities."
 }
 

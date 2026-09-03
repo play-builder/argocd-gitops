@@ -132,6 +132,10 @@ elif db04_mismatch == "foreign-account-image-repository":
     foreign_account = "999999999999" if account_id != "999999999999" else "111111111111"
     for identity in (stable, faulty, hotfix):
         identity["imageRepository"] = f"{foreign_account}.dkr.ecr.{region}.amazonaws.com/mini-commerce"
+elif db04_mismatch in {"one-character-image-repository", "two-character-image-repository"}:
+    repository_name = "a" if db04_mismatch == "one-character-image-repository" else "ab"
+    for identity in (stable, faulty, hotfix):
+        identity["imageRepository"] = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository_name}"
 scenarios = ("git-revert", "break-glass-undo-plus-git", "hotfix-fix-forward")
 recovery_sources = {}
 for number, scenario in enumerate(scenarios, start=1):
@@ -417,6 +421,9 @@ case_db04_recovery_identity() {
   make_runtime_bundle "$work/valid" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z
   run_runtime_producer "$work/valid" >/dev/null || fail "runtime producer rejected valid INC-DB-04 recovery identities"
 
+  make_runtime_bundle "$work/two-character" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z two-character-image-repository
+  run_runtime_producer "$work/two-character" >/dev/null || fail "runtime producer rejected a two-character ECR repository name"
+
   make_runtime_bundle "$work/repository-mismatch" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z undo-repository
   if run_runtime_producer "$work/repository-mismatch" >/dev/null 2>&1; then
     fail "runtime producer accepted rollback recoveries whose repository differs from stable"
@@ -426,6 +433,7 @@ case_db04_recovery_identity() {
     blank-stable-image-repository strategy-mismatch invalid-workflow invalid-run-attempt \
     workflow-url-mismatch arbitrary-release-repository workflow-repository-mismatch \
     non-ecr-image-repository cross-region-image-repository foreign-account-image-repository \
+    one-character-image-repository \
     invalid-gitops-revision invalid-rollout-revision \
     invalid-recovery-time blank-execution-id stable-lineage-mismatch \
     faulty-lineage-mismatch hotfix-lineage-mismatch; do

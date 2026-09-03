@@ -40,7 +40,9 @@ migration_repository=$(yq -er '.database.migrationImage.repository' "$values") |
 migration_digest=$(yq -er '.database.migrationImage.digest' "$values") ||
   fail "Prod migration digest is missing"
 
-[[ "$evidence_repository" =~ ^[0-9]{12}\.dkr\.ecr\.(ap-northeast-2|us-east-1)\.amazonaws\.com/[a-z0-9]+([._/-][a-z0-9]+)*$ ]] ||
+evidence_repository_name=${evidence_repository#*/}
+[[ "$evidence_repository" =~ ^[0-9]{12}\.dkr\.ecr\.(ap-northeast-2|us-east-1)\.amazonaws\.com/[a-z0-9]+([._/-][a-z0-9]+)*$ &&
+   ${#evidence_repository_name} -ge 2 && ${#evidence_repository_name} -le 256 ]] ||
   fail "DEV_READY repository is not canonical ECR identity"
 [[ "$evidence_digest" =~ ^sha256:[0-9a-f]{64}$ ]] ||
   fail "DEV_READY digest is not canonical"

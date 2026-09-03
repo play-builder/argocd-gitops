@@ -283,7 +283,7 @@ def validate_db04(selected):
             fail(f"{label} repository must be the canonical sample repository")
         image_repository = value["imageRepository"]
         image_match = ecr_pattern.fullmatch(image_repository) if isinstance(image_repository, str) else None
-        if image_match is None or image_match.group("account") != account_id or image_match.group("region") != region or len(image_match.group("name")) > 256:
+        if image_match is None or image_match.group("account") != account_id or image_match.group("region") != region or not 2 <= len(image_match.group("name")) <= 256:
             fail(f"{label} imageRepository must be a canonical ECR repository in the incident account and Region")
         if not isinstance(value["sourceSha"], str) or not re.fullmatch(sha_pattern, value["sourceSha"]):
             fail(f"{label} sourceSha must be a 40-character lowercase SHA")
