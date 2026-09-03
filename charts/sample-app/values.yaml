@@ -194,7 +194,8 @@ networkPolicy:
 recovery:
   restoreEnabled: false
   namespace: app-recovery
-  snapshotClassName: ebs.csi.aws.com
+  readerRoleArn: ""
+  snapshotClassName: course-ebs-snapshots
   snapshotDriver: ebs.csi.aws.com
   snapshotContentName: sample-app-postgresql-recovery-content
   snapshotName: sample-app-postgresql-recovery-snapshot

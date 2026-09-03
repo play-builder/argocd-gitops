@@ -103,7 +103,7 @@ YAML
     fail "dev Stateful render exceeds course-dev authorization"
 
   manifest="$render_root/dev-snapshot-project-scope.yaml"
-  render_environment dev "$manifest" "$fixture_root/recovery-capture-only.yaml"
+  render_environment dev "$manifest" "$repository_root/envs/dev/snapshot-capture-values.yaml"
   project_allows_manifest "$dev_project" course-dev "$manifest" || \
     fail "dev snapshot render exceeds course-dev authorization"
 

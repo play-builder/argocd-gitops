@@ -14,3 +14,7 @@ argoHealthCustomizations:
     healthyWhen: readyToUse=true with a bound content name
     requiredBeforeSyncWave: -2
     implementationOwner: EKS-infra
+recoveryOutputs:
+  volumeSnapshotClassName: volume_snapshot_class_name
+  snapshotDriver: snapshot_driver
+  recoveryReaderRoleArn: recovery_db_secret_reader_role_arn

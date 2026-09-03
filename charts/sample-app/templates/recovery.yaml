@@ -22,10 +22,16 @@ spec:
   source:
     persistentVolumeClaimName: {{ .Values.recovery.source.pvcName }}
 {{- else }}
-{{- $roleArn := required "externalSecrets.readerRoleArn is required for recovery" .Values.externalSecrets.readerRoleArn }}
+{{- $roleArn := required "recovery.readerRoleArn is required for recovery" .Values.recovery.readerRoleArn }}
 {{- $databaseRemoteKey := required "externalSecrets.database.remoteSecretName is required for recovery" .Values.externalSecrets.database.remoteSecretName }}
-{{- if eq .Values.recovery.snapshotHandle "" }}
-{{- fail "recovery.snapshotHandle is required when recovery restore is enabled" }}
+{{- if ne .Values.recovery.snapshotClassName "course-ebs-snapshots" }}
+{{- fail "recovery.snapshotClassName must be course-ebs-snapshots" }}
+{{- end }}
+{{- if ne .Values.recovery.snapshotDriver "ebs.csi.aws.com" }}
+{{- fail "recovery.snapshotDriver must be ebs.csi.aws.com" }}
+{{- end }}
+{{- if not (regexMatch "^snap-[0-9a-f]{17}$" .Values.recovery.snapshotHandle) }}
+{{- fail "recovery.snapshotHandle must be a validated EBS snapshot ID" }}
 {{- end }}
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotContent
