@@ -100,6 +100,9 @@ jobs:
       - name: Verify Stateful application contract
         run: bash tests/stateful-contract.sh
 
+      - name: Verify repository governance contract
+        run: bash tests/governance-contract.sh docs/github-ruleset.example.json
+
       - name: Run static course contracts
         run: bash tests/test-all.sh
 
