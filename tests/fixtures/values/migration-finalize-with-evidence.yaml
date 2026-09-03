@@ -1,5 +1,6 @@
 database:
   migration:
+    phase: finalize
     target: 003_contract_product_name
     rollbackCandidates:
       enabled: true

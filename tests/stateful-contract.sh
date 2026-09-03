@@ -255,6 +255,16 @@ for phase_target in \
   ' >/dev/null || fail "$phase migration phase target or evidence binding is invalid"
 done
 
+for invalid_phase in contract-without-evidence finalize-with-evidence expand-wrong-target unsupported-phase; do
+  if render_environment prod "$render_root/migration-$invalid_phase-render.yaml" \
+    "$repository_root/envs/prod/stateful-values.yaml" \
+    "$fixture_root/stateful-policy-on.yaml" \
+    "$fixture_root/migration-$invalid_phase.yaml" \
+    2>"$render_root/migration-$invalid_phase.err"; then
+    fail "migration render accepted invalid phase contract $invalid_phase"
+  fi
+done
+
 if render_environment prod "$render_root/migration-missing-target-render.yaml" \
   "$fixture_root/stateful-policy-on.yaml" \
   "$fixture_root/migration-missing-target.yaml" 2>"$render_root/migration-missing-target.err"; then
