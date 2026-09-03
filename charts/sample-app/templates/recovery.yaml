@@ -104,6 +104,15 @@ metadata:
     argocd.argoproj.io/sync-wave: "-3"
 automountServiceAccountToken: true
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sample-app-recovery-postgresql
+  namespace: {{ .Values.recovery.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+automountServiceAccountToken: false
+---
 apiVersion: external-secrets.io/v1
 kind: SecretStore
 metadata:
@@ -172,7 +181,8 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: postgresql, app.kubernetes.io/component: recovery}
     spec:
-      serviceAccountName: sample-app-recovery-secret-reader
+      serviceAccountName: sample-app-recovery-postgresql
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 70

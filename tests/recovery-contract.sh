@@ -82,8 +82,23 @@ case_restore_only() {
   yq eval-all -o=json -I=0 '[select(.kind == "VolumeSnapshotContent")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.name == "sample-app-postgresql-recovery-content" and .[0].spec.driver == "ebs.csi.aws.com" and .[0].spec.sourceVolumeMode == "Filesystem" and .[0].spec.source.snapshotHandle == "snap-0123456789abcdef0" and .[0].spec.volumeSnapshotRef.namespace == "app-recovery" and .[0].spec.volumeSnapshotRef.name == "sample-app-postgresql-recovery-snapshot"' >/dev/null || fail "restore content lacks immutable driver/handle/local binding"
   yq eval-all -o=json -I=0 '[select(.kind == "PersistentVolumeClaim" and .metadata.name == "sample-app-postgresql-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.namespace == "app-recovery" and .[0].spec.dataSource.kind == "VolumeSnapshot" and .[0].spec.dataSource.name == "sample-app-postgresql-recovery-snapshot"' >/dev/null || fail "recovery PVC is not isolated to local snapshot"
   yq eval-all -o=json -I=0 '[select(.kind == "ExternalSecret" and .metadata.name == "sample-app-db-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.namespace == "app-recovery" and .[0].spec.secretStoreRef.name == "aws-secrets-manager-recovery" and .[0].spec.target.name == "sample-app-db-recovery" and .[0].spec.target.creationPolicy == "Owner" and .[0].spec.target.deletionPolicy == "Retain"' >/dev/null || fail "recovery DB Secret is not local Owner/Retain"
-  yq eval-all -o=json -I=0 '[select(.kind == "ServiceAccount" and .metadata.name == "sample-app-recovery-secret-reader")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.annotations["eks.amazonaws.com/role-arn"] == "arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role"' >/dev/null || fail "recovery ServiceAccount lacks the dedicated reader Role"
-  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.namespace == "app-recovery" and .[0].spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name == "sample-app-db-recovery"' >/dev/null || fail "recovery PostgreSQL does not consume local DB Secret"
+  yq eval-all -o=json -I=0 '[select(.kind == "SecretStore" and .metadata.name == "aws-secrets-manager-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].spec.provider.aws.auth.jwt.serviceAccountRef.name == "sample-app-recovery-secret-reader"' >/dev/null || fail "recovery SecretStore is not bound to the IRSA reader ServiceAccount"
+  yq eval-all -o=json -I=0 '[select(.kind == "ServiceAccount")]' "$manifest" | jq -e '
+    ([.[] | select(.metadata.name | startswith("sample-app-recovery"))] | length) == 2 and
+    ([.[] | select(.metadata.name == "sample-app-recovery-secret-reader" and
+      .metadata.annotations["eks.amazonaws.com/role-arn"] == "arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role" and
+      .automountServiceAccountToken == true)] | length) == 1 and
+    ([.[] | select(.metadata.name == "sample-app-recovery-postgresql" and
+      ((.metadata.annotations // {}) | has("eks.amazonaws.com/role-arn") | not) and
+      .automountServiceAccountToken == false)] | length) == 1
+  ' >/dev/null || fail "recovery SecretStore and PostgreSQL ServiceAccounts are not privilege-separated"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql-recovery")]' "$manifest" | jq -e '
+    length == 1 and .[0].metadata.namespace == "app-recovery" and
+    .[0].spec.template.spec.serviceAccountName == "sample-app-recovery-postgresql" and
+    .[0].spec.template.spec.automountServiceAccountToken == false and
+    .[0].spec.template.spec.serviceAccountName != "sample-app-recovery-secret-reader" and
+    .[0].spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name == "sample-app-db-recovery"
+  ' >/dev/null || fail "recovery PostgreSQL is not isolated from the IRSA reader identity"
   yq eval-all -o=json -I=0 '[select(.kind == "VolumeSnapshotContent" or .kind == "VolumeSnapshot" or .kind == "PersistentVolumeClaim" or (.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql-recovery"))]' "$manifest" | jq -e 'length == 4 and all(.[]; .metadata.labels["course.playbuilder.io/cleanup-scope"] == "recovery")' >/dev/null || fail "recovery objects lack cleanup identity"
   yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql")]' "$manifest" | jq -e 'length == 1 and .[0].spec.persistentVolumeClaimRetentionPolicy == {whenDeleted:"Retain",whenScaled:"Retain"}' >/dev/null || fail "source StatefulSet retention policy was changed"
   echo "PASS: isolated recovery resources and local Secret access are valid."
