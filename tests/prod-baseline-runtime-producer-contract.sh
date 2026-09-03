@@ -21,6 +21,27 @@ fixture_log=$(bash "$script" --fixture "$fixture_root/baseline-valid.json")
 grep -Fq '[STATIC]' <<<"$fixture_log" || fail 'baseline fixture validator was not labelled STATIC'
 [[ "$before" == "$(fingerprint)" ]] || fail 'baseline fixture validator changed canonical runtime evidence'
 
+for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-too-long ecr-region-mismatch ecr-account-mismatch; do
+  invalid_fixture="$tmp_root/fixture-$label.json"
+  case "$label" in
+    ecr-double-slash)
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+    ecr-invalid-segment)
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+    ecr-trailing-space)
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app "' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+    ecr-name-too-long)
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/" + ("a" * 257)' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+    ecr-region-mismatch)
+      jq '.image.repository="123456789012.dkr.ecr.us-east-1.amazonaws.com/course/sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+    ecr-account-mismatch)
+      jq '.image.repository="999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+  esac
+  if bash "$script" --fixture "$invalid_fixture" >/dev/null 2>&1; then
+    fail "baseline fixture validator accepted $label"
+  fi
+done
+
 for option in --output --now; do
   if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
     bash "$script" "$option" "$tmp_root/override" >/dev/null 2>&1; then
@@ -56,6 +77,17 @@ run_static() {
     bash "$script" --output "$output" --now 2026-09-03T00:30:00Z
 }
 
+set_runtime_repository() {
+  local source=$1 repository=$2
+  local digest='sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  jq --arg image "$repository@$digest" '.spec.template.spec.containers[0].image=$image' \
+    "$source/rollout.json" >"$source/mutated"
+  mv "$source/mutated" "$source/rollout.json"
+  jq --arg image "$repository@$digest" '.items[0].spec.template.spec.containers[0].image=$image' \
+    "$source/replicasets.json" >"$source/mutated"
+  mv "$source/mutated" "$source/replicasets.json"
+}
+
 static_output="$tmp_root/baseline.json"
 static_log=$(run_static "$runtime" "$static_output") || fail 'valid static baseline runtime was rejected'
 grep -Fq '[STATIC]' <<<"$static_log" || fail 'fake baseline runtime was not labelled STATIC'
@@ -63,7 +95,7 @@ jq -e '.evidenceGrade=="STATIC" and .rollout=={stableHash:"stable-v1",revision:1
   "$static_output" >/dev/null || fail 'fake baseline runtime output is not canonical STATIC evidence'
 [[ "$before" == "$(fingerprint)" ]] || fail 'fake baseline runtime changed canonical evidence'
 
-for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account context-drift git-mismatch dirty-source argo-repository malformed-cluster-arn; do
+for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account image-region image-double-slash image-invalid-segment image-trailing-space image-name-too-long context-drift git-mismatch dirty-source argo-repository malformed-cluster-arn; do
   candidate="$tmp_root/runtime-$label"
   cp -R "$runtime" "$candidate"
   case "$label" in
@@ -74,7 +106,12 @@ for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision no
     nonfinal-route) jq '.spec.rules[0].backendRefs[0].weight=50 | .spec.rules[0].backendRefs[1].weight=50' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
     extra-route-backend) jq '.spec.rules[0].backendRefs += [{name:"shadow",port:80,weight:0}]' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
     extra-route-rule) jq '.spec.rules += [.spec.rules[0]]' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
-    image-account) jq '.spec.template.spec.containers[0].image |= sub("^123456789012";"999999999999")' "$candidate/rollout.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/rollout.json" ;;
+    image-account) set_runtime_repository "$candidate" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app' ;;
+    image-region) set_runtime_repository "$candidate" '123456789012.dkr.ecr.us-east-1.amazonaws.com/course/sample-app' ;;
+    image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app' ;;
+    image-invalid-segment) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-sample-app' ;;
+    image-trailing-space) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app ' ;;
+    image-name-too-long) set_runtime_repository "$candidate" "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/$(printf 'a%.0s' {1..257})" ;;
     context-drift) jq '.clusters[0].cluster.server="https://foreign.eks.example"' "$candidate/kubeconfig.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/kubeconfig.json" ;;
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$candidate/git-revision.txt" ;;
     dirty-source) printf '%s\n' ' M envs/prod/values.yaml' >"$candidate/git-status.txt" ;;

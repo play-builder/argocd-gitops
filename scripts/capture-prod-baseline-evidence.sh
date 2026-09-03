@@ -12,6 +12,16 @@ adapter_dir=${COURSE_CHECK_BIN_DIR:-}
 fail() { echo "FAIL: $*" >&2; exit 1; }
 usage() { echo "Usage: $0 [--fixture path] [--output path --now RFC3339]" >&2; exit 2; }
 
+validate_ecr_repository() {
+  local repository=$1 expected_region=$2 expected_account=$3
+  local prefix="${expected_account}.dkr.ecr.${expected_region}.amazonaws.com/" repository_name
+  [[ "$repository" == "$prefix"* ]] || fail 'Prod image repository does not match the EKS account and Region'
+  repository_name=${repository#"$prefix"}
+  [[ ${#repository_name} -ge 2 && ${#repository_name} -le 256 &&
+     "$repository_name" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]] ||
+    fail 'Prod image repository name is not canonical ECR syntax'
+}
+
 while (($#)); do
   case "$1" in
     --fixture) fixture=${2:?missing fixture path}; shift 2 ;;
@@ -27,25 +37,23 @@ validate_record() {
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == $grade and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
-    (.image.repository | test("^[0-9]{12}\\.dkr\\.ecr\\.(ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+")) and
+    (.image.repository | type == "string") and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
     (.rollout.stableHash | type == "string" and length > 0) and
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
-    .region as $region |
-    (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
-    ($region | IN("ap-northeast-2","us-east-1")) and
-    (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601)
+    (.region as $region |
+      (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
+      ($region | IN("ap-northeast-2","us-east-1")) and
+      (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601))
   ' "$file" >/dev/null || fail 'Prod baseline does not satisfy course.prod-baseline/v1'
 
-  local cluster_account image_account cluster_region image_region
+  local cluster_account cluster_region image_repository
   cluster_account=$(jq -r '.clusterArn | split(":")[4]' "$file")
   cluster_region=$(jq -r '.clusterArn | split(":")[3]' "$file")
-  image_account=$(jq -r '.image.repository | capture("^(?<account>[0-9]{12})\\.").account' "$file")
-  image_region=$(jq -r '.image.repository | capture("^[0-9]{12}\\.dkr\\.ecr\\.(?<region>[^.]+)\\.").region' "$file")
-  [[ "$cluster_account" == "$image_account" && "$cluster_region" == "$image_region" ]] ||
-    fail 'Prod baseline EKS and ECR account/Region identity mismatch'
+  image_repository=$(jq -r '.image.repository' "$file")
+  validate_ecr_repository "$image_repository" "$cluster_region" "$cluster_account"
 }
 
 if [[ -n "$fixture" ]]; then
@@ -162,10 +170,7 @@ jq -e '
 
 cluster_account=${cluster_arn#arn:aws:eks:$AWS_REGION:}
 cluster_account=${cluster_account%%:*}
-[[ "$image_repository" =~ ^([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com/.+ ]] ||
-  fail 'Prod image repository is not an ECR repository'
-[[ ${BASH_REMATCH[1]} == "$cluster_account" && ${BASH_REMATCH[2]} == "$AWS_REGION" ]] ||
-  fail 'Prod image and EKS cluster do not share the same account and Region'
+validate_ecr_repository "$image_repository" "$AWS_REGION" "$cluster_account"
 
 mkdir -p "$(dirname -- "$output")"
 if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
