@@ -44,7 +44,7 @@ validate_ready() {
     (.attestation.ociProvenanceDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitops | (keys | sort) == ["devRevision"]) and (.gitops.devRevision | test("^[0-9a-f]{40}$")) and
     (.cluster | (keys | sort) == ["arn"]) and (.slo | (keys | sort) == ["evidenceId"]) and
-    (.slo.evidenceId | type == "string" and length > 0) and
+    (.slo.evidenceId | type == "string" and test("\\S")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.issuedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
     ($now | canonical_utc_seconds) and
@@ -337,6 +337,7 @@ workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /cicd-cou
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
 ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"
 ecr-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
+slo-evidence-id-whitespace|.slo.evidenceId = "   "
 attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"
 issued-at-calendar|.issuedAt = "2026-02-31T00:00:00Z"
 expires-at-calendar|.expiresAt = "2026-02-31T02:00:00Z"

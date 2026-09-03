@@ -148,7 +148,7 @@ jq -e --arg now "$clock_now" '
   (.attestation.ociProvenanceDigest | test("^sha256:[0-9a-f]{64}$")) and
   (.gitops | (keys | sort) == ["devRevision"]) and (.gitops.devRevision | test("^[0-9a-f]{40}$")) and
   (.cluster | (keys | sort) == ["arn"]) and
-  (.slo | (keys | sort) == ["evidenceId"]) and (.slo.evidenceId | type == "string" and length > 0) and
+  (.slo | (keys | sort) == ["evidenceId"]) and (.slo.evidenceId | type == "string" and test("\\S")) and
   $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
   (.issuedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
   ($now | canonical_utc_seconds) and

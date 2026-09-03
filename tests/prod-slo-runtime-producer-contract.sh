@@ -140,7 +140,7 @@ set_release_repository "$two_character_runtime" '123456789012.dkr.ecr.ap-northea
 run_static "$two_character_runtime" "$tmp_root/ecr-two-character-output.json" >/dev/null ||
   fail 'Prod SLO runtime rejected a two-character ECR repository name'
 
-for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn promotion-ecr-double-slash promotion-ecr-name-too-short promotion-attestation-alpha promotion-owner-whitespace promotion-calendar-invalid; do
+for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn promotion-ecr-double-slash promotion-ecr-name-too-short promotion-attestation-alpha promotion-owner-whitespace promotion-slo-evidence-id-whitespace promotion-calendar-invalid; do
   runtime="$tmp_root/runtime-$label"
   cp -R "$fake_runtime" "$runtime"
   case "$label" in
@@ -168,6 +168,7 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
     promotion-ecr-name-too-short) set_release_repository "$runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"' "$runtime/promotion.yaml" ;;
     promotion-owner-whitespace) yq -i '.workflow.runUrl="https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl="https://github.com/OWNER /cicd-course-sample-app/attestations/1001"' "$runtime/promotion.yaml" ;;
+    promotion-slo-evidence-id-whitespace) yq -i '.slo.evidenceId="   "' "$runtime/promotion.yaml" ;;
     promotion-calendar-invalid) yq -i '.issuedAt="2026-02-31T00:00:00Z"' "$runtime/promotion.yaml" ;;
   esac
   if run_static "$runtime" "$tmp_root/$label-output.json" >/dev/null 2>&1; then
