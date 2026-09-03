@@ -20,6 +20,10 @@ validate_deployment() {
   exact_keys "$file" '["repository","sha"]' .source
   exact_keys "$file" '["repository","indexDigest"]' .image
   jq -e '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
@@ -33,7 +37,7 @@ validate_deployment() {
     (.region | IN("ap-northeast-2","us-east-1")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
-    (.observedAt | fromdateiso8601 != null)
+    (.observedAt | canonical_utc_seconds)
   ' "$file" >/dev/null || fail "deployment evidence is not CLOUD_RUNTIME or has invalid identity"
 }
 
@@ -43,16 +47,23 @@ validate_slo() {
   exact_keys "$file" '["repository","sha"]' .source
   exact_keys "$file" '["repository","indexDigest"]' .image
   jq -e '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
     (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
+    (.evidenceId | nonblank) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    (.observedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
     (.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)
   ' "$file" >/dev/null || fail "SLO evidence is not an unexpired PASS CLOUD_RUNTIME record"
 }
@@ -60,6 +71,11 @@ validate_slo() {
 validate_baseline() {
   local file=$1
   jq -e '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
@@ -70,12 +86,12 @@ validate_baseline() {
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
-    (.rollout.stableHash | type == "string" and length > 0) and
+    (.rollout.stableHash | nonblank) and
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
-    (.observedAt | fromdateiso8601) <= now
+    (.observedAt | canonical_utc_seconds) and (.observedAt | fromdateiso8601) <= now
   ' "$file" >/dev/null || fail "Prod baseline must prove stable ReplicaSet revision 1 at 100 percent"
 }
 
@@ -91,7 +107,7 @@ case_raw() {
 }
 
 case_identity_edges() {
-  local invalid invalid_slo invalid_baseline
+  local invalid invalid_slo invalid_baseline variant
   invalid=$(mktemp "${TMPDIR:-/tmp}/evidence-identity.XXXXXX")
   invalid_slo=$(mktemp "${TMPDIR:-/tmp}/evidence-slo-identity.XXXXXX")
   invalid_baseline=$(mktemp "${TMPDIR:-/tmp}/evidence-baseline-identity.XXXXXX")
@@ -121,6 +137,22 @@ case_identity_edges() {
     rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
     fail "raw evidence accepted a one-character ECR repository name"
   fi
+  for variant in deployment-impossible-time slo-impossible-time slo-bom-evidence-id baseline-impossible-time baseline-bom-stable-hash; do
+    cp "$fixture_root/deployment-valid.json" "$invalid"
+    cp "$fixture_root/slo-valid.json" "$invalid_slo"
+    cp "$fixture_root/baseline-valid.json" "$invalid_baseline"
+    case "$variant" in
+      deployment-impossible-time) jq '.observedAt="2026-02-31T00:30:00Z"' "$invalid" >"$invalid.tmp" && mv "$invalid.tmp" "$invalid" ;;
+      slo-impossible-time) jq '.observedAt="2026-02-31T00:30:00Z"' "$invalid_slo" >"$invalid_slo.tmp" && mv "$invalid_slo.tmp" "$invalid_slo" ;;
+      slo-bom-evidence-id) jq '.evidenceId="\uFEFF"' "$invalid_slo" >"$invalid_slo.tmp" && mv "$invalid_slo.tmp" "$invalid_slo" ;;
+      baseline-impossible-time) jq '.observedAt="2026-02-31T00:30:00Z"' "$invalid_baseline" >"$invalid_baseline.tmp" && mv "$invalid_baseline.tmp" "$invalid_baseline" ;;
+      baseline-bom-stable-hash) jq '.rollout.stableHash="\uFEFF"' "$invalid_baseline" >"$invalid_baseline.tmp" && mv "$invalid_baseline.tmp" "$invalid_baseline" ;;
+    esac
+    if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$invalid_baseline" case_raw) >/dev/null 2>&1; then
+      rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
+      fail "raw evidence accepted noncanonical $variant"
+    fi
+  done
   jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
     "$fixture_root/deployment-valid.json" >"$invalid"
   jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
