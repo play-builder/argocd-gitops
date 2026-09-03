@@ -16,7 +16,8 @@ validate_fixture() {
 }
 
 case_all() {
-  local tmp_root invalid_inventory_root invalid_inventory invalid_removal value label
+  local tmp_root invalid_inventory_root invalid_inventory invalid_removal value label timestamp_label
+  local invalid_freeze invalid_timestamp_removal
   tmp_root=$(mktemp -d)
   trap 'rm -rf -- "$tmp_root"' RETURN
   set +e
@@ -41,6 +42,39 @@ case_all() {
   for file in "$fixture_root"/freeze-valid.json "$fixture_root"/removal-valid.json; do jq -e '.evidenceGrade == "CLOUD_RUNTIME"' "$file" >/dev/null || fail "$(basename "$file") is not CLOUD_RUNTIME"; done
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --fixture "$fixture_root/freeze-valid.json" >/dev/null || fail "valid freeze evidence fixture was rejected"
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --fixture "$fixture_root/removal-valid.json" --eks-repo-root "$fixture_root" >/dev/null || fail "provider Secret projection validation failed"
+  while IFS='|' read -r timestamp_label value; do
+    invalid_freeze="$tmp_root/freeze-$timestamp_label.json"
+    jq --arg value "$value" '.observedAt=$value' \
+      "$fixture_root/freeze-valid.json" >"$invalid_freeze"
+    if bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze \
+      --fixture "$invalid_freeze" >/dev/null 2>&1; then
+      fail "freeze fixture accepted noncanonical observedAt: $timestamp_label"
+    fi
+
+    invalid_timestamp_removal="$tmp_root/removal-$timestamp_label.json"
+    jq --arg value "$value" '.observedAt=$value' \
+      "$fixture_root/removal-valid.json" >"$invalid_timestamp_removal"
+    if bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --fixture "$invalid_timestamp_removal" --eks-repo-root "$fixture_root" \
+      >/dev/null 2>&1; then
+      fail "removal fixture accepted noncanonical observedAt: $timestamp_label"
+    fi
+
+    invalid_inventory_root="$tmp_root/inventory-timestamp-$timestamp_label"
+    invalid_inventory="$invalid_inventory_root/evidence/cleanup/ownership-inventory.json"
+    mkdir -p "$(dirname "$invalid_inventory")"
+    jq --arg value "$value" '.observedAt=$value' \
+      "$fixture_root/ownership-valid.json" >"$invalid_inventory"
+    if bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --fixture "$fixture_root/removal-valid.json" \
+      --eks-repo-root "$invalid_inventory_root" >/dev/null 2>&1; then
+      fail "ownership fixture accepted noncanonical observedAt: $timestamp_label"
+    fi
+  done <<'TIMESTAMPS'
+invalid-calendar|2026-02-31T00:00:00Z
+fractional|2026-09-03T00:00:00.123Z
+non-z-offset|2026-09-03T09:00:00+09:00
+TIMESTAMPS
   for label in ascii-space bom; do
     value=' '
     [[ "$label" == bom ]] && value=$(printf '\357\273\277')

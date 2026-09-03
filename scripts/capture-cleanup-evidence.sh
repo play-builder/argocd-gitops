@@ -62,6 +62,8 @@ def utc_timestamp(value, context):
         parsed = datetime.fromisoformat(value[:-1] + "+00:00")
     except ValueError:
         fail(f"{context} is not an RFC3339 UTC timestamp")
+    if parsed.microsecond != 0 or parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
+        fail(f"{context} must use canonical UTC-second precision")
     if parsed > datetime.now(timezone.utc):
         fail(f"{context} is in the future")
 
@@ -464,6 +466,10 @@ else
 
   jq -e --arg grade "$evidence_grade" '
     def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
+    def canonical_utc_seconds:
+      type == "string" and
+      test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      ((try (fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") == .);
     (keys | sort) == ["accountId","courseId","evidenceGrade","observedAt","region","resources","schemaVersion"] and
     .schemaVersion == "course.cleanup-ownership/v1" and .evidenceGrade == $grade and
     (.courseId | nonblank) and (.accountId | test("^[0-9]{12}$")) and
@@ -480,7 +486,7 @@ else
       (.billable | type == "boolean") and (.decision | IN("DELETE","RETAIN","EXTERNAL_SHARED")) and
       (if .decision == "DELETE" then .owner == "course"
        else (.reason | nonblank) and (.followUpAction | nonblank) end)) and
-    (.observedAt | fromdateiso8601) <= now
+    (.observedAt | canonical_utc_seconds) and (.observedAt | fromdateiso8601) <= now
   ' "$inventory" >/dev/null || {
     echo "FAIL: ownership inventory does not satisfy course.cleanup-ownership/v1" >&2
     exit 1
@@ -493,6 +499,10 @@ else
   }
 
   jq -e --arg region "$region" --arg account "$account_id" --arg grade "$evidence_grade" '
+    def canonical_utc_seconds:
+      type == "string" and
+      test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      ((try (fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") == .);
     (keys | sort) == ["clusters","evidenceGrade","gitopsRevision","observedAt","schemaVersion","status","writers"] and
     .schemaVersion == "course.gitops-freeze/v1" and .evidenceGrade == $grade and .status == "FROZEN" and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
@@ -505,7 +515,8 @@ else
       .application.sync == "Synced" and .application.health == "Healthy" and
       .application.automated == false) and
     (.writers | (keys | sort) == ["chaosResources","loadGenerators","migrationJobs","recoveryJobs"]) and
-    ([.writers[]] | all(. == 0)) and (.observedAt | fromdateiso8601) < now
+    ([.writers[]] | all(. == 0)) and (.observedAt | canonical_utc_seconds) and
+    (.observedAt | fromdateiso8601) < now
   ' "$freeze" >/dev/null || {
     echo "FAIL: canonical freeze evidence is invalid or does not match ownership identity" >&2
     exit 1

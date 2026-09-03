@@ -88,6 +88,11 @@ jq -e \
   --arg environment "$environment" \
   --arg revision "$expected_gitops_revision" \
   --arg now "$now" '
+  def canonical_utc_seconds:
+    . as $value |
+    ($value | type == "string") and
+    ($value | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+    ((try ($value | fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") == $value);
   .region as $region |
   keys == [
     "application", "clusterArn", "environment", "evidenceGrade", "expiresAt",
@@ -134,7 +139,11 @@ jq -e \
     "terraformAddress": "module.external_secrets[0].helm_release.this",
     "to": "terraform"
   } and
+  (.observedAt | canonical_utc_seconds) and
+  (.expiresAt | canonical_utc_seconds) and
+  ($now | canonical_utc_seconds) and
   ((.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)) and
+  ((.observedAt | fromdateiso8601) <= ($now | fromdateiso8601)) and
   ((.expiresAt | fromdateiso8601) > ($now | fromdateiso8601))
 ' "$handoff" >/dev/null || fail "handoff evidence is malformed, stale, or not frozen"
 
@@ -153,6 +162,11 @@ jq -e \
   --arg cluster "$handoff_cluster" \
   --arg handoffObserved "$handoff_observed" \
   --arg now "$now" '
+  def canonical_utc_seconds:
+    . as $value |
+    ($value | type == "string") and
+    ($value | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+    ((try ($value | fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") == $value);
   keys == [
     "clusterArn", "environment", "evidenceGrade", "expiresAt", "handoffSha256",
     "observedAt", "region", "release", "schemaVersion", "terraform"
@@ -179,8 +193,13 @@ jq -e \
   .terraform.planActions == [] and
   (.terraform.stateLineage | test("^[0-9a-fA-F-]{36}$")) and
   .terraform.stateSerial >= 1 and
+  (.observedAt | canonical_utc_seconds) and
+  (.expiresAt | canonical_utc_seconds) and
+  ($handoffObserved | canonical_utc_seconds) and
+  ($now | canonical_utc_seconds) and
   ((.observedAt | fromdateiso8601) >= ($handoffObserved | fromdateiso8601)) and
   ((.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)) and
+  ((.observedAt | fromdateiso8601) <= ($now | fromdateiso8601)) and
   ((.expiresAt | fromdateiso8601) > ($now | fromdateiso8601))
 ' "$adoption" >/dev/null || {
   if jq -e '.terraform.imported != true or .terraform.planActions != []' \

@@ -116,4 +116,63 @@ set -e
 grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: adoption evidence is malformed' \
   <<<"$hash_output"
 
+assert_timestamp_rejected() {
+  local document=$1 field=$2 value=$3 candidate=$4 output status paired_adoption digest
+  jq --arg value "$value" ".$field = \$value" "$document" >"$candidate"
+  set +e
+  if [[ "$document" == *dev-handoff.json ]]; then
+    paired_adoption="$candidate.adoption.json"
+    if command -v sha256sum >/dev/null 2>&1; then
+      digest=$(sha256sum "$candidate" | awk '{print "sha256:"$1}')
+    else
+      digest=$(shasum -a 256 "$candidate" | awk '{print "sha256:"$1}')
+    fi
+    jq --arg digest "$digest" '.handoffSha256 = $digest' \
+      "$fixture_root/dev-adoption.json" >"$paired_adoption"
+    output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+      bash "$gate" --environment dev --handoff "$candidate" \
+        --adoption "$paired_adoption" \
+        --expected-gitops-revision "$revision" 2>&1)
+  else
+    output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+      bash "$gate" --environment dev --handoff "$fixture_root/dev-handoff.json" \
+        --adoption "$candidate" --expected-gitops-revision "$revision" 2>&1)
+  fi
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || {
+    echo "FAIL: $field accepted noncanonical timestamp: $value" >&2
+    exit 1
+  }
+  if [[ "$document" == *dev-handoff.json ]]; then
+    grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: handoff evidence is malformed' <<<"$output"
+  else
+    grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: adoption evidence is malformed' <<<"$output"
+  fi
+}
+
+for value in \
+  2026-02-31T00:00:00Z \
+  2026-09-03T00:00:00.123Z \
+  2026-09-03T09:00:00+09:00; do
+  assert_timestamp_rejected "$fixture_root/dev-handoff.json" observedAt "$value" \
+    "$scratch_root/invalid-handoff-observed.json"
+  assert_timestamp_rejected "$fixture_root/dev-adoption.json" observedAt "$value" \
+    "$scratch_root/invalid-adoption-observed.json"
+done
+
+for value in \
+  2099-02-31T00:00:00Z \
+  2099-09-03T01:00:00.123Z \
+  2099-09-03T10:00:00+09:00; do
+  assert_timestamp_rejected "$fixture_root/dev-handoff.json" expiresAt "$value" \
+    "$scratch_root/invalid-handoff-expires.json"
+  assert_timestamp_rejected "$fixture_root/dev-adoption.json" expiresAt "$value" \
+    "$scratch_root/invalid-adoption-expires.json"
+done
+assert_timestamp_rejected "$fixture_root/dev-handoff.json" observedAt \
+  2098-09-03T00:00:00Z "$scratch_root/future-handoff-observed.json"
+assert_timestamp_rejected "$fixture_root/dev-adoption.json" observedAt \
+  2098-09-03T00:00:00Z "$scratch_root/future-adoption-observed.json"
+
 echo "PASS: Phase B gate fails closed and validates the exact adoption contract."
