@@ -2,6 +2,7 @@ database:
   enabled: true
 recovery:
   restoreEnabled: true
+  snapshotHandle: snap-0123456789abcdef
 networkPolicy:
   enabled: true
   gateway:

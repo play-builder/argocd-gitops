@@ -12,3 +12,5 @@ argoHealthCustomizations:
     apiGroup: snapshot.storage.k8s.io
     kind: VolumeSnapshot
     healthyWhen: readyToUse=true with a bound content name
+    requiredBeforeSyncWave: -2
+    implementationOwner: EKS-infra

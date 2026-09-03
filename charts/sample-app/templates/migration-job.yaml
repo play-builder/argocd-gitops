@@ -1,4 +1,4 @@
-{{- if .Values.database.enabled }}
+{{- if and .Values.database.enabled .Values.database.migration.enabled (not .Values.maintenance.writersStopped) }}
 {{- $secretName := include "sample-app.databaseSecretName" . }}
 apiVersion: batch/v1
 kind: Job

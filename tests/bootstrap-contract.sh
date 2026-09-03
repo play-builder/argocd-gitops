@@ -301,6 +301,20 @@ case_platform_health_interface() {
   echo "PASS: ExternalSecret readiness contract has one EKS-infra implementation owner."
 }
 
+case_recovery_wiring() {
+  local dev="$render_root/bootstrap-dev-recovery.yaml" prod="$render_root/bootstrap-prod-recovery.yaml"
+  render_bootstrap dev "$dev"; render_bootstrap prod "$prod"
+  yq eval-all -o=json -I=0 '[.]' "$dev" | jq -s -e 'add | . as $all |
+    ([ $all[] | select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev") ] | length) == 1 and
+    ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.destinations[].namespace] | sort) == ["app-dev","app-recovery"] and
+    ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.clusterResourceWhitelist[] | select(.group == "snapshot.storage.k8s.io" and .kind == "VolumeSnapshotContent")] | length) == 1
+  ' >/dev/null || fail "Dev bootstrap must explicitly wire app-recovery and VolumeSnapshotContent"
+  yq -o=json '.' "$repository_root/argocd/bootstrap/dev/sample-app.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles == ["../../{{ .valuesFile }}","../../{{ .statefulValuesFile }}","../../envs/dev/recovery-values.yaml"]' >/dev/null || fail "Dev recovery values must follow the stateful values file"
+  if yq -o=json '.' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles[] | select(contains("recovery-values.yaml"))' >/dev/null; then fail "Prod ApplicationSet must not consume recovery values"; fi
+  yq -o=json '.' "$repository_root/contracts/platform-requirements.yaml" | jq -e '.argoHealthCustomizations | any(.[]; .id == "volume-snapshot-ready-health/v1" and .implementationOwner == "EKS-infra" and .healthyWhen == "readyToUse=true with a bound content name")' >/dev/null || fail "VolumeSnapshot health must remain EKS-infra owned"
+  echo "PASS: Dev recovery destination, snapshot allowlist, and platform health wiring are explicit."
+}
+
 requested_case=all
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
@@ -316,6 +330,7 @@ case "$requested_case" in
   pss-enforce) case_pss_enforce ;;
   reloader-diff) case_reloader_diff ;;
   platform-health-interface) case_platform_health_interface ;;
+  recovery-wiring) case_recovery_wiring ;;
   all)
     case_namespace_pss
     case_phase_a_controller
@@ -323,6 +338,7 @@ case "$requested_case" in
     case_pss_enforce
     case_reloader_diff
     case_platform_health_interface
+    case_recovery_wiring
     ;;
   *) fail "unknown bootstrap contract case: $requested_case" ;;
 esac

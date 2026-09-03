@@ -54,6 +54,10 @@ app.kubernetes.io/component: application
 {{- required "externalSecrets.database.targetSecretName is required when database is enabled" .Values.externalSecrets.database.targetSecretName -}}
 {{- end -}}
 
+{{- define "sample-app.recoveryDatabaseSecretName" -}}
+{{- printf "%s-db-recovery" (include "sample-app.fullname" .) -}}
+{{- end -}}
+
 {{- define "sample-app.telemetryConfigName" -}}
 {{- printf "%s-telemetry" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

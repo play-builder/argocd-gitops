@@ -1,0 +1,17 @@
+database:
+  enabled: true
+  replicaCount: 1
+  migration:
+    enabled: false
+maintenance:
+  writersStopped: true
+snapshot:
+  captureEnabled: true
+recovery:
+  restoreEnabled: false
+  namespace: app-recovery
+  snapshotClassName: ebs.csi.aws.com
+  source:
+    namespace: app-dev
+    pvcName: data-sample-app-postgresql-0
+    snapshotName: sample-app-postgresql-snapshot

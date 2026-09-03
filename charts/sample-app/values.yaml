@@ -108,6 +108,7 @@ database:
     digest: ""
     pullPolicy: IfNotPresent
   migration:
+    enabled: true
     backoffLimit: 3
     activeDeadlineSeconds: 600
   resources:
@@ -188,3 +189,18 @@ networkPolicy:
 recovery:
   restoreEnabled: false
   namespace: app-recovery
+  snapshotClassName: ebs.csi.aws.com
+  snapshotDriver: ebs.csi.aws.com
+  snapshotContentName: sample-app-postgresql-recovery-content
+  snapshotName: sample-app-postgresql-recovery-snapshot
+  pvcName: sample-app-postgresql-recovery
+  snapshotHandle: ""
+  cleanupLabel: recovery
+  source:
+    namespace: app-dev
+    pvcName: data-sample-app-postgresql-0
+    snapshotName: sample-app-postgresql-snapshot
+snapshot:
+  captureEnabled: false
+maintenance:
+  writersStopped: false

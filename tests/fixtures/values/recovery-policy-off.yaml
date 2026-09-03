@@ -1,6 +1,6 @@
 database:
   enabled: true
 recovery:
-  restoreEnabled: true
+  restoreEnabled: false
 networkPolicy:
   enabled: false

@@ -55,6 +55,8 @@ spec:
       kind: GatewayClass
     - group: gateway.k8s.aws
       kind: LoadBalancerConfiguration
+    - group: snapshot.storage.k8s.io
+      kind: VolumeSnapshotContent
   namespaceResourceWhitelist:
     - group: ""
       kind: ServiceAccount
