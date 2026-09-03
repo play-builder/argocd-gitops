@@ -90,7 +90,7 @@ externalSecrets:
     remoteSecretName: ""
     targetSecretName: sample-app-db
 
-# Lab-only PostgreSQL. Ch01~Ch14 remains Stateless because this is false by default.
+# PostgreSQL stays opt-in so the default deployment remains stateless.
 database:
   enabled: false
   host: ""
@@ -185,7 +185,6 @@ networkPolicy:
     podLabels: {}
     port: 4318
 
-# Task 6 expands this interface with snapshot and restore identity fields.
 recovery:
   restoreEnabled: false
   namespace: app-recovery
