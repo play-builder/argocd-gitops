@@ -83,6 +83,25 @@ classify_rollback() {
   '
 }
 
+validate_stable_reapply_json() {
+  jq -e '
+    type == "object" and
+    (keys | sort) == ["action","candidateDigest","requiresDesiredStateReconcile","stableDigest"] and
+    .action == "git-reapply-stable-digest" and
+    .requiresDesiredStateReconcile == true and
+    (.stableDigest | type == "string" and test("^sha256:[0-9a-f]{64}$")) and
+    (.candidateDigest | type == "string" and test("^sha256:[0-9a-f]{64}$")) and
+    .stableDigest != .candidateDigest
+  ' >/dev/null
+}
+
+validate_stable_reapply_document() {
+  local file=$1 json
+  json=$(yq -o=json '.' "$file") || return 1
+  jq -e '(keys | sort) == ["inProgressStableReapply"]' <<<"$json" >/dev/null || return 1
+  jq -cer '.inProgressStableReapply' <<<"$json" | validate_stable_reapply_json
+}
+
 validate_candidate_set() {
   local file=$1 rollback_json window hash revision count
   rollback_json=$(yq -o=json '.' "$file") || return 1
@@ -120,6 +139,9 @@ validate_candidate_set() {
       .imageDigest == $root.releaseLineage.v2PrimeContractCompatible.indexDigest and
       .gitRevertSha == $root.releaseLineage.v2PrimeContractCompatible.sourceSha)
   ' <<<"$rollback_json" >/dev/null || return 1
+  if jq -e 'has("inProgressStableReapply")' <<<"$rollback_json" >/dev/null; then
+    jq -cer '.inProgressStableReapply' <<<"$rollback_json" | validate_stable_reapply_json || return 1
+  fi
   window=$(jq -r '.completedRollback.rollbackWindow.revisions' <<<"$rollback_json")
   [[ "$window" =~ ^[0-9]+$ ]] && ((window >= 1)) || return 1
   while IFS=$'\t' read -r hash revision; do
@@ -218,6 +240,11 @@ case_rollback_edges() {
 
   validate_candidate_set "$outside" >/dev/null 2>&1 && fail "outside-window rollback fixture was accepted"
 
+  invalid="$render_root/rollback-invalid-stable-reapply.json"
+  jq '.inProgressStableReapply.action="kubectl-set-image" | .inProgressStableReapply.extra=true' "$inside" >"$invalid"
+  validate_candidate_set "$invalid" >/dev/null 2>&1 &&
+    fail "rollback candidate set accepted an unsafe or noncanonical inProgressStableReapply"
+
   for fixture in "$fixture_root"/rollback/{experiment-excluded,foreign-owner,foreign-uid,non-controller-owner,revision-gap}.json; do
     validate_candidate_set "$fixture" ||
       fail "valid timestamp/ownership rollback fixture was rejected: $(basename "$fixture")"
@@ -247,6 +274,28 @@ case_rollback_edges() {
     fi
   done
   echo "PASS: rollback candidates, ownership, and rollback-window edge cases fail closed."
+}
+
+case_in_progress_stable_reapply() {
+  local valid="$fixture_root/rollback/in-progress-stable-reapply.json"
+  local invalid label expression
+  validate_stable_reapply_document "$valid" || fail "in-progress stable reapply requires GitOps reconciliation"
+  while IFS='|' read -r label expression; do
+    invalid="$render_root/stable-reapply-$label.json"
+    jq "$expression" "$valid" >"$invalid"
+    if validate_stable_reapply_document "$invalid" >/dev/null 2>&1; then
+      fail "in-progress stable reapply accepted invalid $label"
+    fi
+  done <<'CASES'
+extra-key|.inProgressStableReapply.extra = true
+missing-action|del(.inProgressStableReapply.action)
+unsafe-action|.inProgressStableReapply.action = "kubectl-set-image"
+reconcile-false|.inProgressStableReapply.requiresDesiredStateReconcile = false
+stable-digest|.inProgressStableReapply.stableDigest = "sha256:abc"
+candidate-digest|.inProgressStableReapply.candidateDigest = "sha256:XYZ"
+same-digest|.inProgressStableReapply.candidateDigest = .inProgressStableReapply.stableDigest
+CASES
+  echo "PASS: stable reapply requires canonical GitOps reconciliation."
 }
 
 case_lineage() {
@@ -346,11 +395,11 @@ case "$requested" in
   expired) NOW=2026-09-03T03:00:00Z EVIDENCE="$fixture_root/promotion/expired.yaml" case_promotion ;;
   baseline-candidate-input|render-equivalence) case_render ;;
   promotion) case_promotion ;;
-  in-progress-stable-reapply) jq -e '.inProgressStableReapply.requiresDesiredStateReconcile == true and .inProgressStableReapply.stableDigest != .inProgressStableReapply.candidateDigest' "$fixture_root/rollback/in-progress-stable-reapply.json" >/dev/null || fail "in-progress stable reapply requires desired-state reconciliation"; echo "PASS: stable reapply requires GitOps reconciliation." ;;
+  in-progress-stable-reapply) case_in_progress_stable_reapply ;;
   rollback-edges) case_rollback_edges ;;
   ready-edges) case_ready_edges ;;
   lineage) case_lineage ;;
   real-path) case_real_path ;;
-  all) case_promotion; case_render; case_ready_edges; case_rollback_edges; case_lineage; case_real_path ;;
+  all) case_promotion; case_render; case_ready_edges; case_in_progress_stable_reapply; case_rollback_edges; case_lineage; case_real_path ;;
   *) case_promotion ;;
 esac
