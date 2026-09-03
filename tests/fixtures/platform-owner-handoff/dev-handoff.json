@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "course.platform-release-handoff/v1",
+  "evidenceGrade": "STATIC",
+  "environment": "dev",
+  "region": "ap-northeast-2",
+  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev",
+  "gitopsRevision": "1111111111111111111111111111111111111111",
+  "application": {
+    "name": "external-secrets-dev",
+    "uid": "application-uid-dev",
+    "present": true,
+    "automated": false,
+    "resourcesFinalizerPresent": false,
+    "operationInProgress": false
+  },
+  "release": {
+    "namespace": "external-secrets",
+    "name": "external-secrets",
+    "chart": "external-secrets",
+    "version": "2.10.0",
+    "revision": 1,
+    "status": "deployed",
+    "valuesSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "helmStorageObjectUid": "helm-storage-uid-dev",
+    "workloadUids": [
+      {
+        "kind": "Deployment",
+        "name": "external-secrets",
+        "uid": "deployment-uid-dev"
+      }
+    ],
+    "crdUids": [
+      {
+        "name": "externalsecrets.external-secrets.io",
+        "uid": "crd-uid-dev"
+      }
+    ]
+  },
+  "readiness": {
+    "deploymentsAvailable": true,
+    "crdsEstablished": true
+  },
+  "ownership": {
+    "from": "argocd",
+    "to": "terraform",
+    "terraformAddress": "module.external_secrets[0].helm_release.this"
+  },
+  "observedAt": "2026-09-03T00:00:00Z",
+  "expiresAt": "2099-09-03T01:00:00Z"
+}

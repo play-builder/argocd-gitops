@@ -13,6 +13,7 @@ spec:
         elements:
           - environment: prod
             namespace: app-prod
+            podSecurityVersion: v1.36
             valuesFile: envs/prod/values.yaml
             statefulValuesFile: envs/prod/stateful-values.yaml
   template:
@@ -37,8 +38,13 @@ spec:
       syncPolicy:
         managedNamespaceMetadata:
           labels:
+            course.playbuilder.io/admission: enabled
             gateway-access: "true"
             environment: "{{ .environment }}"
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
+            pod-security.kubernetes.io/warn-version: "{{ .podSecurityVersion }}"
+            pod-security.kubernetes.io/audit-version: "{{ .podSecurityVersion }}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

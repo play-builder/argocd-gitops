@@ -1,0 +1,79 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: course-workload-security
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Equivalent
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs"]
+      - apiGroups: ["argoproj.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["rollouts"]
+  variables:
+    - name: podSpec
+      expression: >-
+        object.kind == 'Pod' ? object.spec : object.spec.template.spec
+  validations:
+    - expression: >-
+        variables.podSpec.containers.all(container,
+          container.image.matches('^.+@sha256:[0-9a-f]{64}$')) &&
+        (!has(variables.podSpec.initContainers) ||
+          variables.podSpec.initContainers.all(container,
+            container.image.matches('^.+@sha256:[0-9a-f]{64}$')))
+      message: Every workload image must use an immutable sha256 digest.
+      reason: Invalid
+    - expression: >-
+        has(variables.podSpec.securityContext) &&
+        variables.podSpec.securityContext.runAsNonRoot == true &&
+        has(variables.podSpec.securityContext.seccompProfile) &&
+        variables.podSpec.securityContext.seccompProfile.type == 'RuntimeDefault'
+      message: Workloads must run as non-root with RuntimeDefault seccomp.
+      reason: Invalid
+    - expression: >-
+        variables.podSpec.containers.all(container,
+          has(container.securityContext) &&
+          container.securityContext.allowPrivilegeEscalation == false &&
+          has(container.securityContext.capabilities) &&
+          has(container.securityContext.capabilities.drop) &&
+          container.securityContext.capabilities.drop.exists(capability, capability == 'ALL')) &&
+        (!has(variables.podSpec.initContainers) ||
+          variables.podSpec.initContainers.all(container,
+            has(container.securityContext) &&
+            container.securityContext.allowPrivilegeEscalation == false &&
+            has(container.securityContext.capabilities) &&
+            has(container.securityContext.capabilities.drop) &&
+            container.securityContext.capabilities.drop.exists(capability, capability == 'ALL')))
+      message: Containers must disable privilege escalation and drop all capabilities.
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: course-workload-security
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  policyName: course-workload-security
+  validationActions:
+    - Audit
+    - Warn
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        course.playbuilder.io/admission: enabled

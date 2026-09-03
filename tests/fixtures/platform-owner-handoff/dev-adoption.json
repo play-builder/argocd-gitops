@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "course.platform-release-adoption/v1",
+  "evidenceGrade": "STATIC",
+  "environment": "dev",
+  "region": "ap-northeast-2",
+  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev",
+  "handoffSha256": "sha256:a8f8689b0e03b30c3a5cd6ca3d9ec9c19fba21eda86dd0461339ec846f42eeae",
+  "release": {
+    "before": {
+      "namespace": "external-secrets",
+      "name": "external-secrets",
+      "chart": "external-secrets",
+      "version": "2.10.0",
+      "revision": 1,
+      "status": "deployed",
+      "valuesSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "helmStorageObjectUid": "helm-storage-uid-dev",
+      "workloadUids": [
+        {
+          "kind": "Deployment",
+          "name": "external-secrets",
+          "uid": "deployment-uid-dev"
+        }
+      ],
+      "crdUids": [
+        {
+          "name": "externalsecrets.external-secrets.io",
+          "uid": "crd-uid-dev"
+        }
+      ]
+    },
+    "after": {
+      "namespace": "external-secrets",
+      "name": "external-secrets",
+      "chart": "external-secrets",
+      "version": "2.10.0",
+      "revision": 1,
+      "status": "deployed",
+      "valuesSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "helmStorageObjectUid": "helm-storage-uid-dev",
+      "workloadUids": [
+        {
+          "kind": "Deployment",
+          "name": "external-secrets",
+          "uid": "deployment-uid-dev"
+        }
+      ],
+      "crdUids": [
+        {
+          "name": "externalsecrets.external-secrets.io",
+          "uid": "crd-uid-dev"
+        }
+      ]
+    }
+  },
+  "terraform": {
+    "address": "module.external_secrets[0].helm_release.this",
+    "stateLineage": "22222222-2222-4222-8222-222222222222",
+    "stateSerial": 5,
+    "imported": true,
+    "planActions": []
+  },
+  "observedAt": "2026-09-03T00:10:00Z",
+  "expiresAt": "2099-09-03T01:00:00Z"
+}

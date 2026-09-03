@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: course-prod
+  namespace: argocd
+spec:
+  roles:
+    - name: observer
+      description: Read production applications without mutation permission
+      groups:
+        - course:prod-observers
+      policies:
+        - p, proj:course-prod:observer, applications, get, course-prod/*, allow
+    - name: operator
+      description: Read, sync, and promote approved production releases
+      groups:
+        - course:prod-operators
+      policies:
+        - p, proj:course-prod:operator, applications, get, course-prod/*, allow
+        - p, proj:course-prod:operator, applications, sync, course-prod/*, allow
+        - p, proj:course-prod:operator, applications, action/argoproj.io/Rollout/promote, course-prod/*, allow
