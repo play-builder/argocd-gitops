@@ -240,6 +240,34 @@ jq -e '
 ' "$static_removal" >/dev/null || fail 'fake removal output omitted exhaustive retained-object evidence'
 [[ "$before_removal" == "$(fingerprint "$removal_output")" ]] || fail 'fake removal execution changed canonical evidence'
 
+for label in ascii-space bom; do
+  value=' '
+  [[ "$label" == bom ]] && value=$(printf '\357\273\277')
+  invalid_inventory_root="$tmp_root/EKS-infra-$label-course-id"
+  mkdir -p "$invalid_inventory_root/evidence/cleanup"
+  jq --arg value "$value" '.courseId=$value' \
+    "$eks_root/evidence/cleanup/ownership-inventory.json" \
+    >"$invalid_inventory_root/evidence/cleanup/ownership-inventory.json"
+  if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+    bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --eks-repo-root "$invalid_inventory_root" --dev-context dev-context --prod-context prod-context \
+      --freeze-evidence "$static_freeze" --output "$tmp_root/$label-course-id-removal.json" >/dev/null 2>&1; then
+    fail "static removal execution accepted $label-only ownership courseId"
+  fi
+  invalid_inventory_root="$tmp_root/EKS-infra-$label-reason"
+  mkdir -p "$invalid_inventory_root/evidence/cleanup"
+  jq --arg value "$value" \
+    '.resources |= map(if .kind=="PersistentVolumeClaim" then .reason=$value else . end)' \
+    "$eks_root/evidence/cleanup/ownership-inventory.json" \
+    >"$invalid_inventory_root/evidence/cleanup/ownership-inventory.json"
+  if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+    bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --eks-repo-root "$invalid_inventory_root" --dev-context dev-context --prod-context prod-context \
+      --freeze-evidence "$static_freeze" --output "$tmp_root/$label-reason-removal.json" >/dev/null 2>&1; then
+    fail "static removal execution accepted $label-only retained rationale"
+  fi
+done
+
 existing_runtime="$tmp_root/cleanup-runtime-existing-app"
 cp -R "$runtime" "$existing_runtime"
 printf '%s\n' 'application.argoproj.io/sample-app-dev' >"$existing_runtime/dev-application-name.txt"

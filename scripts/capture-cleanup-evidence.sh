@@ -48,6 +48,9 @@ def fail(message):
     print("FAIL: " + message, file=sys.stderr)
     raise SystemExit(1)
 
+def nonblank(value):
+    return isinstance(value, str) and any(not (character.isspace() or character == "\ufeff") for character in value)
+
 def exact(value, keys, context):
     if not isinstance(value, dict) or set(value) != set(keys):
         fail(f"{context} has an unexpected key set")
@@ -75,7 +78,7 @@ def validate_inventory(path):
     exact(inventory, {"schemaVersion","evidenceGrade","courseId","accountId","region","resources","observedAt"}, "ownership inventory")
     if inventory["schemaVersion"] != "course.cleanup-ownership/v1" or inventory["evidenceGrade"] != "CLOUD_RUNTIME":
         fail("ownership inventory schema or evidence grade is invalid")
-    if not isinstance(inventory["courseId"], str) or not inventory["courseId"] or not re.fullmatch(r"[0-9]{12}", inventory["accountId"]):
+    if not nonblank(inventory["courseId"]) or not re.fullmatch(r"[0-9]{12}", inventory["accountId"]):
         fail("ownership inventory identity is invalid")
     if inventory["region"] not in {"ap-northeast-2", "us-east-1"} or not isinstance(inventory["resources"], list) or not inventory["resources"]:
         fail("ownership inventory Region or resources are invalid")
@@ -86,13 +89,13 @@ def validate_inventory(path):
         exact(resource, RESOURCE_KEYS, "ownership resource")
         if resource["environment"] not in {"dev","prod","shared"} or resource["managedBy"] != "terraform":
             fail("ownership resource scope is invalid")
-        if not all(isinstance(resource[key], str) and resource[key] for key in ("kind","id","classification","owner")):
+        if not all(nonblank(resource[key]) for key in ("kind","id","classification","owner")):
             fail("ownership resource identity is incomplete")
         if type(resource["billable"]) is not bool or resource["decision"] not in {"DELETE","RETAIN","EXTERNAL_SHARED"}:
             fail("ownership resource decision is invalid")
         if resource["decision"] == "DELETE" and resource["owner"] != "course":
             fail("delete decision is not course-owned")
-        if resource["decision"] != "DELETE" and not all(isinstance(resource[key], str) and resource[key] for key in ("reason","followUpAction")):
+        if resource["decision"] != "DELETE" and not all(nonblank(resource[key]) for key in ("reason","followUpAction")):
             fail("retained ownership resource lacks rationale")
         identities.append((resource["kind"], resource["id"]))
     if len(identities) != len(set(identities)):
@@ -160,7 +163,7 @@ else:
         exact(item, {"environment","namespace","kind","name","uid","classification","requiresExplicitDeletion"}, "retained object")
         if item["environment"] not in {"dev","prod","shared"} or item["requiresExplicitDeletion"] is not True:
             fail("retained object scope or approval boundary is invalid")
-        if not all(isinstance(item[key], str) and item[key] for key in ("kind","name","uid","classification")) or not isinstance(item["namespace"], str):
+        if not all(nonblank(item[key]) for key in ("kind","name","uid","classification")) or not isinstance(item["namespace"], str):
             fail("retained object identity is incomplete")
         retained_identities.append((item["environment"],item["namespace"],item["kind"],item["name"],item["uid"]))
     if retained_identities != sorted(retained_identities) or len(retained_identities) != len(set(retained_identities)):
@@ -460,22 +463,23 @@ else
   }
 
   jq -e --arg grade "$evidence_grade" '
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     (keys | sort) == ["accountId","courseId","evidenceGrade","observedAt","region","resources","schemaVersion"] and
     .schemaVersion == "course.cleanup-ownership/v1" and .evidenceGrade == $grade and
-    (.courseId | type == "string" and length > 0) and (.accountId | test("^[0-9]{12}$")) and
+    (.courseId | nonblank) and (.accountId | test("^[0-9]{12}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (.resources | type == "array" and length > 0) and
     ([.resources[] | [.kind,.id]] == ([.resources[] | [.kind,.id]] | sort)) and
     ([.resources[] | [.kind,.id]] | unique | length) == (.resources | length) and
     all(.resources[];
       (keys | sort) == ["billable","classification","decision","environment","followUpAction","id","kind","managedBy","owner","reason"] and
-      (.kind | type == "string" and length > 0) and (.id | type == "string" and length > 0) and
+      (.kind | nonblank) and (.id | nonblank) and
       (.environment | IN("dev","prod","shared")) and
-      (.classification | type == "string" and length > 0) and
-      (.owner | type == "string" and length > 0) and .managedBy == "terraform" and
+      (.classification | nonblank) and
+      (.owner | nonblank) and .managedBy == "terraform" and
       (.billable | type == "boolean") and (.decision | IN("DELETE","RETAIN","EXTERNAL_SHARED")) and
       (if .decision == "DELETE" then .owner == "course"
-       else (.reason | type == "string" and length > 0) and (.followUpAction | type == "string" and length > 0) end)) and
+       else (.reason | nonblank) and (.followUpAction | nonblank) end)) and
     (.observedAt | fromdateiso8601) <= now
   ' "$inventory" >/dev/null || {
     echo "FAIL: ownership inventory does not satisfy course.cleanup-ownership/v1" >&2

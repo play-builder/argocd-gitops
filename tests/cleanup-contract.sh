@@ -16,6 +16,9 @@ validate_fixture() {
 }
 
 case_all() {
+  local tmp_root invalid_inventory_root invalid_inventory invalid_removal value label
+  tmp_root=$(mktemp -d)
+  trap 'rm -rf -- "$tmp_root"' RETURN
   set +e
   invalid_output=$(bash "$repository_root/tests/incident-contract.sh" --fixture "$incident_fixture_root/invalid-provider-delete.yaml" 2>&1)
   invalid_status=$?
@@ -38,6 +41,31 @@ case_all() {
   for file in "$fixture_root"/freeze-valid.json "$fixture_root"/removal-valid.json; do jq -e '.evidenceGrade == "CLOUD_RUNTIME"' "$file" >/dev/null || fail "$(basename "$file") is not CLOUD_RUNTIME"; done
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --fixture "$fixture_root/freeze-valid.json" >/dev/null || fail "valid freeze evidence fixture was rejected"
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --fixture "$fixture_root/removal-valid.json" --eks-repo-root "$fixture_root" >/dev/null || fail "provider Secret projection validation failed"
+  for label in ascii-space bom; do
+    value=' '
+    [[ "$label" == bom ]] && value=$(printf '\357\273\277')
+    invalid_inventory_root="$tmp_root/inventory-$label"
+    invalid_inventory="$invalid_inventory_root/evidence/cleanup/ownership-inventory.json"
+    mkdir -p "$(dirname "$invalid_inventory")"
+    jq --arg value "$value" '.courseId=$value' "$fixture_root/ownership-valid.json" >"$invalid_inventory"
+    if bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --fixture "$fixture_root/removal-valid.json" --eks-repo-root "$invalid_inventory_root" >/dev/null 2>&1; then
+      fail "cleanup fixture adapter accepted $label-only ownership courseId"
+    fi
+    jq --arg value "$value" \
+      '.resources |= map(if .kind=="PersistentVolumeClaim" then .reason=$value else . end)' \
+      "$fixture_root/ownership-valid.json" >"$invalid_inventory"
+    if bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --fixture "$fixture_root/removal-valid.json" --eks-repo-root "$invalid_inventory_root" >/dev/null 2>&1; then
+      fail "cleanup fixture adapter accepted $label-only retained rationale"
+    fi
+    invalid_removal="$tmp_root/removal-$label.json"
+    jq --arg value "$value" '.retained[0].uid=$value' "$fixture_root/removal-valid.json" >"$invalid_removal"
+    if bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
+      --fixture "$invalid_removal" --eks-repo-root "$fixture_root" >/dev/null 2>&1; then
+      fail "cleanup fixture adapter accepted $label-only retained UID"
+    fi
+  done
   echo "PASS: cleanup ownership and evidence boundaries are valid."
 }
 
