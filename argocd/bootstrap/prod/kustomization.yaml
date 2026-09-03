@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - project.yaml
+  - external-secrets-project.yaml
   - external-secrets.yaml
   - admission-policy.yaml
   - sample-app.yaml

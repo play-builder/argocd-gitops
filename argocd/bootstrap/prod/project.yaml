@@ -9,12 +9,9 @@ spec:
   description: Bootstrap and Phase A platform handoff resources in the production cluster
   sourceRepos:
     - https://github.com/REPLACE_ME/argocd-gitops.git
-    - https://charts.external-secrets.io
   destinations:
     - server: https://kubernetes.default.svc
       namespace: argocd
-    - server: https://kubernetes.default.svc
-      namespace: external-secrets
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace

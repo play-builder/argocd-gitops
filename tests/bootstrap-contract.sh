@@ -40,6 +40,94 @@ assert_manifest() {
   yq eval-all -e "$expression" "$manifest" >/dev/null || fail "$message"
 }
 
+external_secrets_project_valid() {
+  local manifest=$1
+  local environment=$2
+  local project="course-external-secrets-$environment"
+
+  PROJECT="$project" yq eval-all -o=json '
+    select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
+  ' "$manifest" | jq -e '
+    .spec.sourceRepos == ["https://charts.external-secrets.io"] and
+    .spec.destinations == [{"server":"https://kubernetes.default.svc","namespace":"external-secrets"}] and
+    ([.spec.clusterResourceWhitelist[] | [.group, .kind]] | sort) == ([
+      ["", "Namespace"],
+      ["admissionregistration.k8s.io", "ValidatingWebhookConfiguration"],
+      ["apiextensions.k8s.io", "CustomResourceDefinition"],
+      ["rbac.authorization.k8s.io", "ClusterRole"],
+      ["rbac.authorization.k8s.io", "ClusterRoleBinding"]
+    ] | sort) and
+    ([.spec.namespaceResourceWhitelist[] | [.group, .kind]] | sort) == ([
+      ["", "Secret"],
+      ["", "Service"],
+      ["", "ServiceAccount"],
+      ["apps", "Deployment"],
+      ["rbac.authorization.k8s.io", "Role"],
+      ["rbac.authorization.k8s.io", "RoleBinding"]
+    ] | sort)
+  ' >/dev/null
+}
+
+case_external_secrets_project() {
+  local environment manifest application project
+
+  for environment in dev prod; do
+    manifest="$render_root/bootstrap-$environment-external-secrets.yaml"
+    application="external-secrets-$environment"
+    project="course-external-secrets-$environment"
+    render_bootstrap "$environment" "$manifest"
+
+    assert_document_count "$manifest" AppProject 3
+    external_secrets_project_valid "$manifest" "$environment" || \
+      fail "$environment External Secrets AppProject does not match Chart 2.10.0 scope"
+    APPLICATION="$application" yq eval-all -o=json '
+      select(.kind == "Application" and .metadata.name == strenv(APPLICATION))
+    ' "$manifest" | jq -e --arg project "$project" '
+      .spec.project == $project and
+      .spec.source.repoURL == "https://charts.external-secrets.io" and
+      .spec.source.chart == "external-secrets" and
+      .spec.source.targetRevision == "2.10.0" and
+      .spec.destination == {"server":"https://kubernetes.default.svc","namespace":"external-secrets"} and
+      .spec.syncPolicy.syncOptions == ["CreateNamespace=true", "ServerSideApply=true"]
+    ' >/dev/null || fail "$application is not bound to its dedicated AppProject"
+
+    PROJECT="course-bootstrap-$environment" yq eval-all -o=json '
+      select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
+    ' "$manifest" | jq -e '
+      (.spec.sourceRepos | index("https://charts.external-secrets.io")) == null and
+      ([.spec.destinations[].namespace] | index("external-secrets")) == null
+    ' >/dev/null || fail "$environment bootstrap AppProject still owns External Secrets"
+  done
+
+  if external_secrets_project_valid \
+    "$test_root/fixtures/external-secrets-project/missing-service-project.yaml" dev; then
+    fail "External Secrets project accepted a missing Service permission"
+  fi
+  if external_secrets_project_valid \
+    "$test_root/fixtures/external-secrets-project/wrong-scope-cluster-role-project.yaml" dev; then
+    fail "External Secrets project accepted a namespaced ClusterRole"
+  fi
+
+  if [[ -n "${EXTERNAL_SECRETS_RENDERED_MANIFEST:-}" ]]; then
+    [[ -s "$EXTERNAL_SECRETS_RENDERED_MANIFEST" ]] || \
+      fail "EXTERNAL_SECRETS_RENDERED_MANIFEST is empty"
+    local expected_resources actual_resources
+    expected_resources=$(jq -Rn '
+      [inputs | split("\t") | {group: .[1], kind: .[2]}] |
+      unique_by([.group, .kind]) | sort_by([.group, .kind])
+    ' <"$test_root/fixtures/external-secrets-project/chart-2.10.0-resource-tuples.tsv")
+    actual_resources=$(yq eval-all -o=json '.' "$EXTERNAL_SECRETS_RENDERED_MANIFEST" | jq -s '
+      [ .[] | select(type == "object" and .apiVersion != null and .kind != null) |
+        {group: (if (.apiVersion | contains("/")) then (.apiVersion | split("/")[0]) else "" end), kind} ] |
+      unique_by([.group, .kind]) | sort_by([.group, .kind])
+    ')
+    [[ "$actual_resources" == "$expected_resources" ]] || \
+      fail "rendered External Secrets Chart resources differ from the checked scope registry"
+  fi
+
+  echo "PASS: External Secrets Chart 2.10.0 has a dedicated least-privilege AppProject."
+}
+
 case_namespace_pss() {
   local bootstrap_dev="$render_root/bootstrap-dev.yaml"
   local bootstrap_prod="$render_root/bootstrap-prod.yaml"
@@ -136,7 +224,7 @@ case_least_privilege() {
   render_bootstrap prod "$bootstrap_prod"
 
   for manifest in "$bootstrap_dev" "$bootstrap_prod"; do
-    assert_document_count "$manifest" AppProject 2
+    assert_document_count "$manifest" AppProject 3
     yq eval-all -o=json '[select(.kind == "AppProject")]' "$manifest" | jq -e '
       all(.[].spec.sourceRepos[]; . != "*") and
       all(.[].spec.destinations[]; .namespace != "*") and
@@ -328,13 +416,14 @@ requested_case=all
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--case <namespace-pss|phase-a-controller|least-privilege|pss-enforce|reloader-diff|platform-health-interface|all>]" >&2
+  echo "Usage: $0 [--case <namespace-pss|phase-a-controller|external-secrets-project|least-privilege|pss-enforce|reloader-diff|platform-health-interface|all>]" >&2
   exit 2
 fi
 
 case "$requested_case" in
   namespace-pss) case_namespace_pss ;;
   phase-a-controller) case_phase_a_controller ;;
+  external-secrets-project) case_external_secrets_project ;;
   least-privilege) case_least_privilege ;;
   pss-enforce) case_pss_enforce ;;
   reloader-diff) case_reloader_diff ;;
@@ -343,6 +432,7 @@ case "$requested_case" in
   all)
     case_namespace_pss
     case_phase_a_controller
+    case_external_secrets_project
     case_least_privilege
     case_pss_enforce
     case_reloader_diff
