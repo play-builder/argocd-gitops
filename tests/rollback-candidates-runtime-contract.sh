@@ -6,7 +6,8 @@ repository_root=$(cd -- "$test_root/.." && pwd -P)
 script="$repository_root/scripts/capture-rollback-candidates-evidence.sh"
 source_record="$repository_root/envs/prod/rollback-compatibility.yaml"
 canonical="$repository_root/evidence/prod/rollback-candidates.json"
-sample_verifier=/private/tmp/cicd-course-final-worktrees/sample-app/src/migration-ledger.js
+sample_verifier_resolver="$test_root/lib/resolve-sample-verifier.sh"
+sample_verifier=$("$sample_verifier_resolver")
 tmp_root=$(mktemp -d)
 trap 'rm -rf -- "$tmp_root"' EXIT
 
@@ -138,8 +139,11 @@ for (const key of Object.keys(expected)) {
   if (!rejected) throw new Error(`Sample verifier accepted expected ${key} drift`);
 }
 NODE
+  sample_repository=$(git -C "$(dirname -- "$sample_verifier")" rev-parse --show-toplevel)
+  sample_revision=$(git -C "$sample_repository" rev-parse HEAD)
+  echo "[STATIC] verified Sample Contract 003 with $sample_repository at $sample_revision"
 else
-  echo '[STATIC] Sample Contract 003 checkout absent; cross-repository verifier invocation skipped.'
+  echo '[STATIC] Sample Contract 003 verification skipped by explicit SAMPLE_APP_VERIFIER_OPTIONAL=1.'
 fi
 
 for label in dirty-git git-mismatch already-synced automated-sync running-operation cluster-account cluster-region cluster-name kube-endpoint rollout-name rollout-uid rollout-window rollout-unhealthy foreign-owner non-controller missing-candidate-rs extra-candidate-rs experiment-candidate wrong-candidate-image source-missing-candidate source-extra-candidate source-duplicate-candidate source-wrong-lineage source-wrong-revert source-window; do

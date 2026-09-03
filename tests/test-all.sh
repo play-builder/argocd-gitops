@@ -14,7 +14,13 @@ bash "$test_root/prod-slo-runtime-producer-contract.sh"
 bash "$test_root/runtime-evidence-producer-contract.sh"
 bash "$test_root/promotion-contract.sh" --case all
 bash "$test_root/prod-promotion-binding-contract.sh"
-bash "$test_root/rollback-candidates-runtime-contract.sh"
+bash "$test_root/sample-verifier-binding-contract.sh"
+if [[ -n ${SAMPLE_APP_REPO_ROOT:-} || -n ${SAMPLE_APP_VERIFIER_PATH:-} ||
+      ${CROSS_REPO_CONTRACT_MODE:-repository-local} == exact-sha ]]; then
+  bash "$test_root/rollback-candidates-runtime-contract.sh"
+else
+  SAMPLE_APP_VERIFIER_OPTIONAL=1 bash "$test_root/rollback-candidates-runtime-contract.sh"
+fi
 bash "$test_root/stateful-contract.sh"
 bash "$test_root/recovery-contract.sh" --case all
 bash "$test_root/snapshot-runtime-producer-contract.sh"
