@@ -288,19 +288,30 @@ case_network_policy() {
 }
 
 case_telemetry() {
-  local dev_stateless="$render_root/dev-stateless-telemetry.yaml"
-  local prod_stateless="$render_root/prod-stateless-telemetry.yaml"
-  local environment manifest namespace
+  local dev_baseline="$render_root/dev-baseline-telemetry.yaml"
+  local prod_baseline="$render_root/prod-baseline-telemetry.yaml"
+  local dev_ready="$render_root/dev-platform-ready-telemetry.yaml"
+  local prod_ready="$render_root/prod-platform-ready-telemetry.yaml"
+  local stateful="$render_root/dev-stateful-identity.yaml"
+  local environment manifest namespace invalid_fixture invalid_name
 
-  render_environment dev "$dev_stateless" "$fixture_root/stateless-policy-off.yaml"
-  render_environment prod "$prod_stateless" "$fixture_root/stateless-policy-off.yaml"
+  render_environment dev "$dev_baseline" "$fixture_root/stateless-policy-off.yaml"
+  render_environment prod "$prod_baseline" "$fixture_root/stateless-policy-off.yaml"
+
+  assert_document_count "$dev_baseline" ConfigMap 0
+  assert_document_count "$prod_baseline" ConfigMap 0
+
+  render_environment dev "$dev_ready" "$fixture_root/stateless-policy-off.yaml" \
+    "$fixture_root/telemetry-platform-ready.yaml"
+  render_environment prod "$prod_ready" "$fixture_root/stateless-policy-off.yaml" \
+    "$fixture_root/telemetry-platform-ready.yaml"
 
   for environment in dev prod; do
     if [[ "$environment" == "dev" ]]; then
-      manifest="$dev_stateless"
+      manifest="$dev_ready"
       namespace=app-dev
     else
-      manifest="$prod_stateless"
+      manifest="$prod_ready"
       namespace=app-prod
     fi
 
@@ -338,7 +349,69 @@ case_telemetry() {
     ' >/dev/null || fail "$environment workload lacks correlated stateless telemetry inputs"
   done
 
-  echo "PASS: Stateless telemetry correlates metrics, logs, and traces without DB runtime claims."
+  for invalid_name in xray-inactive wrong-protocol wrong-path; do
+    invalid_fixture="$fixture_root/telemetry-$invalid_name.yaml"
+    if render_environment dev "$render_root/telemetry-$invalid_name-render.yaml" \
+      "$fixture_root/stateless-policy-off.yaml" "$invalid_fixture" \
+      2>"$render_root/telemetry-$invalid_name.err"; then
+      fail "telemetry accepted the $invalid_name platform contract"
+    fi
+    case "$invalid_name" in
+      xray-inactive)
+        grep -Fq 'telemetry.platformXrayEnabled must be true' \
+          "$render_root/telemetry-$invalid_name.err" || \
+          fail "inactive X-Ray contract failed for an unexpected reason"
+        ;;
+      wrong-protocol)
+        grep -Fq 'telemetry.otlpProtocol must be http/protobuf' \
+          "$render_root/telemetry-$invalid_name.err" || \
+          fail "invalid OTLP protocol failed for an unexpected reason"
+        ;;
+      wrong-path)
+        grep -Fq 'telemetry.otlpTracesPath must be /v1/traces' \
+          "$render_root/telemetry-$invalid_name.err" || \
+          fail "invalid OTLP traces path failed for an unexpected reason"
+        ;;
+    esac
+  done
+
+  yq eval-all -o=json '
+    select(.kind == "Deployment" and .metadata.name == "sample-app") |
+    .spec.template.spec.securityContext
+  ' "$dev_ready" | jq -e '
+    .runAsUser == 10001 and .runAsGroup == 10001 and .fsGroup == 10001
+  ' >/dev/null || fail "application Pod identity is not 10001:10001"
+
+  render_environment dev "$stateful" "$fixture_root/stateful-policy-off.yaml"
+  yq eval-all -o=json '
+    select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+    .spec.template.spec.securityContext
+  ' "$stateful" | jq -e '
+    .runAsUser == 10001 and .runAsGroup == 10001
+  ' >/dev/null || fail "migration Job identity is not 10001:10001"
+
+  yq -o=json '.telemetryOutputs' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
+    .xrayEnabled == "adot_xray_enabled" and
+    .endpoint == "otlp_http_traces_endpoint" and
+    .protocol == "otlp_traces_protocol" and
+    .port == "otlp_http_port" and
+    .path == "otlp_http_traces_path"
+  ' >/dev/null || fail "platform telemetry output names do not match the EKS producer"
+
+  yq -o=json '.prometheusLabels' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
+    . == ["namespace", "pod", "app", "rollouts_pod_template_hash"]
+  ' >/dev/null || fail "AMP label interface does not match the AnalysisTemplate selectors"
+
+  yq eval-all -o=json '
+    select(.kind == "AnalysisTemplate" and .metadata.name == "sample-app-success-rate")
+  ' "$prod_ready" | jq -e '
+    ([.spec.metrics[].provider.prometheus.query] | join("\n")) as $queries |
+    ($queries | contains("app=\"sample-app\"")) and
+    ($queries | contains("namespace=\"app-prod\"")) and
+    ($queries | contains("rollouts_pod_template_hash="))
+  ' >/dev/null || fail "AnalysisTemplate selectors do not match the AMP label interface"
+
+  echo "PASS: Telemetry requires a complete X-Ray platform contract and runtime identities match the image."
 }
 
 case_secret_reload() {

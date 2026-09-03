@@ -1,4 +1,5 @@
 {{- if .Values.telemetry.enabled }}
+{{- include "sample-app.validateTelemetry" . }}
 {{- $endpoint := required "telemetry.otlpEndpoint is required when telemetry is enabled" .Values.telemetry.otlpEndpoint }}
 apiVersion: v1
 kind: ConfigMap

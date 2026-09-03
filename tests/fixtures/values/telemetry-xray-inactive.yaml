@@ -1,0 +1,7 @@
+telemetry:
+  enabled: true
+  platformXrayEnabled: false
+  otlpEndpoint: http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces
+  otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: /v1/traces

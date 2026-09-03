@@ -173,9 +173,12 @@ rollout:
 
 telemetry:
   enabled: false
+  platformXrayEnabled: false
   serviceName: sample-app
   otlpEndpoint: ""
   otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""
 
 networkPolicy:
   enabled: false

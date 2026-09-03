@@ -195,7 +195,7 @@ for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yam
   ' "Database NetworkPolicy must select PostgreSQL and allow its configured port"
 done
 
-assert_document_count "$render_root/prod-stateful.yaml" ConfigMap 1
+assert_document_count "$render_root/prod-stateful.yaml" ConfigMap 0
 yq eval-all -e '
   [select(.kind == "ConfigMap" and .metadata.name == "sample-app-rollback-candidates")] | length == 0
 ' "$render_root/prod-stateful.yaml" >/dev/null ||
