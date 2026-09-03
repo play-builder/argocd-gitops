@@ -267,6 +267,7 @@ case_ready_edges() {
   local valid="$fixture_root/promotion/valid-ap-northeast-2.yaml"
   local now=2026-09-03T01:00:00Z candidate label expression
   validate_ready "$valid" "$now"
+  validate_ready "$fixture_root/promotion/valid-us-east-1.yaml" "$now"
   while IFS='|' read -r label expression; do
     candidate="$render_root/dev-ready-$label.yaml"
     yq "$expression" "$valid" >"$candidate"
