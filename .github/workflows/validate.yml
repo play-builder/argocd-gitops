@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
@@ -37,6 +39,12 @@ jobs:
       - name: Assert compatibility pins
         run: |
           yq -e '.tooling.yq == "4.53.6" and .tooling.kubectl == "1.36.0" and .delivery.helmCli == "4.2.4" and .delivery.argoCdController == "3.5.2" and .delivery.argoRolloutsController == "1.9.1" and .delivery.externalSecretsChart == "2.10.0" and .delivery.gatewayApi == "1.6.0"' versions.lock.yaml
+
+      - name: Bind changed Prod values to current DEV_READY
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/verify-prod-promotion-binding.sh "$BASE_SHA"
 
       - name: Lint Helm chart
         run: |

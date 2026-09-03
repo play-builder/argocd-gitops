@@ -12,6 +12,7 @@ bash "$test_root/prod-baseline-runtime-producer-contract.sh"
 bash "$test_root/prod-slo-runtime-producer-contract.sh"
 bash "$test_root/runtime-evidence-producer-contract.sh"
 bash "$test_root/promotion-contract.sh" --case all
+bash "$test_root/prod-promotion-binding-contract.sh"
 bash "$test_root/stateful-contract.sh"
 bash "$test_root/recovery-contract.sh" --case all
 bash "$test_root/chaos-contract.sh" --case dev

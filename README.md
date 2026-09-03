@@ -128,7 +128,7 @@ StatefulSet을 삭제해도 `volumeClaimTemplates`가 만든 PVC가 자동으로
 ## 운영 계약
 
 - dev: application code PR merge → build/push → dev digest PR → validate → auto-merge → Argo CD auto-sync
-- prod: dev에서 검증한 **동일 digest** → prod promotion PR → CODEOWNERS 승인/merge → Argo CD auto-sync → Rollouts Canary
+- prod: dev에서 검증한 **동일 digest** → prod promotion PR → CODEOWNERS 승인/merge → 운영자 Argo CD Sync → Rollouts Canary
 - HPA 활성화 시 workload의 `spec.replicas`를 렌더하지 않습니다.
 - 카나리 중 `HTTPRoute.spec.rules`는 Rollouts plugin이 변경합니다. 해당 라벨이 있는 동안만 Argo CD가 차이를 무시합니다.
 - AMP 조회는 Rollouts native SigV4를 사용합니다. `aws-sigv4-proxy`는 설치하지 않습니다.
@@ -159,6 +159,13 @@ Prod 초기화는 승인된 PR을 수동 Sync한 뒤 stable revision `1`/traffic
 기록합니다. 이후 후보 digest가 baseline과 다르고
 동일한 Canary/AnalysisTemplate을 유지할 때만 promotion PR을 진행합니다. Prod ApplicationSet은
 자동 Sync를 사용하지 않으며, 최종 `setWeight: 100` 직전에는 무기한 `pause: {}`가 있습니다.
+
+승격은 DEV_READY evidence 게시 PR과 Prod values 후보 PR을 분리합니다. 후보 PR에서
+`envs/prod/values.yaml`이 바뀌면 `scripts/verify-prod-promotion-binding.sh`가 application과
+migration image의 repository·digest를 현재 canonical evidence와 비교합니다. main Ruleset은
+strict required status check를 사용하므로 새로운 evidence가 먼저 merge되면 기존 후보는 base를
+갱신하고 이 검증을 다시 통과해야 합니다. PR merge만으로 배포되지는 않으며, 승인된 운영자가
+Prod Application을 Sync한 시점에 Canary가 시작됩니다.
 
 Canonical AnalysisTemplate metric 이름은 `request-rate`와 `success-rate`입니다. Ch19의
 `scripts/capture-prod-slo-evidence.sh`는 실제 Rollout/AnalysisRun/Argo/AWS 조회를 다시 묶어
