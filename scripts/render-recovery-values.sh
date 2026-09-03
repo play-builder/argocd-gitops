@@ -57,13 +57,17 @@ jq -e --arg now "$validation_now" '
     namespace:"app-dev",
     pvcName:"data-sample-app-postgresql-0",
     pvcUid:.source.pvcUid,
-    volumeName:.source.volumeName
+    volumeName:.source.volumeName,
+    volumeHandle:.source.volumeHandle
   } and
   (.source.pvcUid | test("^[0-9a-f-]{36}$")) and (.source.volumeName | test("^pvc-[0-9a-f-]{36}$")) and
+  (.source.volumeHandle | test("^vol-[0-9a-f]{8,64}$")) and
   .snapshot.namespace == "app-dev" and .snapshot.name == "sample-app-postgresql-snapshot" and
   (.snapshot.uid | test("^[0-9a-f-]{36}$")) and (.snapshot.contentUid | test("^[0-9a-f-]{36}$")) and
   (.snapshot.contentName | test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")) and
   .snapshot.className == "course-ebs-snapshots" and .snapshot.driver == "ebs.csi.aws.com" and
+  (.snapshot.sourceVolumeHandle | test("^vol-[0-9a-f]{8,64}$")) and
+  .snapshot.sourceVolumeHandle == .source.volumeHandle and
   (.snapshot.handle | test("^snap-[0-9a-f]{17}$")) and .snapshot.readyToUse == true and
   (.recovery.readerRoleArn | test("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$")) and
   (.recovery.normalReaderRoleArn | test("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$")) and

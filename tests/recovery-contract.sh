@@ -126,7 +126,7 @@ case_evidence_gate() {
     fail "live renderer accepted a caller-controlled clock"
   fi
   printf '%s\n' "$sentinel" >"$output"
-  for fixture in snapshot-ready-fake-handle snapshot-ready-wrong-class snapshot-ready-normal-reader-role; do
+  for fixture in snapshot-ready-fake-handle snapshot-ready-wrong-class snapshot-ready-normal-reader-role snapshot-ready-volume-handle-mismatch; do
     if bash "$renderer" --fixture "$test_root/fixtures/recovery/$fixture.json" "$output" \
       --now 2026-09-03T01:10:30Z >/dev/null 2>&1; then
       fail "renderer accepted invalid evidence fixture $fixture"

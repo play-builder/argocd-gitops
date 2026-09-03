@@ -169,11 +169,21 @@ jq -e '
   .environment == "dev" and .region == "ap-northeast-2" and
   .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev" and
   .gitopsRevision == "3333333333333333333333333333333333333333" and
-  .source == {namespace:"app-dev",pvcName:"data-sample-app-postgresql-0",pvcUid:"11111111-1111-1111-1111-111111111111",volumeName:"pvc-11111111-1111-1111-1111-111111111111"} and
-  .snapshot == {namespace:"app-dev",name:"sample-app-postgresql-snapshot",uid:"22222222-2222-2222-2222-222222222222",contentName:"snapcontent-22222222-2222-2222-2222-222222222222",contentUid:"33333333-3333-3333-3333-333333333333",className:"course-ebs-snapshots",driver:"ebs.csi.aws.com",handle:"snap-0123456789abcdef0",readyToUse:true} and
+  .source == {namespace:"app-dev",pvcName:"data-sample-app-postgresql-0",pvcUid:"11111111-1111-1111-1111-111111111111",volumeName:"pvc-11111111-1111-1111-1111-111111111111",volumeHandle:"vol-0123456789abcdef0"} and
+  .snapshot == {namespace:"app-dev",name:"sample-app-postgresql-snapshot",uid:"22222222-2222-2222-2222-222222222222",contentName:"snapcontent-22222222-2222-2222-2222-222222222222",contentUid:"33333333-3333-3333-3333-333333333333",className:"course-ebs-snapshots",driver:"ebs.csi.aws.com",sourceVolumeHandle:"vol-0123456789abcdef0",handle:"snap-0123456789abcdef0",readyToUse:true} and
   .recovery == {readerRoleArn:"arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role",normalReaderRoleArn:"arn:aws:iam::123456789012:role/dev-course-external-secrets-reader-role"} and
   .observedAt == "2026-09-03T01:10:00Z" and .expiresAt == "2026-09-03T02:10:00Z"
 ' "$ready" >/dev/null || fail 'ready snapshot evidence is not bound to actual content, handle, class, driver, and Role identities'
+
+volume_mismatch="$tmp_root/runtime-ready-volume-mismatch"
+cp -R "$runtime" "$volume_mismatch"
+jq '.spec.source.volumeHandle="vol-11111111111111111"' \
+  "$volume_mismatch/ready/snapshot-content.json" >"$volume_mismatch/mutated"
+mv "$volume_mismatch/mutated" "$volume_mismatch/ready/snapshot-content.json"
+if run_ready "$volume_mismatch" "$final" "$tmp_root/ready-volume-mismatch.json" \
+  >/dev/null 2>&1; then
+  fail 'ready snapshot producer accepted content bound to a different source volume handle'
+fi
 
 cloud="$tmp_root/snapshot-quiesce-cloud.json"
 jq '.evidenceGrade="CLOUD_RUNTIME"' "$final" >"$cloud"

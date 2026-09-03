@@ -221,12 +221,14 @@ capture_ready_snapshot() {
   ' <<<"$snapshot" >/dev/null || fail 'VolumeSnapshot is not ready or bound to the reviewed source'
   content=$(kubectl get volumesnapshotcontent "$content_name" -o json) ||
     fail 'unable to query the bound VolumeSnapshotContent'
-  jq -e --arg name "$content_name" --arg snapshotUid "$(jq -r '.metadata.uid' <<<"$snapshot")" '
+  jq -e --arg name "$content_name" --arg snapshotUid "$(jq -r '.metadata.uid' <<<"$snapshot")" \
+    --arg volumeHandle "$pv_volume_handle" '
     .metadata.name == $name and (.metadata.uid | test("^[0-9a-f-]{36}$")) and
     .spec.driver == "ebs.csi.aws.com" and .spec.volumeSnapshotClassName == "course-ebs-snapshots" and
     .spec.volumeSnapshotRef == {name:"sample-app-postgresql-snapshot",namespace:"app-dev",uid:$snapshotUid} and
+    .spec.source.volumeHandle == $volumeHandle and
     .status.readyToUse == true and (.status.snapshotHandle | test("^snap-[0-9a-f]{17}$"))
-  ' <<<"$content" >/dev/null || fail 'bound VolumeSnapshotContent has an invalid class, driver, UID, or EBS handle'
+  ' <<<"$content" >/dev/null || fail 'bound VolumeSnapshotContent has an invalid class, driver, UID, source volume, or EBS snapshot handle'
 
   observed=$clock_now
   expires=$(jq -nr --arg now "$clock_now" '(($now | fromdateiso8601) + 3600) | strftime("%Y-%m-%dT%H:%M:%SZ")')
@@ -234,16 +236,19 @@ capture_ready_snapshot() {
   trap 'rm -f -- "$record"' RETURN
   jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$cluster_arn" \
     --arg revision "$local_revision" --arg pvcUid "$pvc_uid" --arg volume "$volume_name" \
+    --arg volumeHandle "$pv_volume_handle" \
     --arg snapshotUid "$(jq -r '.metadata.uid' <<<"$snapshot")" --arg contentName "$content_name" \
-    --arg contentUid "$(jq -r '.metadata.uid' <<<"$content")" --arg handle "$(jq -r '.status.snapshotHandle' <<<"$content")" \
+    --arg contentUid "$(jq -r '.metadata.uid' <<<"$content")" \
+    --arg sourceVolumeHandle "$(jq -r '.spec.source.volumeHandle' <<<"$content")" \
+    --arg handle "$(jq -r '.status.snapshotHandle' <<<"$content")" \
     --arg role "$RECOVERY_DB_SECRET_READER_ROLE_ARN" --arg normalRole "$EXTERNAL_SECRETS_READER_ROLE_ARN" \
     --arg observed "$observed" --arg expires "$expires" '
     {schemaVersion:"course.snapshot-ready/v1",evidenceGrade:$grade,environment:"dev",region:$region,
      clusterArn:$arn,gitopsRevision:$revision,
-     source:{namespace:"app-dev",pvcName:"data-sample-app-postgresql-0",pvcUid:$pvcUid,volumeName:$volume},
+     source:{namespace:"app-dev",pvcName:"data-sample-app-postgresql-0",pvcUid:$pvcUid,volumeName:$volume,volumeHandle:$volumeHandle},
      snapshot:{namespace:"app-dev",name:"sample-app-postgresql-snapshot",uid:$snapshotUid,
        contentName:$contentName,contentUid:$contentUid,className:"course-ebs-snapshots",
-       driver:"ebs.csi.aws.com",handle:$handle,readyToUse:true},
+       driver:"ebs.csi.aws.com",sourceVolumeHandle:$sourceVolumeHandle,handle:$handle,readyToUse:true},
      recovery:{readerRoleArn:$role,normalReaderRoleArn:$normalRole},observedAt:$observed,expiresAt:$expires}
   ' >"$record"
   write_atomic "$record" "$destination" 'snapshot-ready evidence'
@@ -276,10 +281,12 @@ query_pvc_pv() {
     (.metadata.uid | nonblank) and (.spec.volumeName | nonblank) and .status.phase == "Bound"
   ' <<<"$pvc" >/dev/null || fail 'source PVC is not the exact Bound snapshot source'
   pv=$(kubectl get pv "$volume_name" -o json) || fail 'unable to query source PV'
-  jq -e --arg name "$volume_name" --arg uid "$pvc_uid" '
+  pv_volume_handle=$(jq -er '.spec.csi.volumeHandle' <<<"$pv") || fail 'source PV CSI volumeHandle is missing'
+  jq -e --arg name "$volume_name" --arg uid "$pvc_uid" --arg volumeHandle "$pv_volume_handle" '
     .metadata.name == $name and .status.phase == "Bound" and
     .spec.claimRef == {namespace:"app-dev",name:"data-sample-app-postgresql-0",uid:$uid} and
-    .spec.csi.driver == "ebs.csi.aws.com" and (.spec.csi.volumeHandle | test("^vol-[0-9a-f]{8,64}$"))
+    .spec.csi.driver == "ebs.csi.aws.com" and .spec.csi.volumeHandle == $volumeHandle and
+    ($volumeHandle | test("^vol-[0-9a-f]{8,64}$"))
   ' <<<"$pv" >/dev/null || fail 'source PV claim, CSI driver, or EBS volume identity differs'
 }
 
