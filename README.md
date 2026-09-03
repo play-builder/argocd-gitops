@@ -128,7 +128,10 @@ Dev에서 생성되는 `evidence/dev/deployment.json`과 `evidence/dev/slo.json`
 `CLOUD_RUNTIME` 등급의 만료 가능한 입력입니다. 두 파일의 source, image, GitOps revision,
 cluster ARN, Region이 일치해야 CI가 `course.dev-ready/v1` 승격 증거를 수락합니다.
 Prod 초기화는 승인된 PR을 수동 Sync한 뒤 stable revision `1`/traffic `100`을 확인하여
-`evidence/prod/baseline.json`을 만드는 별도 단계입니다. 이후 후보 digest가 baseline과 다르고
+`scripts/capture-prod-baseline-evidence.sh`로 `evidence/prod/baseline.json`을 만드는 별도 단계입니다.
+이 producer는 Argo CD revision, Rollout/ReplicaSet 소유권·readiness, HTTPRoute 100/0 weight,
+현재 kube-context와 EKS endpoint, ECR digest의 account/Region을 모두 교차 확인하고 원자적으로
+기록합니다. 이후 후보 digest가 baseline과 다르고
 동일한 Canary/AnalysisTemplate을 유지할 때만 promotion PR을 진행합니다. Prod ApplicationSet은
 자동 Sync를 사용하지 않으며, 최종 `setWeight: 100` 직전에는 무기한 `pause: {}`가 있습니다.
 
@@ -171,4 +174,13 @@ External Secrets refresh, 또는 cleanup 실행을 증명하지 않습니다. �
 검토된 non-fixture lifecycle artifact를 재해시한 `evidence/incidents/index.json`만
 생성하며, Ch26 freeze/removal 기록도 live read-only capture에서만
 `evidenceGrade: CLOUD_RUNTIME`으로 기록합니다. Provider Secret은 GitOps가 삭제하지
-않고 canonical ownership inventory에서 보존·분류합니다.
+않고 canonical ownership inventory에서 보존·분류합니다. Removal capture는 두 EKS context와
+EKS-infra repository를 명시하여 Argo Application 부재, namespace별 workload/writer 0건,
+승인된 retained PVC, 실제 provider Secret 존재를 확인합니다.
+
+```bash
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$PROD_CLUSTER_NAME" \
+  bash scripts/capture-prod-baseline-evidence.sh
+bash scripts/capture-cleanup-evidence.sh removal --eks-repo-root "$LAB_EKS_REPO" \
+  --dev-context "$DEV_KUBE_CONTEXT" --prod-context "$PROD_KUBE_CONTEXT"
+```

@@ -7,11 +7,15 @@ mode=${1:-}
 shift || true
 fixture=
 eks_repo_root=
-usage() { echo "Usage: $0 freeze|removal [--fixture file] [--eks-repo-root dir]" >&2; exit 2; }
+dev_context=
+prod_context=
+usage() { echo "Usage: $0 freeze|removal [--fixture file] [--eks-repo-root dir] [--dev-context name --prod-context name]" >&2; exit 2; }
 while (($#)); do
   case "$1" in
     --fixture) fixture=${2:?missing fixture}; shift 2 ;;
     --eks-repo-root) eks_repo_root=${2:?missing EKS repository root}; shift 2 ;;
+    --dev-context) dev_context=${2:?missing Dev context}; shift 2 ;;
+    --prod-context) prod_context=${2:?missing Prod context}; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -94,7 +98,273 @@ Path(out).write_text(json.dumps(result,sort_keys=True,separators=(",",":"))+"\n"
 PY
   chmod 600 "$evidence_root/.freeze.tmp"; mv "$evidence_root/.freeze.tmp" "$evidence_root/freeze.json"
 else
-  echo "FAIL: removal capture requires a validated freeze.json and live removal query" >&2
-  exit 1
+  for command in kubectl argocd aws jq python3 git mktemp; do
+    command -v "$command" >/dev/null || { echo "FAIL: $command is required for live removal capture" >&2; exit 1; }
+  done
+  [[ -n "$dev_context" && -n "$prod_context" ]] || {
+    echo "FAIL: removal capture requires --dev-context and --prod-context" >&2
+    exit 1
+  }
+  [[ "$dev_context" != "$prod_context" ]] || {
+    echo "FAIL: Dev and Prod Kubernetes contexts must be distinct" >&2
+    exit 1
+  }
+  [[ "$git_revision" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "FAIL: GitOps revision is not a full commit SHA" >&2
+    exit 1
+  }
+
+  freeze="$evidence_root/freeze.json"
+  inventory_root=$(cd -- "$eks_repo_root" && pwd -P) || {
+    echo "FAIL: EKS repository root does not exist" >&2
+    exit 1
+  }
+  inventory="$inventory_root/evidence/cleanup/ownership-inventory.json"
+  [[ -f "$freeze" && -f "$inventory" ]] || {
+    echo "FAIL: canonical freeze and ownership inventory evidence are required" >&2
+    exit 1
+  }
+  [[ "$inventory" != *'/tests/fixtures/'* && "$inventory" != *'/test/fixtures/'* ]] || {
+    echo "FAIL: fixture ownership inventory cannot produce runtime removal evidence" >&2
+    exit 1
+  }
+
+  jq -e '
+    (keys | sort) == ["accountId","courseId","evidenceGrade","observedAt","region","resources","schemaVersion"] and
+    .schemaVersion == "course.cleanup-ownership/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
+    (.courseId | type == "string" and length > 0) and (.accountId | test("^[0-9]{12}$")) and
+    (.region | IN("ap-northeast-2","us-east-1")) and
+    (.resources | type == "array" and length > 0) and
+    ([.resources[] | [.kind,.id]] == ([.resources[] | [.kind,.id]] | sort)) and
+    ([.resources[] | [.kind,.id]] | unique | length) == (.resources | length) and
+    all(.resources[];
+      (keys | sort) == ["billable","classification","decision","environment","followUpAction","id","kind","managedBy","owner","reason"] and
+      (.kind | type == "string" and length > 0) and (.id | type == "string" and length > 0) and
+      (.environment | IN("dev","prod","shared")) and
+      (.classification | type == "string" and length > 0) and
+      (.owner | type == "string" and length > 0) and .managedBy == "terraform" and
+      (.billable | type == "boolean") and (.decision | IN("DELETE","RETAIN","EXTERNAL_SHARED")) and
+      (if .decision == "DELETE" then .owner == "course"
+       else (.reason | type == "string" and length > 0) and (.followUpAction | type == "string" and length > 0) end)) and
+    (.observedAt | fromdateiso8601) <= now
+  ' "$inventory" >/dev/null || {
+    echo "FAIL: ownership inventory does not satisfy course.cleanup-ownership/v1" >&2
+    exit 1
+  }
+  account_id=$(jq -r '.accountId' "$inventory")
+  region=$(jq -r '.region' "$inventory")
+  [[ -z ${AWS_REGION:-} || "$AWS_REGION" == "$region" ]] || {
+    echo "FAIL: AWS_REGION does not match the ownership inventory" >&2
+    exit 1
+  }
+
+  jq -e --arg region "$region" --arg account "$account_id" '
+    (keys | sort) == ["clusters","evidenceGrade","gitopsRevision","observedAt","schemaVersion","status","writers"] and
+    .schemaVersion == "course.gitops-freeze/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "FROZEN" and
+    (.gitopsRevision | test("^[0-9a-f]{40}$")) and
+    [.clusters[].environment] == ["dev","prod"] and
+    all(.clusters[];
+      (keys | sort) == ["application","clusterArn","environment"] and
+      (.clusterArn | test("^arn:aws:eks:" + $region + ":" + $account + ":cluster/.+")) and
+      (.application | (keys | sort) == ["automated","health","name","sync"]) and
+      .application.name == ("sample-app-" + .environment) and
+      .application.sync == "Synced" and .application.health == "Healthy" and
+      .application.automated == false) and
+    (.writers | (keys | sort) == ["chaosResources","loadGenerators","migrationJobs","recoveryJobs"]) and
+    ([.writers[]] | all(. == 0)) and (.observedAt | fromdateiso8601) < now
+  ' "$freeze" >/dev/null || {
+    echo "FAIL: canonical freeze evidence is invalid or does not match ownership identity" >&2
+    exit 1
+  }
+
+  application_list=$(argocd app list -o json) || {
+    echo "FAIL: unable to list Argo CD Applications after removal" >&2
+    exit 1
+  }
+  jq -e '
+    type == "array" and
+    ([.[] | select(.metadata.name == "sample-app-dev" or .metadata.name == "sample-app-prod")] | length) == 0
+  ' <<<"$application_list" >/dev/null || {
+    echo "FAIL: sample-app Argo CD Applications still exist" >&2
+    exit 1
+  }
+
+  tmp_dir=$(mktemp -d)
+  tmp=$(mktemp "$evidence_root/.removal.XXXXXX")
+  trap 'rm -rf -- "$tmp_dir"; rm -f -- "$tmp"' EXIT
+
+  verify_context() {
+    local environment=$1 context=$2 expected_arn cluster_name cluster_json endpoint kubeconfig server
+    expected_arn=$(jq -r --arg environment "$environment" '.clusters[] | select(.environment == $environment) | .clusterArn' "$freeze")
+    cluster_name=${expected_arn##*/}
+    cluster_json=$(aws eks describe-cluster --name "$cluster_name" --region "$region" --output json) || {
+      echo "FAIL: unable to describe the $environment EKS cluster" >&2
+      return 1
+    }
+    jq -e --arg arn "$expected_arn" '.cluster.arn == $arn and .cluster.status == "ACTIVE" and (.cluster.endpoint | startswith("https://"))' \
+      <<<"$cluster_json" >/dev/null || {
+      echo "FAIL: $environment EKS cluster identity or status mismatch" >&2
+      return 1
+    }
+    endpoint=$(jq -r '.cluster.endpoint' <<<"$cluster_json")
+    kubeconfig=$(kubectl --context "$context" config view --minify -o json) || {
+      echo "FAIL: unable to inspect the $environment Kubernetes context" >&2
+      return 1
+    }
+    server=$(jq -er '.clusters | if length == 1 then .[0].cluster.server else empty end' <<<"$kubeconfig") || {
+      echo "FAIL: $environment context does not contain exactly one cluster server" >&2
+      return 1
+    }
+    [[ "$server" == "$endpoint" ]] || {
+      echo "FAIL: $environment Kubernetes context does not match freeze cluster ARN" >&2
+      return 1
+    }
+  }
+
+  scan_namespace() {
+    local environment=$1 context=$2 namespace="app-$1" namespace_json
+    verify_context "$environment" "$context"
+    namespace_json=$(kubectl --context "$context" get namespace "$namespace" -o json --ignore-not-found) || {
+      echo "FAIL: unable to query $namespace" >&2
+      return 1
+    }
+    if [[ -z "$namespace_json" ]]; then
+      echo '{"apiVersion":"v1","kind":"List","items":[]}' >"$tmp_dir/$environment-workloads.json"
+      echo '{"apiVersion":"v1","kind":"List","items":[]}' >"$tmp_dir/$environment-pvcs.json"
+      return
+    fi
+    jq -e --arg namespace "$namespace" '.kind == "Namespace" and .metadata.name == $namespace and (.metadata.uid | type == "string" and length > 0)' \
+      <<<"$namespace_json" >/dev/null || {
+      echo "FAIL: $namespace response is not a valid Namespace" >&2
+      return 1
+    }
+    kubectl --context "$context" get \
+      rollouts.argoproj.io,deployments.apps,statefulsets.apps,jobs.batch,externalsecrets.external-secrets.io,podchaos.chaos-mesh.org,networkchaos.chaos-mesh.org \
+      -n "$namespace" -o json >"$tmp_dir/$environment-workloads.json" || {
+      echo "FAIL: unable to scan remaining workloads in $namespace" >&2
+      return 1
+    }
+    kubectl --context "$context" get persistentvolumeclaims -n "$namespace" -o json \
+      >"$tmp_dir/$environment-pvcs.json" || {
+      echo "FAIL: unable to scan retained PVCs in $namespace" >&2
+      return 1
+    }
+    jq -e '.items | type == "array"' "$tmp_dir/$environment-workloads.json" "$tmp_dir/$environment-pvcs.json" >/dev/null || {
+      echo "FAIL: kubectl returned a non-list response for $namespace" >&2
+      return 1
+    }
+  }
+
+  scan_namespace dev "$dev_context"
+  scan_namespace prod "$prod_context"
+
+  summary=$(jq -n \
+    --slurpfile dev "$tmp_dir/dev-workloads.json" --slurpfile prod "$tmp_dir/prod-workloads.json" '
+    ($dev[0].items + $prod[0].items) as $items |
+    {
+      rollouts:([$items[] | select(.kind == "Rollout")] | length),
+      deployments:([$items[] | select(.kind == "Deployment")] | length),
+      statefulSets:([$items[] | select(.kind == "StatefulSet")] | length),
+      jobs:([$items[] | select(.kind == "Job")] | length),
+      externalSecrets:([$items[] | select(.kind == "ExternalSecret")] | length),
+      chaosResources:([$items[] | select(.kind == "PodChaos" or .kind == "NetworkChaos")] | length)
+    }
+  ') || {
+    echo "FAIL: unable to summarize remaining workloads" >&2
+    exit 1
+  }
+  jq -e '[.[]] | all(. == 0)' <<<"$summary" >/dev/null || {
+    echo "FAIL: GitOps workloads or writer resources remain after removal" >&2
+    exit 1
+  }
+
+  retained=$(python3 - "$inventory" "$tmp_dir/dev-pvcs.json" "$tmp_dir/prod-pvcs.json" <<'PY'
+import json, sys
+from pathlib import Path
+
+inventory_path, dev_path, prod_path = map(Path, sys.argv[1:])
+inventory = json.loads(inventory_path.read_text())
+resources = inventory["resources"]
+result = []
+seen = set()
+for environment, path in (("dev", dev_path), ("prod", prod_path)):
+    for pvc in json.loads(path.read_text())["items"]:
+        metadata = pvc.get("metadata", {})
+        namespace = metadata.get("namespace")
+        name = metadata.get("name")
+        uid = metadata.get("uid")
+        if pvc.get("kind") != "PersistentVolumeClaim" or not all(isinstance(v, str) and v for v in (namespace, name, uid)):
+            raise SystemExit("FAIL: retained PVC identity is incomplete")
+        matches = [item for item in resources if item.get("kind") == "PersistentVolumeClaim"
+                   and item.get("environment") == environment and item.get("decision") == "RETAIN"
+                   and isinstance(item.get("id"), str) and item["id"].endswith(uid)]
+        if len(matches) != 1:
+            raise SystemExit(f"FAIL: retained PVC {namespace}/{name} is not uniquely approved by ownership inventory")
+        key = (environment, namespace, name, uid)
+        if key in seen:
+            raise SystemExit("FAIL: duplicate retained PVC identity")
+        seen.add(key)
+        result.append({"environment": environment, "namespace": namespace,
+                       "kind": "PersistentVolumeClaim", "name": name, "uid": uid,
+                       "classification": matches[0]["classification"],
+                       "requiresExplicitDeletion": True})
+
+expected = [item for item in resources if item.get("kind") == "PersistentVolumeClaim"
+            and item.get("environment") in ("dev", "prod") and item.get("decision") == "RETAIN"]
+if len(expected) != len(result):
+    raise SystemExit("FAIL: ownership inventory retained PVC set differs from live namespaces")
+result.sort(key=lambda item: (item["environment"], item["namespace"], item["kind"], item["name"], item["uid"]))
+print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+PY
+  ) || exit 1
+
+  provider_count=0
+  while IFS= read -r provider; do
+    [[ -n "$provider" ]] || continue
+    provider_count=$((provider_count + 1))
+    provider_id=$(jq -r '.id' <<<"$provider")
+    [[ "$provider_id" =~ ^arn:aws:secretsmanager:$region:$account_id:secret:.+ ]] || {
+      echo "FAIL: provider Secret inventory contains a foreign ARN" >&2
+      exit 1
+    }
+    secret_json=$(aws secretsmanager describe-secret --secret-id "$provider_id" --region "$region" --output json) || {
+      echo "FAIL: provider Secret is not observable: $provider_id" >&2
+      exit 1
+    }
+    jq -e --arg arn "$provider_id" '.ARN == $arn' <<<"$secret_json" >/dev/null || {
+      echo "FAIL: provider Secret ARN does not match ownership inventory" >&2
+      exit 1
+    }
+  done < <(jq -c '.resources[] | select(.kind == "SecretsManagerSecret")' "$inventory")
+  ((provider_count > 0)) || {
+    echo "FAIL: ownership inventory contains no provider Secrets" >&2
+    exit 1
+  }
+
+  freeze_sha=$(shasum -a 256 "$freeze" | awk '{print $1}')
+  provider_sha=$(jq -cS '[.resources[] | select(.kind == "SecretsManagerSecret")] | sort_by(.environment,.id)' \
+    "$inventory" | shasum -a 256 | awk '{print $1}')
+  observed=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  jq -e --arg observed "$observed" '(.observedAt | fromdateiso8601) < ($observed | fromdateiso8601)' "$freeze" >/dev/null || {
+    echo "FAIL: removal observedAt must be later than freeze observedAt" >&2
+    exit 1
+  }
+  jq -n --arg revision "$git_revision" --arg freeze "$freeze_sha" --arg provider "$provider_sha" \
+    --arg observed "$observed" --argjson clusters "$(jq -c '[.clusters[] | {environment,clusterArn}]' "$freeze")" \
+    --argjson remaining "$summary" --argjson retained "$retained" '
+    {
+      schemaVersion:"course.gitops-removal/v1",evidenceGrade:"CLOUD_RUNTIME",status:"REMOVED",
+      gitopsRevision:$revision,freezeEvidenceSha256:$freeze,clusters:$clusters,
+      remaining:$remaining,retained:$retained,
+      providerSecrets:{retained:true,inventorySha256:$provider},observedAt:$observed
+    }
+  ' >"$tmp" || {
+    echo "FAIL: unable to construct GitOps removal evidence" >&2
+    exit 1
+  }
+  chmod 600 "$tmp"
+  mv "$tmp" "$evidence_root/removal.json"
+  rm -rf -- "$tmp_dir"
+  trap - EXIT
 fi
 echo "[CLOUD_RUNTIME] wrote $evidence_root/$mode.json"
