@@ -214,6 +214,18 @@ if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$arn_drift_runtime" AWS_RE
   fail 'static freeze execution accepted an EKS ARN whose cluster name differs from the requested cluster'
 fi
 
+malformed_arn_runtime="$tmp_root/cleanup-runtime-malformed-arn"
+cp -R "$runtime" "$malformed_arn_runtime"
+jq '.cluster.arn="arn:aws:eks:ap-northeast-2:111111111111:cluster/forged:cluster/course-dev"' \
+  "$malformed_arn_runtime/dev-cluster.json" >"$malformed_arn_runtime/mutated"
+mv "$malformed_arn_runtime/mutated" "$malformed_arn_runtime/dev-cluster.json"
+if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$malformed_arn_runtime" AWS_REGION=ap-northeast-2 \
+  DEV_CLUSTER_NAME=course-dev PROD_CLUSTER_NAME=course-prod \
+  bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --dev-context dev-context \
+    --prod-context prod-context --output "$tmp_root/malformed-arn-freeze.json" >/dev/null 2>&1; then
+  fail 'static freeze execution accepted a malformed EKS cluster ARN'
+fi
+
 static_removal="$tmp_root/static-removal.json"
 removal_log=$(COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \

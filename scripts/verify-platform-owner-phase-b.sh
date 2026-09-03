@@ -108,7 +108,7 @@ jq -e \
   .evidenceGrade == $grade and
   .environment == $environment and
   ($region == "ap-northeast-2" or $region == "us-east-1") and
-  (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/.+$")) and
+  (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
   .gitopsRevision == $revision and
   .application.name == ("external-secrets-" + $environment) and
   .application.uid != "" and

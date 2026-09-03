@@ -34,7 +34,7 @@ validate_record() {
     (.rollout.stableHash | type == "string" and length > 0) and
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
     .region as $region |
-    (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/.+")) and
+    (.clusterArn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     ($region | IN("ap-northeast-2","us-east-1")) and
     (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601)
   ' "$file" >/dev/null || fail 'Prod baseline does not satisfy course.prod-baseline/v1'
@@ -103,7 +103,7 @@ cluster_arn=$(jq -er '.cluster.arn' <<<"$cluster_json") || fail 'EKS cluster ARN
 cluster_endpoint=$(jq -er '.cluster.endpoint' <<<"$cluster_json") || fail 'EKS cluster endpoint is missing'
 jq -e --arg name "$EKS_CLUSTER_NAME" --arg region "$AWS_REGION" '
   .cluster.name == $name and .cluster.status == "ACTIVE" and
-  (.cluster.arn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/")) and
+  (.cluster.arn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
   (.cluster.arn | endswith(":cluster/" + $name)) and
   (.cluster.endpoint | type == "string" and startswith("https://"))
 ' <<<"$cluster_json" >/dev/null || fail 'Prod EKS identity or status is invalid'

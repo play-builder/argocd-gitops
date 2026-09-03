@@ -41,7 +41,7 @@ from pathlib import Path
 mode, fixture, eks_root = sys.argv[1:]
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
-ARN = re.compile(r"^arn:aws:eks:(ap-northeast-2|us-east-1):([0-9]{12}):cluster/.+$")
+ARN = re.compile(r"^arn:aws:eks:(ap-northeast-2|us-east-1):([0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
 RESOURCE_KEYS = {"kind","id","environment","classification","owner","managedBy","billable","decision","reason","followUpAction"}
 
 def fail(message):
@@ -271,7 +271,7 @@ if [[ "$mode" == freeze ]]; then
     }
     jq -e --arg name "$cluster_name" --arg region "$AWS_REGION" '
       .cluster.name == $name and .cluster.status == "ACTIVE" and
-      (.cluster.arn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/")) and
+      (.cluster.arn | test("^arn:aws:eks:" + $region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
       (.cluster.arn | endswith(":cluster/" + $name)) and
       (.cluster.endpoint | type == "string" and startswith("https://"))
     ' <<<"$cluster_json" >/dev/null || {
@@ -495,7 +495,7 @@ else
     [.clusters[].environment] == ["dev","prod"] and
     all(.clusters[];
       (keys | sort) == ["application","clusterArn","environment"] and
-      (.clusterArn | test("^arn:aws:eks:" + $region + ":" + $account + ":cluster/.+")) and
+      (.clusterArn | test("^arn:aws:eks:" + $region + ":" + $account + ":cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
       (.application | (keys | sort) == ["automated","health","name","sync"]) and
       .application.name == ("sample-app-" + .environment) and
       .application.sync == "Synced" and .application.health == "Healthy" and

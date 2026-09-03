@@ -38,13 +38,13 @@ validate_record() {
   jq -e --arg grade "$expected_grade" --arg observedLimit "$observed_limit" '
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["analysisRun","clusterArn","evidenceGrade","evidenceId","gitopsRevision","image","metricResults","observedAt","region","rollout","schemaVersion","source","status"] and
     .schemaVersion == "course.prod-slo/v1" and .evidenceGrade == $grade and .status == "PASS" and
     (.source | (keys | sort) == ["repository","sha"]) and (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-    (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:[a-z0-9-]+:[0-9]{12}:cluster/.+")) and (.region | IN("ap-northeast-2","us-east-1")) and
+    (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.rollout | (keys | sort) == ["currentPodHash","name","phase","revision","stableHash","trafficWeight","uid"]) and
     (.rollout.revision | type == "number" and floor == . and . >= 2) and
@@ -110,7 +110,7 @@ jq -e --arg now "$clock_now" '
   .workflow as $workflow |
   (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
   (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-  (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+  (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["attestation","cluster","environment","expiresAt","gitops","image","issuedAt","region","schemaVersion","slo","sourceSha","workflow"] and
   .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
   (.region | IN("ap-northeast-2","us-east-1")) and
@@ -138,7 +138,7 @@ jq -e --arg now "$clock_now" '
 jq -e --arg now "$clock_now" '
   . as $root |
   (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-  (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+  (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
   .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
   (.image | (keys | sort) == ["indexDigest","repository"]) and

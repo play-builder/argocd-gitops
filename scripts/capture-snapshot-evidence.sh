@@ -14,7 +14,7 @@ validate() {
   jq -e '
     (keys | sort) == ["checksum","clusterArn","database","environment","evidenceGrade","expiresAt","gitopsRevision","observedAt","region","schemaVersion","source","storage","writers"] and
     .schemaVersion == "course.snapshot-quiesce/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .environment == "dev" and
-    (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:[a-z0-9-]+:[0-9]{12}:cluster/.+")) and
+    (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.source | (keys | sort) == ["namespace","pvcName","pvcUid","statefulSet","volumeName"] and .namespace == "app-dev" and .statefulSet == "sample-app-postgresql") and
     (.writers == {applicationReplicas:0,migrationActive:0,migrationPending:0}) and
     (.database | .desiredReplicas == 0 and .readyReplicas == 0 and .shutdownSignal == "SIGTERM" and .cleanShutdownObserved == true and (.cleanShutdownEvidenceId | test("^sha256:[0-9a-f]{64}$"))) and

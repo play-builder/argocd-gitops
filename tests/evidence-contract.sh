@@ -22,14 +22,14 @@ validate_deployment() {
   jq -e '
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-deployment/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     .status == {sync:"Synced",health:"Healthy"} and
     (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
-    (.clusterArn | test("^arn:aws:eks:[a-z0-9-]+:[0-9]{12}:cluster/.+")) and
+    (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601 != null)
@@ -44,11 +44,11 @@ validate_slo() {
   jq -e '
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
     (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-    (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:[a-z0-9-]+:[0-9]{12}:cluster/.+")) and
+    (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)
@@ -60,7 +60,7 @@ validate_baseline() {
   jq -e '
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and

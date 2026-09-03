@@ -63,7 +63,7 @@ jq -e '.evidenceGrade=="STATIC" and .rollout=={stableHash:"stable-v1",revision:1
   "$static_output" >/dev/null || fail 'fake baseline runtime output is not canonical STATIC evidence'
 [[ "$before" == "$(fingerprint)" ]] || fail 'fake baseline runtime changed canonical evidence'
 
-for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account context-drift git-mismatch dirty-source argo-repository; do
+for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account context-drift git-mismatch dirty-source argo-repository malformed-cluster-arn; do
   candidate="$tmp_root/runtime-$label"
   cp -R "$runtime" "$candidate"
   case "$label" in
@@ -79,6 +79,7 @@ for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision no
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$candidate/git-revision.txt" ;;
     dirty-source) printf '%s\n' ' M envs/prod/values.yaml' >"$candidate/git-status.txt" ;;
     argo-repository) jq '.spec.source.repoURL="https://github.com/OWNER/other-repo.git"' "$candidate/application.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/application.json" ;;
+    malformed-cluster-arn) jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$candidate/cluster.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/cluster.json" ;;
   esac
   if run_static "$candidate" "$tmp_root/$label.json" >/dev/null 2>&1; then
     fail "static baseline runtime accepted $label"

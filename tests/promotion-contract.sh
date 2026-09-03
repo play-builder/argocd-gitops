@@ -20,7 +20,7 @@ validate_ready() {
     .workflow as $workflow |
     (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-    (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+    (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (.sourceSha | test("^[0-9a-f]{40}$")) and
@@ -143,7 +143,7 @@ case_promotion() {
   jq -e '
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
-    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and

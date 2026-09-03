@@ -115,7 +115,7 @@ jq -e '
 ' "$static_output" >/dev/null || fail 'static runtime adapter did not preserve canonical live-selection output'
 [[ "$before" == "$(fingerprint)" ]] || fail 'static runtime adapter changed canonical runtime evidence'
 
-for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse; do
+for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn; do
   runtime="$tmp_root/runtime-$label"
   cp -R "$fake_runtime" "$runtime"
   case "$label" in
@@ -135,6 +135,10 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
     image-mismatch) jq '.spec.template.spec.containers[0].image |= sub("c{64}$";"d" * 64)' "$runtime/rollout.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/rollout.json" ;;
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$runtime/git-revision.txt" ;;
     baseline-reuse) yq -o=json '.' "$runtime/promotion.yaml" | jq '.image.indexDigest="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' | yq -P >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/promotion.yaml" ;;
+    malformed-cluster-arn)
+      jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
+      jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
+      ;;
   esac
   if run_static "$runtime" "$tmp_root/$label-output.json" >/dev/null 2>&1; then
     fail "static runtime adapter accepted $label"

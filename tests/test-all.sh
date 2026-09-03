@@ -7,6 +7,7 @@ bash "$test_root/render-contract.sh" --case network-policy
 bash "$test_root/render-contract.sh" --case telemetry
 bash "$test_root/bootstrap-contract.sh" --case all
 bash "$test_root/evidence-contract.sh" --case all
+bash "$test_root/cluster-arn-contract.sh"
 bash "$test_root/prod-baseline-runtime-producer-contract.sh"
 bash "$test_root/prod-slo-runtime-producer-contract.sh"
 bash "$test_root/runtime-evidence-producer-contract.sh"
