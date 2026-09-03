@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../bootstrap/dev
+
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: ApplicationSet
+      name: sample-app-dev
+    patch: |-
+      - op: add
+        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/pod-security.kubernetes.io~1enforce
+        value: restricted
+      - op: add
+        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/pod-security.kubernetes.io~1enforce-version
+        value: "{{ .podSecurityVersion }}"
+  - target:
+      version: v1
+      kind: Namespace
+      name: app-recovery
+    patch: |-
+      - op: add
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce
+        value: restricted
+      - op: add
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce-version
+        value: v1.36
+  - target:
+      group: admissionregistration.k8s.io
+      version: v1
+      kind: ValidatingAdmissionPolicyBinding
+      name: course-workload-security
+    patch: |-
+      - op: replace
+        path: /spec/validationActions
+        value:
+          - Deny

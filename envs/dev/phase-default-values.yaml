@@ -1,0 +1,10 @@
+# Safe default. Select exactly one lifecycle overlay in the Dev ApplicationSet
+# only for the reviewed snapshot, recovery, or Chaos phase.
+maintenance:
+  writersStopped: false
+snapshot:
+  captureEnabled: false
+recovery:
+  restoreEnabled: false
+chaos:
+  enabled: false

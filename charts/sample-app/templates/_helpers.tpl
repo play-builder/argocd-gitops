@@ -26,6 +26,7 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- define "sample-app.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "sample-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: application
 {{- end -}}
 
 {{- define "sample-app.image" -}}
@@ -38,11 +39,50 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "sample-app.version" -}}
-{{- .Values.image.digest | trimPrefix "sha256:" | trunc 12 -}}
+{{- .Chart.AppVersion -}}
 {{- end -}}
 
 {{- define "sample-app.databaseFullname" -}}
 {{- printf "%s-postgresql" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "sample-app.runtimeSecretName" -}}
+{{- required "externalSecrets.runtime.targetSecretName is required when External Secrets is enabled" .Values.externalSecrets.runtime.targetSecretName -}}
+{{- end -}}
+
+{{- define "sample-app.databaseSecretName" -}}
+{{- required "externalSecrets.database.targetSecretName is required when database is enabled" .Values.externalSecrets.database.targetSecretName -}}
+{{- end -}}
+
+{{- define "sample-app.recoveryDatabaseSecretName" -}}
+{{- printf "%s-db-recovery" (include "sample-app.fullname" .) -}}
+{{- end -}}
+
+{{- define "sample-app.telemetryConfigName" -}}
+{{- printf "%s-telemetry" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "sample-app.validateNetworkPolicy" -}}
+{{- if .Values.networkPolicy.enabled -}}
+{{- if eq (len .Values.networkPolicy.gateway.sourceCidrs) 0 -}}
+{{- fail "networkPolicy.gateway.sourceCidrs must contain platform-validated CIDRs when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- range $cidr := .Values.networkPolicy.gateway.sourceCidrs -}}
+{{- if or (eq $cidr "0.0.0.0/0") (eq $cidr "::/0") (not (regexMatch "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" $cidr)) -}}
+{{- fail "networkPolicy.gateway.sourceCidrs must contain bounded CIDRs and must not contain a wildcard" -}}
+{{- end -}}
+{{- end -}}
+{{- if eq (len .Values.networkPolicy.telemetry.namespaceLabels) 0 -}}
+{{- fail "networkPolicy.telemetry.namespaceLabels must select the platform collector" -}}
+{{- end -}}
+{{- if eq (len .Values.networkPolicy.telemetry.podLabels) 0 -}}
+{{- fail "networkPolicy.telemetry.podLabels must select the platform collector" -}}
+{{- end -}}
+{{- $telemetryPort := int .Values.networkPolicy.telemetry.port -}}
+{{- if or (lt $telemetryPort 1) (gt $telemetryPort 65535) -}}
+{{- fail "networkPolicy.telemetry.port must be between 1 and 65535" -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "sample-app.databaseImage" -}}
@@ -74,9 +114,11 @@ metadata:
   labels:
     {{- include "sample-app.selectorLabels" . | nindent 4 }}
   annotations:
+    {{- if .Values.telemetry.enabled }}
     prometheus.io/scrape: "true"
     prometheus.io/path: /metrics
     prometheus.io/port: {{ .Values.containerPort | quote }}
+    {{- end }}
 spec:
   serviceAccountName: {{ .Values.serviceAccount.name }}
   automountServiceAccountToken: false
@@ -133,24 +175,63 @@ spec:
           value: {{ .Values.app.shutdownDelayMs | quote }}
         - name: SECRET_KEYS
           value: {{ .Values.app.secretKeys | quote }}
-        {{- if .Values.database.enabled }}
         - name: DATABASE_ENABLED
-          value: "true"
+          value: {{ ternary "true" "false" .Values.database.enabled | quote }}
+        {{- if .Values.telemetry.enabled }}
+        - name: OTEL_SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_SERVICE_NAME
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_RESOURCE_ATTRIBUTES
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_EXPORTER_OTLP_PROTOCOL
+        {{- end }}
+        {{- if .Values.database.enabled }}
         - name: DB_HOST
-          value: {{ default (include "sample-app.databaseFullname" .) .Values.database.host | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_HOST
         - name: DB_PORT
-          value: {{ .Values.database.port | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_PORT
         - name: DB_NAME
-          value: {{ .Values.database.name | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_NAME
         - name: DB_USER
-          value: {{ .Values.database.user | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_PASSWORD
         - name: DB_SSL
           value: "false"
         {{- end }}
       {{- if .Values.externalSecrets.enabled }}
       envFrom:
         - secretRef:
-            name: {{ .Values.externalSecrets.targetSecretName }}
+            name: {{ include "sample-app.runtimeSecretName" . }}
       {{- end }}
       livenessProbe:
         httpGet:

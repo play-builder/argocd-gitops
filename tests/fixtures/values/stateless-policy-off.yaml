@@ -1,0 +1,4 @@
+database:
+  enabled: false
+networkPolicy:
+  enabled: false

@@ -2,7 +2,7 @@
 {{- if not .Values.externalSecrets.enabled }}
 {{- fail "externalSecrets.enabled must be true when database is enabled" }}
 {{- end }}
-{{- $secretName := required "externalSecrets.targetSecretName is required when database is enabled" .Values.externalSecrets.targetSecretName }}
+{{- $secretName := include "sample-app.databaseSecretName" . }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/component: database
 spec:
   serviceName: {{ include "sample-app.databaseFullname" . }}
-  replicas: 1
+  replicas: {{ if hasKey .Values.database "replicaCount" }}{{ int .Values.database.replicaCount }}{{ else }}1{{ end }}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain
@@ -33,6 +33,7 @@ spec:
         app.kubernetes.io/part-of: sample-app
         app.kubernetes.io/component: database
     spec:
+      terminationGracePeriodSeconds: {{ .Values.database.terminationGracePeriodSeconds }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -55,14 +56,20 @@ spec:
               protocol: TCP
           env:
             - name: POSTGRES_DB
-              value: {{ .Values.database.name | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_NAME
             - name: POSTGRES_USER
-              value: {{ .Values.database.user | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $secretName }}
-                  key: {{ .Values.database.passwordSecretKey }}
+                  key: DB_PASSWORD
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           readinessProbe:

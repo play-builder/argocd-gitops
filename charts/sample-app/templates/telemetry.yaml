@@ -1,0 +1,18 @@
+{{- if .Values.telemetry.enabled }}
+{{- $endpoint := required "telemetry.otlpEndpoint is required when telemetry is enabled" .Values.telemetry.otlpEndpoint }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sample-app.telemetryConfigName" . }}
+  namespace: {{ include "sample-app.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    {{- include "sample-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: telemetry-configuration
+data:
+  OTEL_SERVICE_NAME: {{ required "telemetry.serviceName is required when telemetry is enabled" .Values.telemetry.serviceName | quote }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ printf "service.name=%s,service.namespace=%s,deployment.environment=%s" .Values.telemetry.serviceName (include "sample-app.namespace" .) .Values.environment | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ $endpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.telemetry.otlpProtocol | quote }}
+{{- end }}

@@ -15,6 +15,10 @@ database:
   migrationImage:
     repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  migration:
+    rollbackCandidates:
+      enabled: true
+      configMapName: sample-app-rollback-candidates
 
 workload:
   kind: Rollout
@@ -35,7 +39,12 @@ externalSecrets:
   enabled: true
   awsRegion: "REPLACE_ME_REGION"
   readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/prod-REPLACE_ME_PROJECT-external-secrets-reader-role"
-  remoteSecretName: "sample-app/prod/app-secrets"
+  runtime:
+    remoteSecretName: "sample-app/prod/sample-app-runtime"
+    targetSecretName: sample-app-runtime
+  database:
+    remoteSecretName: "sample-app/prod/sample-app-db"
+    targetSecretName: sample-app-db
 
 gateway:
   enabled: true
@@ -77,3 +86,19 @@ rollout:
           duration: 2m
       - pause: {}
       - setWeight: 100
+
+telemetry:
+  enabled: true
+  otlpEndpoint: "http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces"
+
+networkPolicy:
+  enabled: false
+  gateway:
+    sourceCidrs:
+      - REPLACE_ME_PLATFORM_GATEWAY_SOURCE_CIDR
+  telemetry:
+    namespaceLabels:
+      kubernetes.io/metadata.name: opentelemetry-operator-system
+    podLabels:
+      app.kubernetes.io/name: adot-collector-prometheus-collector
+    port: 4318

@@ -4,4 +4,9 @@ kind: Kustomization
 resources:
   - project.yaml
   - external-secrets.yaml
+  - admission-policy.yaml
+  - recovery-namespace.yaml
   - sample-app.yaml
+
+patches:
+  - path: rbac.yaml

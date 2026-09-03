@@ -1,0 +1,16 @@
+schemaVersion: course.platform-requirements/v1
+ownerRepository: EKS-infra
+argoConfigMap: argocd-cm
+argoHealthCustomizations:
+  - id: external-secret-ready-health/v1
+    apiGroup: external-secrets.io
+    kind: ExternalSecret
+    healthyWhen: Ready=True at observedGeneration
+    requiredBeforeSyncWave: -2
+    implementationOwner: EKS-infra
+  - id: volume-snapshot-ready-health/v1
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    healthyWhen: readyToUse=true with a bound content name
+    requiredBeforeSyncWave: -2
+    implementationOwner: EKS-infra

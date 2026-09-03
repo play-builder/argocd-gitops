@@ -1,0 +1,1 @@
+{"inProgressStableReapply":{"stableDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","candidateDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","requiresDesiredStateReconcile":true,"action":"git-reapply-stable-digest"}}

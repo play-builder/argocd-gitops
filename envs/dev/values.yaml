@@ -32,7 +32,12 @@ externalSecrets:
   enabled: true
   awsRegion: "REPLACE_ME_REGION"
   readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/dev-REPLACE_ME_PROJECT-external-secrets-reader-role"
-  remoteSecretName: "sample-app/dev/app-secrets"
+  runtime:
+    remoteSecretName: "sample-app/dev/sample-app-runtime"
+    targetSecretName: sample-app-runtime
+  database:
+    remoteSecretName: "sample-app/dev/sample-app-db"
+    targetSecretName: sample-app-db
 
 gateway:
   enabled: true
@@ -43,3 +48,19 @@ gateway:
 rollout:
   analysis:
     enabled: false
+
+telemetry:
+  enabled: true
+  otlpEndpoint: "http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces"
+
+networkPolicy:
+  enabled: false
+  gateway:
+    sourceCidrs:
+      - REPLACE_ME_PLATFORM_GATEWAY_SOURCE_CIDR
+  telemetry:
+    namespaceLabels:
+      kubernetes.io/metadata.name: opentelemetry-operator-system
+    podLabels:
+      app.kubernetes.io/name: adot-collector-prometheus-collector
+    port: 4318

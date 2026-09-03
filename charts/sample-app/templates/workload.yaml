@@ -7,13 +7,18 @@ metadata:
   namespace: {{ include "sample-app.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    {{- if .Values.externalSecrets.enabled }}
+    secret.reloader.stakater.com/reload: {{ include "sample-app.runtimeSecretName" . | quote }}
+    {{- end }}
   labels:
     {{- include "sample-app.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+  {{- if .Values.maintenance.writersStopped }}
+  replicas: 0
+  {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
-  revisionHistoryLimit: 3
+  revisionHistoryLimit: {{ .Values.workload.revisionHistoryLimit }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -32,13 +37,19 @@ metadata:
   namespace: {{ include "sample-app.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    {{- if .Values.externalSecrets.enabled }}
+    secret.reloader.stakater.com/reload: {{ include "sample-app.runtimeSecretName" . | quote }}
+    reloader.stakater.com/rollout-strategy: rollout
+    {{- end }}
   labels:
     {{- include "sample-app.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+  {{- if .Values.maintenance.writersStopped }}
+  replicas: 0
+  {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
-  revisionHistoryLimit: 3
+  revisionHistoryLimit: {{ .Values.workload.revisionHistoryLimit }}
   {{- if gt (int .Values.rollout.rollbackWindow.revisions) 0 }}
   rollbackWindow:
     revisions: {{ .Values.rollout.rollbackWindow.revisions }}

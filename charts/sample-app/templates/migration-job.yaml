@@ -1,5 +1,9 @@
-{{- if .Values.database.enabled }}
-{{- $secretName := required "externalSecrets.targetSecretName is required when database is enabled" .Values.externalSecrets.targetSecretName }}
+{{- if and .Values.database.enabled .Values.database.migration.enabled (not .Values.maintenance.writersStopped) }}
+{{- $secretName := include "sample-app.databaseSecretName" . }}
+{{- $rollbackConfigMapName := "" }}
+{{- if .Values.database.migration.rollbackCandidates.enabled }}
+{{- $rollbackConfigMapName = required "database.migration.rollbackCandidates.configMapName is required when rollback candidate handoff is enabled" .Values.database.migration.rollbackCandidates.configMapName }}
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -46,25 +50,85 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.database.migration.rollbackCandidates.enabled }}
+            - name: rollback-candidates
+              mountPath: /var/run/course-evidence
+              readOnly: true
+            {{- end }}
           env:
             - name: DATABASE_ENABLED
               value: "true"
             - name: DB_HOST
-              value: {{ default (include "sample-app.databaseFullname" .) .Values.database.host | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_HOST
             - name: DB_PORT
-              value: {{ .Values.database.port | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_PORT
             - name: DB_NAME
-              value: {{ .Values.database.name | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_NAME
             - name: DB_USER
-              value: {{ .Values.database.user | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_USER
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $secretName }}
-                  key: {{ .Values.database.passwordSecretKey }}
+                  key: DB_PASSWORD
             - name: DB_SSL
               value: "false"
+            {{- if .Values.database.migration.rollbackCandidates.enabled }}
+            - name: ROLLBACK_CANDIDATES_FILE
+              value: /var/run/course-evidence/rollback-candidates.json
+            - name: ROLLBACK_EXPECTED_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: environment
+            - name: ROLLBACK_EXPECTED_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: region
+            - name: ROLLBACK_EXPECTED_CLUSTER_ARN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: clusterArn
+            - name: ROLLBACK_EXPECTED_ROLLOUT_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: rolloutName
+            - name: ROLLBACK_EXPECTED_GITOPS_REVISION
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: gitopsRevision
+            - name: ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: sourceEvidenceDigest
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.database.migration.rollbackCandidates.enabled }}
+        - name: rollback-candidates
+          configMap:
+            name: {{ $rollbackConfigMapName }}
+            defaultMode: 0444
+            items:
+              - key: rollback-candidates.json
+                path: rollback-candidates.json
+        {{- end }}
 {{- end }}

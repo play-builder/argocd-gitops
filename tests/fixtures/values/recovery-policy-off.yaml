@@ -1,0 +1,6 @@
+database:
+  enabled: true
+recovery:
+  restoreEnabled: false
+networkPolicy:
+  enabled: false

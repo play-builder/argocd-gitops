@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: course-dev
+  namespace: argocd
+spec:
+  roles:
+    - name: developer
+      description: Read and sync Dev applications without delete permission
+      groups:
+        - course:dev-developers
+      policies:
+        - p, proj:course-dev:developer, applications, get, course-dev/*, allow
+        - p, proj:course-dev:developer, applications, sync, course-dev/*, allow
+        - p, proj:course-dev:developer, applications, action/argoproj.io/Rollout/promote, course-dev/*, allow

@@ -16,6 +16,7 @@ image:
 
 workload:
   kind: Deployment
+  revisionHistoryLimit: 3
 
 replicaCount: 2
 
@@ -81,18 +82,22 @@ externalSecrets:
   awsRegion: ""
   readerServiceAccount: external-secrets-reader
   readerRoleArn: ""
-  remoteSecretName: ""
-  targetSecretName: sample-app-secrets
   refreshInterval: 1h
+  runtime:
+    remoteSecretName: ""
+    targetSecretName: sample-app-runtime
+  database:
+    remoteSecretName: ""
+    targetSecretName: sample-app-db
 
-# Lab-only PostgreSQL. Ch01~Ch14 remains Stateless because this is false by default.
+# PostgreSQL stays opt-in so the default deployment remains stateless.
 database:
   enabled: false
+  terminationGracePeriodSeconds: 120
   host: ""
   port: 5432
   name: commerce
   user: commerce
-  passwordSecretKey: DB_PASSWORD
   storageClassName: course-gp3
   storageSize: 5Gi
   image:
@@ -104,8 +109,12 @@ database:
     digest: ""
     pullPolicy: IfNotPresent
   migration:
+    enabled: true
     backoffLimit: 3
     activeDeadlineSeconds: 600
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""
   resources:
     requests:
       cpu: 100m
@@ -160,5 +169,52 @@ rollout:
           duration: 2m
       - setWeight: 100
 
+telemetry:
+  enabled: false
+  serviceName: sample-app
+  otlpEndpoint: ""
+  otlpProtocol: http/protobuf
+
 networkPolicy:
   enabled: false
+  gateway:
+    sourceCidrs: []
+  dns:
+    namespaceLabels:
+      kubernetes.io/metadata.name: kube-system
+    podLabels:
+      k8s-app: kube-dns
+  telemetry:
+    namespaceLabels: {}
+    podLabels: {}
+    port: 4318
+
+recovery:
+  restoreEnabled: false
+  namespace: app-recovery
+  snapshotClassName: ebs.csi.aws.com
+  snapshotDriver: ebs.csi.aws.com
+  snapshotContentName: sample-app-postgresql-recovery-content
+  snapshotName: sample-app-postgresql-recovery-snapshot
+  pvcName: sample-app-postgresql-recovery
+  snapshotHandle: ""
+  cleanupLabel: recovery
+  source:
+    namespace: app-dev
+    pvcName: data-sample-app-postgresql-0
+    snapshotName: sample-app-postgresql-snapshot
+snapshot:
+  captureEnabled: false
+maintenance:
+  writersStopped: false
+
+chaos:
+  enabled: false
+  environment: dev
+  maximumDuration: 5m
+  targetLabels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: application
+
+courseCleanup:
+  workloadsDisabled: false

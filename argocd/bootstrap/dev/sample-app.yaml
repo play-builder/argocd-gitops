@@ -13,8 +13,11 @@ spec:
         elements:
           - environment: dev
             namespace: app-dev
+            podSecurityVersion: v1.36
+            chaosInjectionEnabled: false
             valuesFile: envs/dev/values.yaml
             statefulValuesFile: envs/dev/stateful-values.yaml
+            phaseValuesFile: envs/dev/phase-default-values.yaml
   template:
     metadata:
       name: "sample-app-{{ .environment }}"
@@ -31,6 +34,15 @@ spec:
           valueFiles:
             - "../../{{ .valuesFile }}"
             - "../../{{ .statefulValuesFile }}"
+            - "../../{{ .phaseValuesFile }}"
+      templatePatch: |
+        {{- if and (eq .environment "dev") .chaosInjectionEnabled }}
+        spec:
+          syncPolicy:
+            managedNamespaceMetadata:
+              annotations:
+                chaos-mesh.org/inject: enabled
+        {{- end }}
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ .namespace }}"
@@ -40,13 +52,26 @@ spec:
           selfHeal: true
         managedNamespaceMetadata:
           labels:
+            course.playbuilder.io/admission: enabled
             gateway-access: "true"
             environment: "{{ .environment }}"
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
+            pod-security.kubernetes.io/warn-version: "{{ .podSecurityVersion }}"
+            pod-security.kubernetes.io/audit-version: "{{ .podSecurityVersion }}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
           - RespectIgnoreDifferences=true
       ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers:
+            - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
         - group: ""
           kind: Service
           jqPathExpressions:
