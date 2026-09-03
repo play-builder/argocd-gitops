@@ -43,6 +43,17 @@ if [[ "$mode" == exact-sha ]]; then
   actual_sha=$(git -C "$git_root" rev-parse HEAD)
   [[ "$actual_sha" == "$SAMPLE_APP_EXPECTED_SHA" ]] ||
     fail 'sample-app checkout revision differs from SAMPLE_APP_EXPECTED_SHA'
+  expected_blob=$(git -C "$git_root" rev-parse \
+    "$SAMPLE_APP_EXPECTED_SHA:src/migration-ledger.js" 2>/dev/null) ||
+    fail 'expected sample-app commit does not track src/migration-ledger.js'
+  index_blob=$(git -C "$git_root" rev-parse ':src/migration-ledger.js' 2>/dev/null) ||
+    fail 'sample-app index does not track src/migration-ledger.js'
+  actual_blob=$(git hash-object "$verifier_path") ||
+    fail 'unable to hash the selected sample-app verifier'
+  [[ "$index_blob" == "$expected_blob" ]] ||
+    fail 'staged sample-app verifier bytes differ from the expected commit'
+  [[ "$actual_blob" == "$expected_blob" ]] ||
+    fail 'sample-app verifier bytes differ from the expected commit'
 fi
 
 printf '%s\n' "$verifier_path"

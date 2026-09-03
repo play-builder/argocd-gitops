@@ -26,6 +26,21 @@ resolved=$(CROSS_REPO_CONTRACT_MODE=exact-sha \
   "$resolver") || fail 'exact-SHA mode rejected the selected sample-app checkout'
 [[ "$resolved" == "$expected_path" ]] || fail 'resolver did not return the selected checkout verifier'
 
+printf '%s\n' '// unstaged mutation' >>"$expected_path"
+if CROSS_REPO_CONTRACT_MODE=exact-sha SAMPLE_APP_REPO_ROOT="$sample_root" \
+  SAMPLE_APP_EXPECTED_SHA="$sample_sha" "$resolver" >/dev/null 2>&1; then
+  fail 'exact-SHA mode accepted an unstaged verifier mutation'
+fi
+git -C "$sample_root" restore --source=HEAD --worktree src/migration-ledger.js
+
+printf '%s\n' '// staged mutation' >>"$expected_path"
+git -C "$sample_root" add src/migration-ledger.js
+if CROSS_REPO_CONTRACT_MODE=exact-sha SAMPLE_APP_REPO_ROOT="$sample_root" \
+  SAMPLE_APP_EXPECTED_SHA="$sample_sha" "$resolver" >/dev/null 2>&1; then
+  fail 'exact-SHA mode accepted a staged verifier mutation'
+fi
+git -C "$sample_root" restore --source=HEAD --staged --worktree src/migration-ledger.js
+
 resolved=$(SAMPLE_APP_VERIFIER_PATH="$expected_path" "$resolver") ||
   fail 'explicit verifier path was rejected'
 [[ "$resolved" == "$expected_path" ]] || fail 'explicit verifier path was not resolved physically'
@@ -38,6 +53,20 @@ fi
 if CROSS_REPO_CONTRACT_MODE=exact-sha "$resolver" >/dev/null 2>&1; then
   fail 'exact-SHA mode accepted a missing sample-app checkout'
 fi
+
+untracked_root="$tmp_root/sample-app-untracked"
+mkdir -p "$untracked_root/src"
+git init -q "$untracked_root"
+git -C "$untracked_root" -c user.name='Contract Test' \
+  -c user.email=contract@example.invalid commit -q --allow-empty -m 'empty source'
+untracked_sha=$(git -C "$untracked_root" rev-parse HEAD)
+printf '%s\n' 'export function verifyContract003RollbackCandidates() {}' \
+  >"$untracked_root/src/migration-ledger.js"
+if CROSS_REPO_CONTRACT_MODE=exact-sha SAMPLE_APP_REPO_ROOT="$untracked_root" \
+  SAMPLE_APP_EXPECTED_SHA="$untracked_sha" "$resolver" >/dev/null 2>&1; then
+  fail 'exact-SHA mode accepted an untracked verifier path'
+fi
+
 optional=$(SAMPLE_APP_VERIFIER_OPTIONAL=1 "$resolver") ||
   fail 'explicit repository-local optional mode was rejected'
 [[ -z "$optional" ]] || fail 'optional mode returned an unexpected verifier'
