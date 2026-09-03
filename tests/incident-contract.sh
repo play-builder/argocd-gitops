@@ -118,6 +118,20 @@ elif db04_mismatch == "blank-stable-repository":
     stable["repository"] = " "
 elif db04_mismatch == "blank-stable-image-repository":
     stable["imageRepository"] = " "
+elif db04_mismatch == "arbitrary-release-repository":
+    for identity in (stable, faulty, hotfix):
+        identity["repository"] = "evil/other-app"
+elif db04_mismatch == "non-ecr-image-repository":
+    for identity in (stable, faulty, hotfix):
+        identity["imageRepository"] = "not-ecr"
+elif db04_mismatch == "cross-region-image-repository":
+    other_region = "ap-northeast-2" if region == "us-east-1" else "us-east-1"
+    for identity in (stable, faulty, hotfix):
+        identity["imageRepository"] = f"{account_id}.dkr.ecr.{other_region}.amazonaws.com/mini-commerce"
+elif db04_mismatch == "foreign-account-image-repository":
+    foreign_account = "999999999999" if account_id != "999999999999" else "111111111111"
+    for identity in (stable, faulty, hotfix):
+        identity["imageRepository"] = f"{foreign_account}.dkr.ecr.{region}.amazonaws.com/mini-commerce"
 scenarios = ("git-revert", "break-glass-undo-plus-git", "hotfix-fix-forward")
 recovery_sources = {}
 for number, scenario in enumerate(scenarios, start=1):
@@ -141,6 +155,8 @@ for number, scenario in enumerate(scenarios, start=1):
         run_attempt = 0
     elif db04_mismatch == "workflow-url-mismatch" and scenario == "git-revert":
         run_url = "https://github.com/play-builder/cicd-course-sample-app/actions/runs/9999"
+    elif db04_mismatch == "workflow-repository-mismatch":
+        run_url = f"https://github.com/evil/other-app/actions/runs/{run_id}"
     elif db04_mismatch == "invalid-gitops-revision" and scenario == "git-revert":
         gitops_revision = "not-a-git-sha"
     elif db04_mismatch == "invalid-rollout-revision" and scenario == "git-revert":
@@ -408,7 +424,9 @@ case_db04_recovery_identity() {
 
   for variant in invalid-stable-source-sha invalid-stable-digest blank-stable-repository \
     blank-stable-image-repository strategy-mismatch invalid-workflow invalid-run-attempt \
-    workflow-url-mismatch invalid-gitops-revision invalid-rollout-revision \
+    workflow-url-mismatch arbitrary-release-repository workflow-repository-mismatch \
+    non-ecr-image-repository cross-region-image-repository foreign-account-image-repository \
+    invalid-gitops-revision invalid-rollout-revision \
     invalid-recovery-time blank-execution-id stable-lineage-mismatch \
     faulty-lineage-mismatch hotfix-lineage-mismatch; do
     make_runtime_bundle "$work/$variant" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z "$variant"

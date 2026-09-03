@@ -270,17 +270,21 @@ def artifact_record(record):
 def validate_db04(selected):
     """Validate the three independent recovery identities for INC-DB-04."""
     identity_keys = {"repository","sourceSha","imageRepository","indexDigest"}
+    canonical_repository = "play-builder/cicd-course-sample-app"
     sha_pattern = r"[0-9a-f]{40}"
     digest_pattern = r"sha256:[0-9a-f]{64}"
+    ecr_pattern = re.compile(r"(?P<account>[0-9]{12})\.dkr\.ecr\.(?P<region>ap-northeast-2|us-east-1)\.amazonaws\.com/(?P<name>[a-z0-9]+(?:[._/-][a-z0-9]+)*)")
 
     def release_identity(value, label, recovered=False):
         expected = identity_keys | ({"strategy"} if recovered else set())
         if not isinstance(value, dict) or set(value) != expected:
             fail(f"{label} identity is not exact")
-        if not isinstance(value["repository"], str) or not value["repository"].strip():
-            fail(f"{label} repository must be nonblank")
-        if not isinstance(value["imageRepository"], str) or not value["imageRepository"].strip():
-            fail(f"{label} imageRepository must be nonblank")
+        if value["repository"] != canonical_repository:
+            fail(f"{label} repository must be the canonical sample repository")
+        image_repository = value["imageRepository"]
+        image_match = ecr_pattern.fullmatch(image_repository) if isinstance(image_repository, str) else None
+        if image_match is None or image_match.group("account") != account_id or image_match.group("region") != region or len(image_match.group("name")) > 256:
+            fail(f"{label} imageRepository must be a canonical ECR repository in the incident account and Region")
         if not isinstance(value["sourceSha"], str) or not re.fullmatch(sha_pattern, value["sourceSha"]):
             fail(f"{label} sourceSha must be a 40-character lowercase SHA")
         if not isinstance(value["indexDigest"], str) or not re.fullmatch(digest_pattern, value["indexDigest"]):
@@ -331,9 +335,9 @@ def validate_db04(selected):
             fail(f"INC-DB-04/{scenario} workflow runId must contain only digits")
         if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
             fail(f"INC-DB-04/{scenario} workflow runAttempt must be a positive integer")
-        run_match = re.fullmatch(r"https://github\.com/[^/\s]+/[^/\s]+/actions/runs/([0-9]+)", str(run_url))
-        if run_match is None or run_match.group(1) != run_id:
-            fail(f"INC-DB-04/{scenario} workflow runUrl does not bind the runId")
+        expected_run_url = f"https://github.com/{canonical_repository}/actions/runs/{run_id}"
+        if run_url != expected_run_url:
+            fail(f"INC-DB-04/{scenario} workflow runUrl does not bind the canonical repository and runId")
         if not isinstance(recovery.get("executionId"), str) or not recovery["executionId"].strip():
             fail(f"INC-DB-04/{scenario} executionId must be nonblank")
         if not isinstance(recovery.get("gitopsRevision"), str) or not re.fullmatch(sha_pattern, recovery["gitopsRevision"]):
