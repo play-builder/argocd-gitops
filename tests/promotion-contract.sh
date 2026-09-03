@@ -44,7 +44,7 @@ validate_ready() {
     (.attestation.ociProvenanceDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitops | (keys | sort) == ["devRevision"]) and (.gitops.devRevision | test("^[0-9a-f]{40}$")) and
     (.cluster | (keys | sort) == ["arn"]) and (.slo | (keys | sort) == ["evidenceId"]) and
-    (.slo.evidenceId | type == "string" and test("\\S")) and
+    (.slo.evidenceId | type == "string" and test("[^[:space:]\uFEFF]")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.issuedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
     ($now | canonical_utc_seconds) and
@@ -320,6 +320,11 @@ case_ready_edges() {
   candidate="$render_root/dev-ready-ecr-two-character.yaml"
   yq '.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' "$valid" >"$candidate"
   validate_ready "$candidate" "$now" || fail "DEV_READY rejected a two-character ECR repository name"
+  candidate="$render_root/dev-ready-slo-evidence-id-bom.yaml"
+  yq -o=json '.' "$valid" | jq '.slo.evidenceId = "\uFEFF"' | yq -P >"$candidate"
+  if (validate_ready "$candidate" "$now") >/dev/null 2>&1; then
+    fail "DEV_READY accepted invalid slo-evidence-id-bom"
+  fi
   while IFS='|' read -r label expression; do
     candidate="$render_root/dev-ready-$label.yaml"
     yq "$expression" "$valid" >"$candidate"
