@@ -1,5 +1,4 @@
-{{- if and .Values.database.enabled .Values.database.migration.enabled (not .Values.maintenance.writersStopped) }}
-{{- $secretName := include "sample-app.databaseSecretName" . }}
+{{- if and .Values.database.enabled .Values.database.migration.enabled }}
 {{- $migrationPhase := required "database.migration.phase is required when migration is enabled" .Values.database.migration.phase }}
 {{- $migrationTarget := required "database.migration.target is required when migration is enabled" .Values.database.migration.target }}
 {{- $rollbackConfigMapName := "" }}
@@ -25,6 +24,8 @@
 {{- else }}
 {{- fail "database.migration.phase must be initial, expand, contract, or finalize" }}
 {{- end }}
+{{- if not .Values.maintenance.writersStopped }}
+{{- $secretName := include "sample-app.databaseSecretName" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -154,4 +155,5 @@ spec:
               - key: rollback-candidates.json
                 path: rollback-candidates.json
         {{- end }}
+{{- end }}
 {{- end }}

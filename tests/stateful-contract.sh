@@ -265,6 +265,17 @@ for invalid_phase in contract-without-evidence finalize-with-evidence expand-wro
   fi
 done
 
+if render_environment prod "$render_root/migration-paused-unsupported-phase-render.yaml" \
+  "$repository_root/envs/prod/stateful-values.yaml" \
+  "$fixture_root/stateful-policy-on.yaml" \
+  "$fixture_root/migration-paused-unsupported-phase.yaml" \
+  2>"$render_root/migration-paused-unsupported-phase.err"; then
+  fail "paused migration render accepted an unsupported desired phase"
+fi
+grep -Fq 'database.migration.phase must be initial, expand, contract, or finalize' \
+  "$render_root/migration-paused-unsupported-phase.err" || \
+  fail "paused unsupported migration phase failed for an unexpected reason"
+
 if render_environment prod "$render_root/migration-missing-target-render.yaml" \
   "$fixture_root/stateful-policy-on.yaml" \
   "$fixture_root/migration-missing-target.yaml" 2>"$render_root/migration-missing-target.err"; then
