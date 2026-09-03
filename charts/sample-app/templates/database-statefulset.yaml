@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/component: database
 spec:
   serviceName: {{ include "sample-app.databaseFullname" . }}
-  replicas: {{ default 1 .Values.database.replicaCount }}
+  replicas: {{ if hasKey .Values.database "replicaCount" }}{{ int .Values.database.replicaCount }}{{ else }}1{{ end }}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain
@@ -33,6 +33,7 @@ spec:
         app.kubernetes.io/part-of: sample-app
         app.kubernetes.io/component: database
     spec:
+      terminationGracePeriodSeconds: {{ .Values.database.terminationGracePeriodSeconds }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

@@ -18,6 +18,8 @@ charts/sample-app/              공통 Helm chart
 envs/dev/values.yaml            자동 배포, RollingUpdate
 envs/prod/values.yaml           승인된 PR, Canary + AMP 분석
 envs/*/stateful-values.yaml      Ch14 이후에만 true로 바꾸는 DB opt-in switch
+envs/dev/phase-default-values.yaml  기본 lifecycle phase(모두 비활성)
+envs/dev/snapshot-maintenance-values.yaml  Ch23 A1→A2에서만 선택·편집
 
 argocd/bootstrap/dev/           dev 클러스터만 읽는 root 구성
 argocd/bootstrap/prod/          prod 클러스터만 읽는 root 구성
@@ -124,6 +126,60 @@ Application과 migration Job은 같은 ECR image를 사용할 수 있지만 desi
 StatefulSet을 삭제해도 `volumeClaimTemplates`가 만든 PVC가 자동으로 정리된다고 가정하지 않습니다.
 최종 정리에서는 대상 namespace와 label을 확인한 뒤 PVC를 명시적으로 삭제하고 PV와 EBS volume
 삭제 완료까지 확인해야 합니다.
+
+## Ch23 snapshot quiesce A1/A2/A3
+
+Dev ApplicationSet은 기본적으로 `phaseValuesFile=envs/dev/phase-default-values.yaml` 하나만
+선택합니다. 이 safe-default 파일은 recovery와 Chaos를 모두 비활성화하므로 Ch01~Ch14의 기본
+render가 PostgreSQL, recovery object, Chaos object를 만들지 않습니다. Stateful, Chaos, snapshot,
+recovery lifecycle은 각각 검토한 Git commit에서만 phase selector를 해당 파일로 바꿉니다.
+
+A1에서는 `argocd/bootstrap/dev/sample-app.yaml`의 `phaseValuesFile`을
+`envs/dev/snapshot-maintenance-values.yaml`로 바꿔 commit하고 Sync합니다. 이 파일은 application
+replica와 HPA, migration Job을 모두 끄되 PostgreSQL은 `replicaCount: 1`로 유지합니다. 다음 producer는
+clean `HEAD == Argo desired revision`, 현재 EKS/context, DB Pod→PVC UID→PV→VolumeAttachment identity를
+fresh query하고, DB 안에서 FK·idempotency·inventory invariant와 정렬된 네 테이블 row set을 조회합니다.
+raw row set은 저장하지 않고 canonical JSON의 SHA-256만 `0600` A1 handoff에 기록합니다.
+
+```bash
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$DEV_CLUSTER_NAME" \
+  bash scripts/capture-snapshot-evidence.sh prepare
+```
+
+A2 commit은 같은 `envs/dev/snapshot-maintenance-values.yaml`의 `database.replicaCount`만 `1`에서
+`0`으로 바꿉니다. 다른 파일을 함께 변경하면 producer가 `git diff A1..HEAD`에서 차단합니다. 원격에
+commit이 반영된 직후, Argo Auto-Sync가 StatefulSet을 내리는 동안 다음 명령을 시작합니다. producer는
+A1 Pod UID에 log watcher를 먼저 결속하고 PostgreSQL의 `received fast shutdown request` 다음
+`database system is shut down`을 순서대로 관찰합니다. 이 chart는 별도 `preStop` signal을 보내지 않고
+PostgreSQL official image의 `STOPSIGNAL SIGINT`를 사용하며 DB 전용 grace를 120초로 둡니다. Kubernetes는
+image `STOPSIGNAL`을 존중할 수 있고, official PostgreSQL image는 SIGINT를 clean Fast Shutdown으로
+정의합니다([Kubernetes Pod termination](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#termination-of-pods),
+[docker-library/postgres Dockerfile](https://github.com/docker-library/postgres/blob/master/Dockerfile-debian.template)).
+따라서 evidence도 실제 신호인 `SIGINT`를 기록하며 shutdown log 원문 대신 exact bytes
+SHA-256만 보존합니다.
+
+```bash
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$DEV_CLUSTER_NAME" \
+  bash scripts/capture-snapshot-evidence.sh capture
+```
+
+Capture는 StatefulSet desired/ready 0, application/migration writer 0, PVC UID/PV 불변, PVC mount Pod 0,
+해당 PV의 `VolumeAttachment` 0, 기존 `VolumeSnapshot` 0을 확인한 뒤
+`evidence/recovery/snapshot-quiesce.json`을 원자적 `0600`으로 기록합니다. 기록 직전에 동일 항목을
+즉시 다시 조회합니다. watcher를 놓쳤거나 clean shutdown line이 없으면 증거를 합성하지 않고 실패하므로
+A1 상태로 되돌려 새 두 commit을 수행해야 합니다. `kubectl scale`이나 force delete로 Git desired state를
+우회하지 않습니다.
+
+A3에서만 같은 phase file의 `snapshot.captureEnabled`를 `true`로 바꾸는 별도 commit을 Sync합니다.
+그 전에 canonical evidence와 live state를 다시 확인할 수 있습니다.
+
+```bash
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$DEV_CLUSTER_NAME" \
+  bash scripts/capture-snapshot-evidence.sh preflight
+```
+
+Fixture 검증과 fake CLI 테스트는 `[STATIC]`이고 canonical runtime 파일을 만들지 않습니다. 이 절차는
+application-consistent volume snapshot gate이며 PostgreSQL PITR/managed backup을 대신하지 않습니다.
 
 ## 운영 계약
 

@@ -1,6 +1,6 @@
 database:
   enabled: true
-  replicaCount: 1
+  replicaCount: 0
   migration:
     enabled: false
 maintenance:

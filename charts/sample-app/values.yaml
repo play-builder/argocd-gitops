@@ -93,6 +93,7 @@ externalSecrets:
 # PostgreSQL stays opt-in so the default deployment remains stateless.
 database:
   enabled: false
+  terminationGracePeriodSeconds: 120
   host: ""
   port: 5432
   name: commerce

@@ -17,8 +17,7 @@ spec:
             chaosInjectionEnabled: false
             valuesFile: envs/dev/values.yaml
             statefulValuesFile: envs/dev/stateful-values.yaml
-            recoveryValuesFile: envs/dev/recovery-values.yaml
-            chaosValuesFile: envs/dev/chaos-values.yaml
+            phaseValuesFile: envs/dev/phase-default-values.yaml
   template:
     metadata:
       name: "sample-app-{{ .environment }}"
@@ -35,8 +34,7 @@ spec:
           valueFiles:
             - "../../{{ .valuesFile }}"
             - "../../{{ .statefulValuesFile }}"
-            - "../../{{ .recoveryValuesFile }}"
-            - "../../{{ .chaosValuesFile }}"
+            - "../../{{ .phaseValuesFile }}"
       templatePatch: |
         {{- if and (eq .environment "dev") .chaosInjectionEnabled }}
         spec:

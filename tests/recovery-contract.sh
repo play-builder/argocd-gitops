@@ -40,7 +40,27 @@ case_capture_only() {
   [[ "$(KIND=VolumeSnapshotContent yq eval-all '[select(.kind == strenv(KIND))] | length' "$manifest")" == 0 ]] || fail "capture phase must not pre-provision restore content"
   [[ "$(KIND=PersistentVolumeClaim yq eval-all '[select(.kind == strenv(KIND))] | length' "$manifest")" == 0 ]] || fail "capture phase must not render a recovery PVC"
   yq eval-all -o=json -I=0 '[select(.kind == "Deployment" or .kind == "Rollout")]' "$manifest" | jq -e 'length == 1 and .[0].spec.replicas == 0' >/dev/null || fail "capture phase must stop application writers"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql")]' "$manifest" | jq -e 'length == 1 and .[0].spec.replicas == 0' >/dev/null || fail "capture phase must keep the database scaled to zero"
   echo "PASS: snapshot capture phase is source-only."
+}
+
+case_quiesce_phases() {
+  local a1_manifest="$render_root/quiesce-a1.yaml" a2_manifest="$render_root/quiesce-a2.yaml"
+  render_recovery "$a1_manifest" "$repository_root/envs/dev/snapshot-maintenance-values.yaml"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql")]' "$a1_manifest" | jq -e 'length == 1 and .[0].spec.replicas == 1' >/dev/null || fail "A1 must keep one readable database replica"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql")]' "$a1_manifest" | jq -e 'length == 1 and .[0].spec.template.spec.terminationGracePeriodSeconds == 120 and (.[0].spec.template.spec.containers[] | select(.name == "postgresql") | has("lifecycle") | not)' >/dev/null || fail "database must reserve bounded shutdown grace without a competing preStop signal"
+  yq eval-all -o=json -I=0 '[select(.kind == "Deployment" or .kind == "Rollout")]' "$a1_manifest" | jq -e 'length == 1 and .[0].spec.replicas == 0' >/dev/null || fail "A1 must stop application writers"
+  [[ "$(KIND=Job yq eval-all '[select(.kind == strenv(KIND))] | length' "$a1_manifest")" == 0 ]] || fail "A1 must disable migration writers"
+  [[ "$(KIND=HorizontalPodAutoscaler yq eval-all '[select(.kind == strenv(KIND))] | length' "$a1_manifest")" == 0 ]] || fail "A1 must remove the autoscaler while writers are stopped"
+  [[ "$(KIND=VolumeSnapshot yq eval-all '[select(.kind == strenv(KIND))] | length' "$a1_manifest")" == 0 ]] || fail "A1 must not create a snapshot"
+
+  render_recovery "$a2_manifest" "$fixture_root/snapshot-quiesce-zero.yaml"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql")]' "$a2_manifest" | jq -e 'length == 1 and .[0].spec.replicas == 0' >/dev/null || fail "A2 explicit database replicaCount zero was not preserved"
+  yq eval-all -o=json -I=0 '[select(.kind == "Deployment" or .kind == "Rollout")]' "$a2_manifest" | jq -e 'length == 1 and .[0].spec.replicas == 0' >/dev/null || fail "A2 must keep application writers stopped"
+  [[ "$(KIND=Job yq eval-all '[select(.kind == strenv(KIND))] | length' "$a2_manifest")" == 0 ]] || fail "A2 must keep migration writers disabled"
+  [[ "$(KIND=HorizontalPodAutoscaler yq eval-all '[select(.kind == strenv(KIND))] | length' "$a2_manifest")" == 0 ]] || fail "A2 must keep the autoscaler absent while writers are stopped"
+  [[ "$(KIND=VolumeSnapshot yq eval-all '[select(.kind == strenv(KIND))] | length' "$a2_manifest")" == 0 ]] || fail "A2 must not race database shutdown with snapshot creation"
+  echo "PASS: A1 readable-checksum and A2 detached-database renders are distinct."
 }
 
 case_restore_only() {
@@ -65,9 +85,10 @@ case_ordering() {
 requested=${1:-all}; [[ "$requested" == "--case" ]] && requested=${2:-all}
 case "$requested" in
   invalid-same-pvc) case_invalid_same_pvc ;;
+  quiesce-phases) case_quiesce_phases ;;
   capture-only) case_capture_only ;;
   restore-only) case_restore_only ;;
   ordering) case_ordering ;;
-  all) case_invalid_same_pvc; case_capture_only; case_restore_only; case_ordering ;;
-  *) echo "Usage: $0 --case invalid-same-pvc|capture-only|restore-only|ordering|all" >&2; exit 2 ;;
+  all) case_invalid_same_pvc; case_quiesce_phases; case_capture_only; case_restore_only; case_ordering ;;
+  *) echo "Usage: $0 --case invalid-same-pvc|quiesce-phases|capture-only|restore-only|ordering|all" >&2; exit 2 ;;
 esac

@@ -303,13 +303,22 @@ case_platform_health_interface() {
 
 case_recovery_wiring() {
   local dev="$render_root/bootstrap-dev-recovery.yaml" prod="$render_root/bootstrap-prod-recovery.yaml"
+  local appset="$repository_root/argocd/bootstrap/dev/sample-app.yaml" default_manifest="$render_root/default-dev-application.yaml"
   render_bootstrap dev "$dev"; render_bootstrap prod "$prod"
   yq eval-all -o=json -I=0 '[.]' "$dev" | jq -s -e 'add | . as $all |
     ([ $all[] | select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev") ] | length) == 1 and
     ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.destinations[].namespace] | sort) == ["app-dev","app-recovery"] and
     ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.clusterResourceWhitelist[] | select(.group == "snapshot.storage.k8s.io" and .kind == "VolumeSnapshotContent")] | length) == 1
   ' >/dev/null || fail "Dev bootstrap must explicitly wire app-recovery and VolumeSnapshotContent"
-  yq -o=json '.' "$repository_root/argocd/bootstrap/dev/sample-app.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles == ["../../{{ .valuesFile }}","../../{{ .statefulValuesFile }}","../../{{ .recoveryValuesFile }}","../../{{ .chaosValuesFile }}"]' >/dev/null || fail "Dev recovery and chaos values must follow the stateful values file"
+  yq -o=json '.' "$appset" | jq -e '
+    .spec.generators[0].list.elements[0].phaseValuesFile == "envs/dev/phase-default-values.yaml" and
+    .spec.template.spec.source.helm.valueFiles == ["../../{{ .valuesFile }}","../../{{ .statefulValuesFile }}","../../{{ .phaseValuesFile }}"]
+  ' >/dev/null || fail "Dev must select exactly one explicit safe-default lifecycle phase values file"
+  helm template sample-app "$repository_root/charts/sample-app" \
+    --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].valuesFile' "$appset")" \
+    --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].statefulValuesFile' "$appset")" \
+    --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].phaseValuesFile' "$appset")" >"$default_manifest"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" or .kind == "Job" or .kind == "VolumeSnapshot" or .kind == "VolumeSnapshotContent" or .kind == "PodChaos" or .kind == "NetworkChaos")]' "$default_manifest" | jq -e 'length == 0' >/dev/null || fail "default Dev ApplicationSet values rendered stateful, recovery, or Chaos resources"
   if yq -o=json '.' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles[] | select(contains("recovery-values.yaml"))' >/dev/null; then fail "Prod ApplicationSet must not consume recovery values"; fi
   yq -o=json '.' "$repository_root/contracts/platform-requirements.yaml" | jq -e '.argoHealthCustomizations | any(.[]; .id == "volume-snapshot-ready-health/v1" and .implementationOwner == "EKS-infra" and .healthyWhen == "readyToUse=true with a bound content name")' >/dev/null || fail "VolumeSnapshot health must remain EKS-infra owned"
   echo "PASS: Dev recovery destination, snapshot allowlist, and platform health wiring are explicit."

@@ -16,6 +16,7 @@ bash "$test_root/prod-promotion-binding-contract.sh"
 bash "$test_root/rollback-candidates-runtime-contract.sh"
 bash "$test_root/stateful-contract.sh"
 bash "$test_root/recovery-contract.sh" --case all
+bash "$test_root/snapshot-runtime-producer-contract.sh"
 bash "$test_root/chaos-contract.sh" --case dev
 bash "$test_root/chaos-contract.sh" --case prod-deny
 bash "$test_root/chaos-contract.sh" --case namespace-injection

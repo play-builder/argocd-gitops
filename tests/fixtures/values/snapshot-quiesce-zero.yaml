@@ -1,0 +1,11 @@
+database:
+  enabled: true
+  replicaCount: 0
+  migration:
+    enabled: false
+maintenance:
+  writersStopped: true
+snapshot:
+  captureEnabled: false
+recovery:
+  restoreEnabled: false
