@@ -217,8 +217,9 @@ Prod 초기화는 승인된 PR을 수동 Sync한 뒤 stable revision `1`/traffic
 자동 Sync를 사용하지 않으며, 최종 `setWeight: 100` 직전에는 무기한 `pause: {}`가 있습니다.
 
 승격은 DEV_READY evidence 게시 PR과 Prod values 후보 PR을 분리합니다. 후보 PR에서
-`envs/prod/values.yaml`이 바뀌면 `scripts/verify-prod-promotion-binding.sh`가 application과
-migration image의 repository·digest를 현재 canonical evidence와 비교합니다. main Ruleset은
+`envs/prod/values.yaml`의 application 또는 migration image repository·digest가 바뀌면
+`scripts/verify-prod-promotion-binding.sh`가 네 image identity를 현재 canonical evidence와
+비교합니다. image identity가 그대로인 bootstrap·운영 설정 변경에는 DEV_READY를 요구하지 않습니다. main Ruleset은
 strict required status check를 사용하므로 새로운 evidence가 먼저 merge되면 기존 후보는 base를
 갱신하고 이 검증을 다시 통과해야 합니다. PR merge만으로 배포되지는 않으며, 승인된 운영자가
 Prod Application을 Sync한 시점에 Canary가 시작됩니다.
