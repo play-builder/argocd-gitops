@@ -163,5 +163,27 @@ rollout:
           duration: 2m
       - setWeight: 100
 
+telemetry:
+  enabled: false
+  serviceName: sample-app
+  otlpEndpoint: ""
+  otlpProtocol: http/protobuf
+
 networkPolicy:
   enabled: false
+  gateway:
+    sourceCidrs: []
+  dns:
+    namespaceLabels:
+      kubernetes.io/metadata.name: kube-system
+    podLabels:
+      k8s-app: kube-dns
+  telemetry:
+    namespaceLabels: {}
+    podLabels: {}
+    port: 4318
+
+# Task 6 expands this interface with snapshot and restore identity fields.
+recovery:
+  restoreEnabled: false
+  namespace: app-recovery

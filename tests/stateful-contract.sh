@@ -70,7 +70,7 @@ application_image='example.invalid/sample-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaa
 for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yaml"; do
   assert_document_count "$manifest" StatefulSet 1
   assert_document_count "$manifest" Job 1
-  assert_document_count "$manifest" NetworkPolicy 2
+  assert_document_count "$manifest" NetworkPolicy 3
 
   assert_manifest "$manifest" '
     select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql") |

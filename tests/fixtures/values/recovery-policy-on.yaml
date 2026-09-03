@@ -1,5 +1,7 @@
 database:
   enabled: true
+recovery:
+  restoreEnabled: true
 networkPolicy:
   enabled: true
   gateway:

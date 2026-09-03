@@ -37,7 +37,9 @@ run_case() {
     stateless-policy-off) expected_network_policies=0 ;;
     stateless-policy-on) expected_network_policies=1 ;;
     stateful-policy-off) expected_network_policies=0 ;;
-    stateful-policy-on) expected_network_policies=2 ;;
+    stateful-policy-on) expected_network_policies=3 ;;
+    recovery-policy-off) expected_network_policies=0 ;;
+    recovery-policy-on) expected_network_policies=4 ;;
     *)
       echo "FAIL: unknown render case: $case_name" >&2
       return 2
@@ -60,6 +62,173 @@ run_case() {
       ([.[].name] | any(startswith("DB_"))) == false
     ' >/dev/null || fail "stateless workload must explicitly disable the database"
   fi
+}
+
+case_network_policy() {
+  local stateless_policy_on="$render_root/stateless-policy-on-paths.yaml"
+  local stateful_policy_on="$render_root/stateful-policy-on-paths.yaml"
+  local recovery_policy_on="$render_root/recovery-policy-on-paths.yaml"
+
+  render_environment dev "$stateless_policy_on" "$fixture_root/stateless-policy-on.yaml"
+  render_environment dev "$stateful_policy_on" "$fixture_root/stateful-policy-on.yaml"
+  render_environment dev "$recovery_policy_on" "$fixture_root/recovery-policy-on.yaml"
+
+  yq eval-all -o=json -I=0 \
+    '[select(.kind == "NetworkPolicy" and .metadata.name == "sample-app")]' \
+    "$stateful_policy_on" | jq -e '
+      length == 1 and
+      any(.[0].spec.ingress[]?.from[]?; .ipBlock.cidr == "10.0.0.0/16")
+    ' >/dev/null || fail "app policy lacks the configured Gateway source CIDR"
+
+  yq eval-all -o=json -I=0 \
+    '[select(.kind == "NetworkPolicy" and .metadata.name == "sample-app")]' \
+    "$stateless_policy_on" | jq -e '
+      length == 1 and
+      .[0].spec.policyTypes == ["Ingress", "Egress"] and
+      .[0].spec.podSelector.matchLabels["app.kubernetes.io/component"] == "application" and
+      any(.[0].spec.ingress[]?;
+        any(.from[]?;
+          .namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "opentelemetry-operator-system" and
+          .podSelector.matchLabels["app.kubernetes.io/name"] == "adot-collector-prometheus-collector") and
+        .ports == [{"protocol":"TCP","port":3000}]) and
+      any(.[0].spec.egress[]?;
+        any(.to[]?;
+          .namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "kube-system" and
+          .podSelector.matchLabels["k8s-app"] == "kube-dns") and
+        ([.ports[]? | [.protocol, .port]] | sort) == [["TCP",53],["UDP",53]]) and
+      any(.[0].spec.egress[]?;
+        any(.to[]?;
+          .namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "opentelemetry-operator-system" and
+          .podSelector.matchLabels["app.kubernetes.io/name"] == "adot-collector-prometheus-collector") and
+        .ports == [{"protocol":"TCP","port":4318}])
+    ' >/dev/null || fail "app policy lacks selected DNS or telemetry peers and explicit ports"
+
+  yq eval-all -o=json -I=0 \
+    '[select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-postgresql")]' \
+    "$recovery_policy_on" | jq -e '
+      length == 1 and
+      .[0].spec.policyTypes == ["Ingress", "Egress"] and
+      .[0].spec.egress == [] and
+      ([.[0].spec.ingress[]?.from[]?
+        | select(.namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "app-recovery")
+        | .podSelector.matchLabels["app.kubernetes.io/component"]] == ["recovery"])
+    ' >/dev/null || fail "database policy lacks the combined recovery namespace and pod peer"
+
+  yq eval-all -o=json -I=0 '[select(.kind == "NetworkPolicy")]' \
+    "$recovery_policy_on" | jq -e '
+      length == 4 and
+      all(.[];
+        (.spec.podSelector | length) > 0 and
+        ([.spec.ingress[]?.from[]?, .spec.egress[]?.to[]?] |
+          all(.[]; (. | length) > 0)) and
+        ([.spec.ingress[]?.ports[]?, .spec.egress[]?.ports[]?] |
+          all(.[]; .protocol != null and .port != null))) and
+      all(.[];
+        ([.spec.ingress[]?.from[]?.ipBlock.cidr?, .spec.egress[]?.to[]?.ipBlock.cidr?] |
+          all(.[]; . != "0.0.0.0/0" and . != "::/0"))) and
+      (map(select(.metadata.name == "sample-app-database-clients")) | length) == 1 and
+      (map(select(.metadata.name == "sample-app-recovery")) | length) == 1
+    ' >/dev/null || fail "policy set contains a wildcard, unselected peer, missing port, or missing client policy"
+
+  yq eval-all -o=json '
+    select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-database-clients")
+  ' "$stateful_policy_on" | jq -e '
+    .spec.podSelector.matchExpressions == [{
+      "key":"app.kubernetes.io/component",
+      "operator":"In",
+      "values":["application","migration"]
+    }] and
+    .spec.policyTypes == ["Ingress", "Egress"] and
+    .spec.ingress == [] and
+    any(.spec.egress[]?;
+      any(.to[]?; .podSelector.matchLabels["app.kubernetes.io/component"] == "database") and
+      .ports == [{"protocol":"TCP","port":5432}])
+  ' >/dev/null || fail "application and migration database egress is not explicitly selected"
+
+  yq eval-all -o=json '
+    select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-recovery")
+  ' "$recovery_policy_on" | jq -e '
+    .metadata.namespace == "app-recovery" and
+    .spec.podSelector.matchLabels["app.kubernetes.io/component"] == "recovery" and
+    .spec.policyTypes == ["Ingress", "Egress"] and
+    .spec.ingress == [] and
+    any(.spec.egress[]?;
+      any(.to[]?;
+        .namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "app-dev" and
+        .podSelector.matchLabels["app.kubernetes.io/component"] == "database") and
+      .ports == [{"protocol":"TCP","port":5432}])
+  ' >/dev/null || fail "recovery egress lacks a combined source namespace database peer"
+
+  local wildcard_values="$render_root/network-policy-wildcard.yaml"
+  printf '%s\n' \
+    'networkPolicy:' \
+    '  enabled: true' \
+    '  gateway:' \
+    '    sourceCidrs:' \
+    '      - 0.0.0.0/0' >"$wildcard_values"
+  if render_environment dev "$render_root/network-policy-wildcard-render.yaml" \
+    "$wildcard_values" 2>"$render_root/network-policy-wildcard.err"; then
+    fail "NetworkPolicy render accepted a wildcard Gateway CIDR"
+  fi
+  grep -Fq 'networkPolicy.gateway.sourceCidrs must contain bounded CIDRs' \
+    "$render_root/network-policy-wildcard.err" || \
+    fail "wildcard Gateway CIDR failed for an unexpected reason"
+
+  echo "PASS: NetworkPolicy paths use selected peers and explicit ports."
+}
+
+case_telemetry() {
+  local dev_stateless="$render_root/dev-stateless-telemetry.yaml"
+  local prod_stateless="$render_root/prod-stateless-telemetry.yaml"
+  local environment manifest namespace
+
+  render_environment dev "$dev_stateless" "$fixture_root/stateless-policy-off.yaml"
+  render_environment prod "$prod_stateless" "$fixture_root/stateless-policy-off.yaml"
+
+  for environment in dev prod; do
+    if [[ "$environment" == "dev" ]]; then
+      manifest="$dev_stateless"
+      namespace=app-dev
+    else
+      manifest="$prod_stateless"
+      namespace=app-prod
+    fi
+
+    yq eval-all -o=json '
+      select(.kind == "ConfigMap" and .metadata.name == "sample-app-telemetry")
+    ' "$manifest" | ENVIRONMENT="$environment" NAMESPACE="$namespace" jq -e '
+      .data.OTEL_SERVICE_NAME == "sample-app" and
+      .data.OTEL_EXPORTER_OTLP_ENDPOINT ==
+        "http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces" and
+      .data.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf" and
+      .data.OTEL_RESOURCE_ATTRIBUTES ==
+        ("service.name=sample-app,service.namespace=" + env.NAMESPACE +
+          ",deployment.environment=" + env.ENVIRONMENT) and
+      ([.data[]] | any(test("API_KEY|DB_[A-Z_]+"))) == false
+    ' >/dev/null || fail "$environment telemetry metadata or ADOT endpoint contract is invalid"
+
+    yq eval-all -o=json '
+      select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app") |
+      .spec.template
+    ' "$manifest" | jq -e '
+      .metadata.annotations["prometheus.io/scrape"] == "true" and
+      .metadata.annotations["prometheus.io/path"] == "/metrics" and
+      .metadata.annotations["prometheus.io/port"] == "3000" and
+      (.spec.containers[0].env |
+        map(select(.name | startswith("OTEL_"))) |
+        map({name, configMapKeyRef: .valueFrom.configMapKeyRef})) == [
+          {"name":"OTEL_SERVICE_NAME","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_SERVICE_NAME"}},
+          {"name":"OTEL_RESOURCE_ATTRIBUTES","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_RESOURCE_ATTRIBUTES"}},
+          {"name":"OTEL_EXPORTER_OTLP_ENDPOINT","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_EXPORTER_OTLP_ENDPOINT"}},
+          {"name":"OTEL_EXPORTER_OTLP_PROTOCOL","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_EXPORTER_OTLP_PROTOCOL"}}
+        ] and
+      (.spec.containers[0].env |
+        map(select(.name == "DATABASE_ENABLED"))) ==
+          [{"name":"DATABASE_ENABLED","value":"false"}]
+    ' >/dev/null || fail "$environment workload lacks correlated stateless telemetry inputs"
+  done
+
+  echo "PASS: Stateless telemetry correlates metrics, logs, and traces without DB runtime claims."
 }
 
 case_secret_reload() {
@@ -186,17 +355,23 @@ requested_case=matrix
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--case <matrix|secret-reload|case-name>]" >&2
+  echo "Usage: $0 [--case <matrix|secret-reload|network-policy|telemetry|case-name>]" >&2
   exit 2
 fi
 
 if [[ "$requested_case" == "secret-reload" ]]; then
   case_secret_reload
+elif [[ "$requested_case" == "network-policy" ]]; then
+  case_network_policy
+elif [[ "$requested_case" == "telemetry" ]]; then
+  case_telemetry
 elif [[ "$requested_case" == "matrix" ]]; then
   run_case stateless-policy-off
   run_case stateless-policy-on
   run_case stateful-policy-off
   run_case stateful-policy-on
+  run_case recovery-policy-off
+  run_case recovery-policy-on
 else
   run_case "$requested_case"
 fi

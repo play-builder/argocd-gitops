@@ -26,6 +26,7 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- define "sample-app.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "sample-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: application
 {{- end -}}
 
 {{- define "sample-app.image" -}}
@@ -51,6 +52,33 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "sample-app.databaseSecretName" -}}
 {{- required "externalSecrets.database.targetSecretName is required when database is enabled" .Values.externalSecrets.database.targetSecretName -}}
+{{- end -}}
+
+{{- define "sample-app.telemetryConfigName" -}}
+{{- printf "%s-telemetry" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "sample-app.validateNetworkPolicy" -}}
+{{- if .Values.networkPolicy.enabled -}}
+{{- if eq (len .Values.networkPolicy.gateway.sourceCidrs) 0 -}}
+{{- fail "networkPolicy.gateway.sourceCidrs must contain platform-validated CIDRs when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- range $cidr := .Values.networkPolicy.gateway.sourceCidrs -}}
+{{- if or (eq $cidr "0.0.0.0/0") (eq $cidr "::/0") (not (regexMatch "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" $cidr)) -}}
+{{- fail "networkPolicy.gateway.sourceCidrs must contain bounded CIDRs and must not contain a wildcard" -}}
+{{- end -}}
+{{- end -}}
+{{- if eq (len .Values.networkPolicy.telemetry.namespaceLabels) 0 -}}
+{{- fail "networkPolicy.telemetry.namespaceLabels must select the platform collector" -}}
+{{- end -}}
+{{- if eq (len .Values.networkPolicy.telemetry.podLabels) 0 -}}
+{{- fail "networkPolicy.telemetry.podLabels must select the platform collector" -}}
+{{- end -}}
+{{- $telemetryPort := int .Values.networkPolicy.telemetry.port -}}
+{{- if or (lt $telemetryPort 1) (gt $telemetryPort 65535) -}}
+{{- fail "networkPolicy.telemetry.port must be between 1 and 65535" -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "sample-app.databaseImage" -}}
@@ -82,9 +110,11 @@ metadata:
   labels:
     {{- include "sample-app.selectorLabels" . | nindent 4 }}
   annotations:
+    {{- if .Values.telemetry.enabled }}
     prometheus.io/scrape: "true"
     prometheus.io/path: /metrics
     prometheus.io/port: {{ .Values.containerPort | quote }}
+    {{- end }}
 spec:
   serviceAccountName: {{ .Values.serviceAccount.name }}
   automountServiceAccountToken: false
@@ -143,6 +173,28 @@ spec:
           value: {{ .Values.app.secretKeys | quote }}
         - name: DATABASE_ENABLED
           value: {{ ternary "true" "false" .Values.database.enabled | quote }}
+        {{- if .Values.telemetry.enabled }}
+        - name: OTEL_SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_SERVICE_NAME
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_RESOURCE_ATTRIBUTES
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sample-app.telemetryConfigName" . }}
+              key: OTEL_EXPORTER_OTLP_PROTOCOL
+        {{- end }}
         {{- if .Values.database.enabled }}
         - name: DB_HOST
           valueFrom:

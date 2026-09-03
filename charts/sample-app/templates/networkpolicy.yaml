@@ -1,4 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- include "sample-app.validateNetworkPolicy" . }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -12,31 +13,48 @@ spec:
       {{- include "sample-app.selectorLabels" . | nindent 6 }}
   policyTypes: [Ingress, Egress]
   ingress:
-    - ports:
+    - from:
+        {{- range .Values.networkPolicy.gateway.sourceCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.containerPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.telemetry.namespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.telemetry.podLabels | nindent 14 }}
+      ports:
         - protocol: TCP
           port: {{ .Values.containerPort }}
   egress:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: kube-system
+              {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
       ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
-    {{- if .Values.database.enabled }}
     - to:
-        - podSelector:
+        - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: postgresql
-              app.kubernetes.io/instance: {{ .Release.Name }}
+              {{- toYaml .Values.networkPolicy.telemetry.namespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.telemetry.podLabels | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.database.port }}
-    {{- end }}
-{{- end }}
-{{- if and .Values.networkPolicy.enabled .Values.database.enabled }}
+          port: {{ .Values.networkPolicy.telemetry.port }}
+{{- if .Values.database.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -44,22 +62,118 @@ metadata:
   name: {{ include "sample-app.databaseFullname" . }}
   namespace: {{ include "sample-app.namespace" . }}
   labels:
-    app.kubernetes.io/name: postgresql
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/part-of: sample-app
+    {{- include "sample-app.labels" . | nindent 4 }}
     app.kubernetes.io/component: database
 spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: postgresql
       app.kubernetes.io/instance: {{ .Release.Name }}
-  policyTypes: [Ingress]
+      app.kubernetes.io/component: database
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/part-of: sample-app
+              app.kubernetes.io/instance: {{ .Release.Name }}
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [application, migration]
+        {{- if .Values.recovery.restoreEnabled }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.recovery.namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: recovery
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.database.port }}
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sample-app.fullname" . }}-database-clients
+  namespace: {{ include "sample-app.namespace" . }}
+  labels:
+    {{- include "sample-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database-clients
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [application, migration]
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: database
+      ports:
+        - protocol: TCP
+          port: {{ .Values.database.port }}
+{{- if .Values.recovery.restoreEnabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sample-app.fullname" . }}-recovery
+  namespace: {{ .Values.recovery.namespace }}
+  labels:
+    {{- include "sample-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: recovery
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: recovery
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "sample-app.namespace" . }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: database
+      ports:
+        - protocol: TCP
+          port: {{ .Values.database.port }}
+{{- end }}
+{{- end }}
 {{- end }}

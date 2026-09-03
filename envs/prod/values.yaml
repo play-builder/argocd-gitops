@@ -82,3 +82,19 @@ rollout:
           duration: 2m
       - pause: {}
       - setWeight: 100
+
+telemetry:
+  enabled: true
+  otlpEndpoint: "http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces"
+
+networkPolicy:
+  enabled: false
+  gateway:
+    sourceCidrs:
+      - REPLACE_ME_PLATFORM_GATEWAY_SOURCE_CIDR
+  telemetry:
+    namespaceLabels:
+      kubernetes.io/metadata.name: opentelemetry-operator-system
+    podLabels:
+      app.kubernetes.io/name: adot-collector-prometheus-collector
+    port: 4318
