@@ -29,6 +29,107 @@ assert_document_count() {
   fi
 }
 
+project_allows_manifest() {
+  local project_manifest=$1
+  local project_name=$2
+  local rendered_manifest=$3
+  local registry="$test_root/fixtures/project-scope/resource-scopes.tsv"
+  local allowed resource api_version group kind scope
+
+  allowed=$(PROJECT="$project_name" yq eval-all -o=json '
+    select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
+  ' "$project_manifest" | jq -r '
+    [
+      (.spec.clusterResourceWhitelist[]? | ["cluster", .group, .kind]),
+      (.spec.namespaceResourceWhitelist[]? | ["namespace", .group, .kind])
+    ] | .[] | @tsv
+  ') || return 1
+
+  while IFS=$'\t' read -r api_version kind; do
+    [[ -n "$kind" ]] || continue
+    if [[ "$api_version" == */* ]]; then
+      group=${api_version%%/*}
+    else
+      group=""
+    fi
+    scope=$(awk -F '\t' -v group="$group" -v kind="$kind" \
+      '$2 == group && $3 == kind { print $1 }' "$registry")
+    [[ -n "$scope" ]] || {
+      echo "unregistered resource: $group/$kind" >&2
+      return 1
+    }
+    resource=$(printf '%s\t%s\t%s' "$scope" "$group" "$kind")
+    grep -Fqx "$resource" <<<"$allowed" || {
+      echo "unauthorized resource: $resource" >&2
+      return 1
+    }
+  done < <(yq eval-all -o=json -I=0 '
+    select(.apiVersion != null and .kind != null)
+  ' "$rendered_manifest" | jq -s -r '.[] | [.apiVersion, .kind] | @tsv' | sort -u)
+}
+
+case_project_scope() {
+  local synthetic="$render_root/project-scope-synthetic.yaml"
+  local dev_project="$repository_root/argocd/bootstrap/dev/project.yaml"
+  local prod_project="$repository_root/argocd/bootstrap/prod/project.yaml"
+  local manifest
+
+  cat >"$synthetic" <<'YAML'
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: contract}
+---
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata: {name: contract}
+YAML
+  if project_allows_manifest \
+    "$test_root/fixtures/project-scope/missing-configmap-project.yaml" missing-configmap "$synthetic" 2>/dev/null; then
+    fail "project without ConfigMap permission accepted the rendered resource"
+  fi
+  if project_allows_manifest \
+    "$test_root/fixtures/project-scope/wrong-load-balancer-scope-project.yaml" wrong-load-balancer-scope "$synthetic" 2>/dev/null; then
+    fail "project accepted namespaced LoadBalancerConfiguration as a cluster resource"
+  fi
+
+  manifest="$render_root/dev-stateless-project-scope.yaml"
+  render_environment dev "$manifest"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev stateless render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-stateful-project-scope.yaml"
+  render_environment dev "$manifest" "$fixture_root/stateful-policy-off.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev Stateful render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-snapshot-project-scope.yaml"
+  render_environment dev "$manifest" "$fixture_root/recovery-capture-only.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev snapshot render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-recovery-project-scope.yaml"
+  render_environment dev "$manifest" "$repository_root/envs/dev/recovery-values.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev recovery render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-chaos-project-scope.yaml"
+  render_environment dev "$manifest" "$repository_root/envs/dev/chaos-values.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev Chaos render exceeds course-dev authorization"
+
+  manifest="$render_root/prod-stateless-project-scope.yaml"
+  render_environment prod "$manifest"
+  project_allows_manifest "$prod_project" course-prod "$manifest" || \
+    fail "prod stateless render exceeds course-prod authorization"
+
+  manifest="$render_root/prod-stateful-project-scope.yaml"
+  render_environment prod "$manifest" "$fixture_root/stateful-policy-off.yaml"
+  project_allows_manifest "$prod_project" course-prod "$manifest" || \
+    fail "prod Stateful render exceeds course-prod authorization"
+
+  echo "PASS: rendered phase resources are a subset of environment AppProject scopes."
+}
+
 run_case() {
   local case_name=$1
   local expected_network_policies
@@ -355,7 +456,7 @@ requested_case=matrix
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--case <matrix|secret-reload|network-policy|telemetry|case-name>]" >&2
+  echo "Usage: $0 [--case <matrix|secret-reload|network-policy|telemetry|project-scope|case-name>]" >&2
   exit 2
 fi
 
@@ -365,6 +466,8 @@ elif [[ "$requested_case" == "network-policy" ]]; then
   case_network_policy
 elif [[ "$requested_case" == "telemetry" ]]; then
   case_telemetry
+elif [[ "$requested_case" == "project-scope" ]]; then
+  case_project_scope
 elif [[ "$requested_case" == "matrix" ]]; then
   run_case stateless-policy-off
   run_case stateless-policy-on

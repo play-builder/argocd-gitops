@@ -50,11 +50,13 @@ spec:
       kind: Namespace
     - group: gateway.networking.k8s.io
       kind: GatewayClass
-    - group: gateway.k8s.aws
-      kind: LoadBalancerConfiguration
     - group: snapshot.storage.k8s.io
       kind: VolumeSnapshotContent
   namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
     - group: ""
       kind: ServiceAccount
     - group: ""
@@ -81,6 +83,14 @@ spec:
       kind: HTTPRoute
     - group: gateway.k8s.aws
       kind: TargetGroupConfiguration
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+    - group: snapshot.storage.k8s.io
+      kind: VolumeSnapshot
+    - group: chaos-mesh.org
+      kind: PodChaos
+    - group: chaos-mesh.org
+      kind: NetworkChaos
     - group: argoproj.io
       kind: Rollout
     - group: argoproj.io

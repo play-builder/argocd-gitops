@@ -48,9 +48,9 @@ spec:
       kind: Namespace
     - group: gateway.networking.k8s.io
       kind: GatewayClass
-    - group: gateway.k8s.aws
-      kind: LoadBalancerConfiguration
   namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
     - group: ""
       kind: ServiceAccount
     - group: ""
@@ -77,6 +77,8 @@ spec:
       kind: HTTPRoute
     - group: gateway.k8s.aws
       kind: TargetGroupConfiguration
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
     - group: argoproj.io
       kind: Rollout
     - group: argoproj.io

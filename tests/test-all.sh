@@ -5,6 +5,7 @@ bash "$test_root/render-contract.sh" --case matrix
 bash "$test_root/render-contract.sh" --case secret-reload
 bash "$test_root/render-contract.sh" --case network-policy
 bash "$test_root/render-contract.sh" --case telemetry
+bash "$test_root/render-contract.sh" --case project-scope
 bash "$test_root/bootstrap-contract.sh" --case all
 bash "$test_root/evidence-contract.sh" --case all
 bash "$test_root/cluster-arn-contract.sh"
