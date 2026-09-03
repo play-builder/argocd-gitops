@@ -39,7 +39,7 @@ app.kubernetes.io/component: application
 {{- end -}}
 
 {{- define "sample-app.version" -}}
-{{- .Values.image.digest | trimPrefix "sha256:" | trunc 12 -}}
+{{- .Chart.AppVersion -}}
 {{- end -}}
 
 {{- define "sample-app.databaseFullname" -}}

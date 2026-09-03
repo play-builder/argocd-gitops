@@ -11,7 +11,7 @@ spec:
   args:
     - name: latest-hash
   metrics:
-    - name: canary-request-rate
+    - name: request-rate
       initialDelay: 30s
       interval: {{ .Values.rollout.analysis.interval }}
       count: {{ .Values.rollout.analysis.count }}

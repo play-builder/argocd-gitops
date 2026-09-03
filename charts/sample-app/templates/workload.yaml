@@ -16,7 +16,7 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
-  revisionHistoryLimit: 3
+  revisionHistoryLimit: {{ .Values.workload.revisionHistoryLimit }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -45,7 +45,7 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
-  revisionHistoryLimit: 3
+  revisionHistoryLimit: {{ .Values.workload.revisionHistoryLimit }}
   {{- if gt (int .Values.rollout.rollbackWindow.revisions) 0 }}
   rollbackWindow:
     revisions: {{ .Values.rollout.rollbackWindow.revisions }}

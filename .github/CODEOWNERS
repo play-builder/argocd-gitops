@@ -1,5 +1,7 @@
 # Replace the placeholder with the GitHub user or team that owns production.
 /envs/prod/       @REPLACE_ME
+/evidence/dev/    @REPLACE_ME
+/evidence/prod/   @REPLACE_ME
 /charts/          @REPLACE_ME
 /argocd/          @REPLACE_ME
 /.github/         @REPLACE_ME

@@ -121,3 +121,30 @@ CODEOWNERS 승인을 요구합니다. GitHub App push가 validation을 한 번 �
 
 실제 클러스터 검증 전에는 이 저장소를 배포 완료로 간주하지 않습니다. `Gateway`의
 `Programmed=True`, `ExternalSecret Ready=True`, `AnalysisRun Successful`을 각각 확인해야 합니다.
+
+## Prod 승격과 SLO 증거
+
+Dev에서 생성되는 `evidence/dev/deployment.json`과 `evidence/dev/slo.json`은
+`CLOUD_RUNTIME` 등급의 만료 가능한 입력입니다. 두 파일의 source, image, GitOps revision,
+cluster ARN, Region이 일치해야 CI가 `course.dev-ready/v1` 승격 증거를 수락합니다.
+Prod 초기화는 승인된 PR을 수동 Sync한 뒤 stable revision `1`/traffic `100`을 확인하여
+`evidence/prod/baseline.json`을 만드는 별도 단계입니다. 이후 후보 digest가 baseline과 다르고
+동일한 Canary/AnalysisTemplate을 유지할 때만 promotion PR을 진행합니다. Prod ApplicationSet은
+자동 Sync를 사용하지 않으며, 최종 `setWeight: 100` 직전에는 무기한 `pause: {}`가 있습니다.
+
+Canonical AnalysisTemplate metric 이름은 `request-rate`와 `success-rate`입니다. Ch19의
+`scripts/capture-prod-slo-evidence.sh`는 실제 Rollout/AnalysisRun/Argo/AWS 조회를 다시 묶어
+성공한 두 metric과 모든 종료 measurement(이전 `Failed`/`Error` 포함)를 보존한 뒤
+`evidence/prod/slo.json`을 원자적으로 기록합니다. fixture 검증은 `[STATIC]`이며 runtime 증거를
+생성하지 않습니다.
+
+정적 승격 계약은 다음처럼 실행합니다.
+
+```bash
+bash tests/evidence-contract.sh --case all
+bash tests/promotion-contract.sh --case all
+bash scripts/capture-prod-slo-evidence.sh --fixture tests/fixtures/evidence/prod-slo-valid.json
+```
+
+이 명령들은 EKS admission, Argo Sync/Health, AMP query, 실제 rollback 또는 CNI 동작을 증명하지
+않습니다. 해당 항목은 cloud run에서 별도 `[CLOUD_RUNTIME]` 기록으로 수집해야 합니다.

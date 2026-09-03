@@ -1,0 +1,27 @@
+schemaVersion: course.dev-ready/v1
+environment: dev
+region: ap-northeast-2
+sourceSha: 0123456789abcdef0123456789abcdef01234567
+workflow:
+  name: promote
+  event: workflow_dispatch
+  runId: 1001
+  runAttempt: 1
+  runUrl: https://github.com/OWNER/cicd-course-sample-app/actions/runs/1001
+image:
+  repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app
+  indexDigest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  platforms: [linux/amd64, linux/arm64]
+attestation:
+  githubId: 1001
+  githubUrl: https://github.com/OWNER/cicd-course-sample-app/attestations/1001
+  ociSbomDigest: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+  ociProvenanceDigest: sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+gitops:
+  devRevision: fedcba9876543210fedcba9876543210fedcba98
+cluster:
+  arn: arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev
+slo:
+  evidenceId: dev-slo-20260903T003000Z
+issuedAt: 2026-09-03T00:30:00Z
+expiresAt: 2026-09-03T02:30:00Z

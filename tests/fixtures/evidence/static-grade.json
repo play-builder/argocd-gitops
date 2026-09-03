@@ -1,0 +1,3 @@
+{
+  "schemaVersion":"course.dev-deployment/v1","evidenceGrade":"STATIC_VERIFIED","status":{"sync":"Synced","health":"Healthy"},"source":{"repository":"OWNER/cicd-course-sample-app","sha":"0123456789abcdef0123456789abcdef01234567"},"image":{"repository":"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app","indexDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"gitopsRevision":"fedcba9876543210fedcba9876543210fedcba98","clusterArn":"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev","region":"ap-northeast-2","observedAt":"2026-09-03T00:30:00Z"
+}
