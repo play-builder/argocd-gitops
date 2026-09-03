@@ -11,8 +11,8 @@
   "rollout": {"name":"sample-app","uid":"22222222-2222-2222-2222-222222222222","revision":2,"stableHash":"stable-hash","currentPodHash":"stable-hash","trafficWeight":100,"phase":"Healthy"},
   "analysisRun": {"name":"sample-app-2","uid":"33333333-3333-3333-3333-333333333333","phase":"Successful","templateName":"sample-app-success-rate"},
   "metricResults": [
-    {"name":"request-rate","phase":"Successful","measurements":[{"value":12.5,"phase":"Failed","startedAt":"2026-09-03T01:20:00Z","finishedAt":"2026-09-03T01:20:30Z"},{"value":14.2,"phase":"Successful","startedAt":"2026-09-03T01:21:00Z","finishedAt":"2026-09-03T01:21:30Z"}]},
-    {"name":"success-rate","phase":"Successful","measurements":[{"value":99.9,"phase":"Successful","startedAt":"2026-09-03T01:21:00Z","finishedAt":"2026-09-03T01:21:30Z"}]}
+    {"name":"request-rate","phase":"Successful","measurements":[{"value":"12.5","phase":"Failed","startedAt":"2026-09-03T01:20:00Z","finishedAt":"2026-09-03T01:20:30Z"},{"value":"14.2","phase":"Successful","startedAt":"2026-09-03T01:21:00Z","finishedAt":"2026-09-03T01:21:30Z"}]},
+    {"name":"success-rate","phase":"Successful","measurements":[{"value":"99.9","phase":"Successful","startedAt":"2026-09-03T01:21:00Z","finishedAt":"2026-09-03T01:21:30Z"}]}
   ],
   "observedAt":"2026-09-03T01:22:00Z"
 }

@@ -1,1 +1,113 @@
-{}
+{
+  "completedRollback": {
+    "rolloutName": "sample-app",
+    "rolloutUid": "11111111-1111-1111-1111-111111111111",
+    "stableHash": "stable-hash",
+    "targetHash": "target-hash",
+    "rollbackWindow": {
+      "revisions": 2
+    },
+    "candidates": [
+      {
+        "imageDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "productReadContract": "v2prime",
+        "rolloutRevision": 3,
+        "gitRevertSha": "4444444444444444444444444444444444444444",
+        "podTemplateHash": "target-hash"
+      }
+    ],
+    "replicaSetList": {
+      "apiVersion": "apps/v1",
+      "kind": "ReplicaSetList",
+      "items": [
+        {
+          "metadata": {
+            "name": "sample-app-target",
+            "creationTimestamp": "2026-09-03T00:00:00Z",
+            "labels": {
+              "rollouts-pod-template-hash": "target-hash"
+            },
+            "annotations": {
+              "rollout.argoproj.io/revision": "3"
+            },
+            "ownerReferences": [
+              {
+                "apiVersion": "argoproj.io/v1alpha1",
+                "kind": "Rollout",
+                "name": "sample-app",
+                "uid": "11111111-1111-1111-1111-111111111111",
+                "controller": true
+              }
+            ]
+          }
+        },
+        {
+          "metadata": {
+            "name": "sample-app-experiment",
+            "creationTimestamp": "2026-09-03T00:01:00Z",
+            "labels": {
+              "rollouts-pod-template-hash": "experiment-hash"
+            },
+            "annotations": {
+              "rollouts.argoproj.io/experiment-name": "canary-analysis"
+            },
+            "ownerReferences": [
+              {
+                "apiVersion": "argoproj.io/v1alpha1",
+                "kind": "Rollout",
+                "name": "sample-app",
+                "uid": "11111111-1111-1111-1111-111111111111",
+                "controller": true
+              }
+            ]
+          }
+        },
+        {
+          "metadata": {
+            "name": "sample-app-intermediate",
+            "creationTimestamp": "2026-09-03T00:02:00Z",
+            "labels": {
+              "rollouts-pod-template-hash": "intermediate-hash"
+            },
+            "annotations": {
+              "rollout.argoproj.io/revision": "4"
+            },
+            "ownerReferences": [
+              {
+                "apiVersion": "argoproj.io/v1alpha1",
+                "kind": "Rollout",
+                "name": "sample-app",
+                "uid": "11111111-1111-1111-1111-111111111111",
+                "controller": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "inProgressStableReapply": {
+    "stableDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "candidateDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "requiresDesiredStateReconcile": true,
+    "action": "git-reapply-stable-digest"
+  },
+  "releaseLineage": {
+    "v1Compatible": {
+      "sourceSha": "1111111111111111111111111111111111111111",
+      "indexDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "v2FaultyOrderTotal": {
+      "sourceSha": "2222222222222222222222222222222222222222",
+      "indexDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "v201HotfixOrderTotal": {
+      "sourceSha": "3333333333333333333333333333333333333333",
+      "indexDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "v2PrimeContractCompatible": {
+      "sourceSha": "4444444444444444444444444444444444444444",
+      "indexDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  }
+}

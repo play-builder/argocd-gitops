@@ -19,6 +19,7 @@ completedRollback:
           name: sample-app-target
           creationTimestamp: 2026-09-03T00:00:00Z
           labels: {rollouts-pod-template-hash: target-hash}
+          annotations: {rollout.argoproj.io/revision: "3"}
           ownerReferences: [{apiVersion: argoproj.io/v1alpha1, kind: Rollout, name: sample-app, uid: 11111111-1111-1111-1111-111111111111, controller: true}]
       - metadata:
           name: sample-app-experiment
@@ -30,11 +31,13 @@ completedRollback:
           name: sample-app-intermediate
           creationTimestamp: 2026-09-03T00:02:00Z
           labels: {rollouts-pod-template-hash: intermediate-hash}
+          annotations: {rollout.argoproj.io/revision: "4"}
           ownerReferences: [{apiVersion: argoproj.io/v1alpha1, kind: Rollout, name: sample-app, uid: 11111111-1111-1111-1111-111111111111, controller: true}]
       - metadata:
           name: sample-app-stable
           creationTimestamp: 2026-09-03T00:03:00Z
           labels: {rollouts-pod-template-hash: stable-hash}
+          annotations: {rollout.argoproj.io/revision: "5"}
           ownerReferences: [{apiVersion: argoproj.io/v1alpha1, kind: Rollout, name: sample-app, uid: 11111111-1111-1111-1111-111111111111, controller: true}]
 inProgressStableReapply:
   stableDigest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -42,7 +45,7 @@ inProgressStableReapply:
   requiresDesiredStateReconcile: true
   action: git-reapply-stable-digest
 releaseLineage:
-  v1Compatible: {sourceSha: 1111111111111111111111111111111111111111, indexDigest: sha256:1111111111111111111111111111111111111111111111111111111111111111}
-  v2FaultyOrderTotal: {sourceSha: 2222222222222222222222222222222222222222, indexDigest: sha256:2222222222222222222222222222222222222222222222222222222222222222}
-  v201HotfixOrderTotal: {sourceSha: 3333333333333333333333333333333333333333, indexDigest: sha256:3333333333333333333333333333333333333333333333333333333333333333}
+  v1Compatible: {sourceSha: "1111111111111111111111111111111111111111", indexDigest: sha256:1111111111111111111111111111111111111111111111111111111111111111}
+  v2FaultyOrderTotal: {sourceSha: "2222222222222222222222222222222222222222", indexDigest: sha256:2222222222222222222222222222222222222222222222222222222222222222}
+  v201HotfixOrderTotal: {sourceSha: "3333333333333333333333333333333333333333", indexDigest: sha256:3333333333333333333333333333333333333333333333333333333333333333}
   v2PrimeContractCompatible: {sourceSha: "4444444444444444444444444444444444444444", indexDigest: sha256:4444444444444444444444444444444444444444444444444444444444444444}

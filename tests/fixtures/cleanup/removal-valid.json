@@ -2,9 +2,12 @@
   "schemaVersion":"course.gitops-removal/v1","evidenceGrade":"CLOUD_RUNTIME","status":"REMOVED",
   "gitopsRevision":"1111111111111111111111111111111111111111",
   "freezeEvidenceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "clusters":[{"environment":"dev","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/dev"},{"environment":"prod","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/prod"}],
+  "clusters":[{"environment":"dev","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/course-dev"},{"environment":"prod","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/course-prod"}],
   "remaining":{"rollouts":0,"deployments":0,"statefulSets":0,"jobs":0,"externalSecrets":0,"chaosResources":0},
-  "retained":[{"environment":"dev","namespace":"app-dev","kind":"PersistentVolumeClaim","name":"data","uid":"u-1","classification":"source-pvc","requiresExplicitDeletion":true}],
-  "providerSecrets":{"retained":true,"inventorySha256":"2a0ec89207257d7d6d97b3a5c722ba20d03d4fbc3539542865daa9c07bd97b04"},
+  "retained":[
+    {"environment":"dev","namespace":"","kind":"Namespace","name":"app-dev","uid":"namespace-u-1","classification":"application-namespace","requiresExplicitDeletion":true},
+    {"environment":"dev","namespace":"app-dev","kind":"PersistentVolumeClaim","name":"data","uid":"u-1","classification":"source-pvc","requiresExplicitDeletion":true}
+  ],
+  "providerSecrets":{"retained":true,"inventorySha256":"6f6cfbb672b3e0e36cf85a40150eb96ec5835bccdc6e4869e2b01176ee08153b"},
   "observedAt":"2026-09-03T00:00:00Z"
 }

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-repository_root=$(cd -- "$test_root/.." && pwd)
+repository_root=$(cd -- "$test_root/.." && pwd -P)
 fixture_root="$test_root/fixtures/evidence"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -20,14 +20,18 @@ validate_deployment() {
   exact_keys "$file" '["repository","sha"]' .source
   exact_keys "$file" '["repository","indexDigest"]' .image
   jq -e '
+    . as $root |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
     .schemaVersion == "course.dev-deployment/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     .status == {sync:"Synced",health:"Healthy"} and
-    (.source.repository | type == "string" and length > 0) and
+    (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.clusterArn | test("^arn:aws:eks:[a-z0-9-]+:[0-9]{12}:cluster/.+")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
+    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601 != null)
   ' "$file" >/dev/null || fail "deployment evidence is not CLOUD_RUNTIME or has invalid identity"
 }
@@ -38,10 +42,15 @@ validate_slo() {
   exact_keys "$file" '["repository","sha"]' .source
   exact_keys "$file" '["repository","indexDigest"]' .image
   jq -e '
+    . as $root |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
     .schemaVersion == "course.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
+    (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:[a-z0-9-]+:[0-9]{12}:cluster/.+")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
+    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)
   ' "$file" >/dev/null || fail "SLO evidence is not an unexpired PASS CLOUD_RUNTIME record"
 }
@@ -49,37 +58,84 @@ validate_slo() {
 validate_baseline() {
   local file=$1
   jq -e '
+    . as $root |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/.+$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
+    (.image.repository | type == "string" and length > 0) and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
+    (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
-    .rollout.revision == 1 and .rollout.trafficWeight == 100
+    (.rollout.stableHash | type == "string" and length > 0) and
+    .rollout.revision == 1 and .rollout.trafficWeight == 100 and
+    (.region | IN("ap-northeast-2","us-east-1")) and
+    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    (.observedAt | fromdateiso8601) <= now
   ' "$file" >/dev/null || fail "Prod baseline must prove stable ReplicaSet revision 1 at 100 percent"
 }
 
 case_raw() {
   local deployment=${DEPLOYMENT:-$fixture_root/deployment-valid.json}
   local slo=${SLO:-$fixture_root/slo-valid.json}
+  local baseline=${BASELINE:-$fixture_root/baseline-valid.json}
   validate_deployment "$deployment"
   validate_slo "$slo"
-  validate_baseline "$fixture_root/baseline-valid.json"
+  validate_baseline "$baseline"
   jq -s -e '.[0].source == .[1].source and .[0].image == .[1].image and .[0].gitopsRevision == .[1].gitopsRevision and .[0].clusterArn == .[1].clusterArn and .[0].region == .[1].region' "$deployment" "$slo" >/dev/null || fail "deployment and SLO source identity mismatch"
   echo "PASS: raw Dev evidence schemas and shared provenance are valid."
 }
 
+case_identity_edges() {
+  local invalid invalid_slo
+  invalid=$(mktemp "${TMPDIR:-/tmp}/evidence-identity.XXXXXX")
+  invalid_slo=$(mktemp "${TMPDIR:-/tmp}/evidence-slo-identity.XXXXXX")
+  jq '.source.repository="OWNER/other-app" | .image.repository="not-ecr" | .clusterArn="arn:aws:eks:us-east-1:999999999999:cluster/foreign"' \
+    "$fixture_root/deployment-valid.json" >"$invalid"
+  jq '.source.repository="OWNER/other-app" | .image.repository="not-ecr" | .clusterArn="arn:aws:eks:us-east-1:999999999999:cluster/foreign"' \
+    "$fixture_root/slo-valid.json" >"$invalid_slo"
+  if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$fixture_root/baseline-valid.json" case_raw) >/dev/null 2>&1; then
+    rm -f -- "$invalid" "$invalid_slo"
+    fail "raw deployment evidence accepted a noncanonical source/ECR/EKS identity"
+  fi
+  if (DEPLOYMENT="$fixture_root/deployment-valid.json" SLO="$fixture_root/slo-valid.json" \
+    BASELINE="$fixture_root/baseline-valid.json" case_real_path) >/dev/null 2>&1; then
+    rm -f -- "$invalid" "$invalid_slo"
+    fail "real-path gate accepted fixture paths in place of canonical runtime evidence"
+  fi
+  rm -f -- "$invalid" "$invalid_slo"
+  echo "PASS: raw evidence rejects noncanonical source, ECR, and EKS identities."
+}
+
 case_real_path() {
-  local deployment="${DEPLOYMENT:-$repository_root/evidence/dev/deployment.json}"
-  local slo="${SLO:-$repository_root/evidence/dev/slo.json}"
-  for file in "$deployment" "$slo"; do
+  local canonical_deployment="$repository_root/evidence/dev/deployment.json"
+  local canonical_slo="$repository_root/evidence/dev/slo.json"
+  local canonical_baseline="$repository_root/evidence/prod/baseline.json"
+  local deployment="${DEPLOYMENT:-$canonical_deployment}"
+  local slo="${SLO:-$canonical_slo}"
+  local baseline="${BASELINE:-$canonical_baseline}"
+  local file expected physical_parent resolved
+  [[ "$deployment" == "$canonical_deployment" && "$slo" == "$canonical_slo" && "$baseline" == "$canonical_baseline" ]] ||
+    fail "real-path gate accepts only canonical repository evidence paths"
+  for file in "$deployment" "$slo" "$baseline"; do
     [[ -f "$file" ]] || continue
-    if [[ "$file" == "$repository_root/evidence/"* && "$file" == *"tests/fixtures"* ]]; then
-      fail "real evidence path points below tests/fixtures"
-    fi
+    [[ ! -L "$file" ]] || fail "real evidence must be a regular non-symlink file"
+    case "$file" in
+      "$deployment") expected=$canonical_deployment ;;
+      "$slo") expected=$canonical_slo ;;
+      "$baseline") expected=$canonical_baseline ;;
+    esac
+    physical_parent=$(cd -- "$(dirname -- "$file")" && pwd -P) || fail "cannot resolve canonical evidence parent"
+    resolved="$physical_parent/$(basename -- "$file")"
+    [[ "$resolved" == "$expected" ]] || fail "real evidence escaped its canonical repository path"
     jq -e '.evidenceGrade == "CLOUD_RUNTIME"' "$file" >/dev/null || fail "real evidence requires CLOUD_RUNTIME"
     ! jq -e 'tostring | contains("example.invalid") or contains("0000000000000000000000000000000000000000")' "$file" >/dev/null || fail "real evidence contains fixture markers"
   done
-  echo "PASS: real evidence paths are absent or provenance-guarded."
+  [[ ! -f "$deployment" ]] || validate_deployment "$deployment"
+  [[ ! -f "$slo" ]] || validate_slo "$slo"
+  [[ ! -f "$baseline" ]] || validate_baseline "$baseline"
+  echo "PASS: deployment, SLO, and Prod baseline real evidence paths are absent or provenance-guarded."
 }
 
 case_expiry() {
@@ -91,7 +147,7 @@ case_expiry() {
 case_prod_slo_terminal() {
   local valid="$fixture_root/prod-slo-valid.json"
   local invalid="$fixture_root/prod-slo-analysis-failed.json"
-  local output
+  local output malformed value
 
   output=$(bash "$repository_root/scripts/capture-prod-slo-evidence.sh" --fixture "$valid")
   grep -Fq '[STATIC] fake Prod SLO adapter validated' <<<"$output" ||
@@ -102,6 +158,23 @@ case_prod_slo_terminal() {
   fi
   grep -Fq 'canonical metric or terminal-state validation' <<<"$output" ||
     fail "failed AnalysisRun fixture was rejected for an unexpected reason"
+
+  for value in NaN Infinity not-a-number; do
+    malformed=$(mktemp "${TMPDIR:-/tmp}/prod-slo-value.XXXXXX")
+    jq --arg value "$value" '.metricResults[0].measurements[0].value=$value' "$valid" >"$malformed"
+    if bash "$repository_root/scripts/capture-prod-slo-evidence.sh" --fixture "$malformed" >/dev/null 2>&1; then
+      rm -f -- "$malformed"
+      fail "non-finite or non-numeric measurement value was accepted: $value"
+    fi
+    rm -f -- "$malformed"
+  done
+  malformed=$(mktemp "${TMPDIR:-/tmp}/prod-slo-number.XXXXXX")
+  jq '.metricResults[0].measurements[0].value=12.5' "$valid" >"$malformed"
+  if bash "$repository_root/scripts/capture-prod-slo-evidence.sh" --fixture "$malformed" >/dev/null 2>&1; then
+    rm -f -- "$malformed"
+    fail "JSON number measurement was accepted instead of the raw Argo Rollouts string"
+  fi
+  rm -f -- "$malformed"
   echo "PASS: Prod SLO terminal AnalysisRun and finished measurement edge cases fail closed."
 }
 
@@ -111,15 +184,17 @@ while (($#)); do
     --case) requested=${2:?missing case}; shift 2 ;;
     --deployment) DEPLOYMENT=${2:?missing deployment}; shift 2 ;;
     --slo) SLO=${2:?missing slo}; shift 2 ;;
+    --baseline) BASELINE=${2:?missing baseline}; shift 2 ;;
     --now) NOW=${2:?missing now}; shift 2 ;;
-    *) echo "Usage: $0 [--case raw|real-path|expiry|prod-slo-terminal|all] [--deployment path --slo path]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [--case raw|real-path|expiry|identity-edges|prod-slo-terminal|all] [--deployment path --slo path --baseline path]" >&2; exit 2 ;;
   esac
 done
 case "$requested" in
   raw) case_raw ;;
   real-path) case_real_path ;;
   expiry) case_expiry ;;
+  identity-edges) case_identity_edges ;;
   prod-slo-terminal) case_prod_slo_terminal ;;
-  all) case_raw; case_real_path; case_expiry; case_prod_slo_terminal ;;
+  all) case_raw; case_real_path; case_expiry; case_identity_edges; case_prod_slo_terminal ;;
   *) echo "Usage: $0 [--case raw|real-path|expiry|all]" >&2; exit 2 ;;
 esac

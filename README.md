@@ -181,6 +181,11 @@ EKS-infra repository를 명시하여 Argo Application 부재, namespace별 workl
 ```bash
 AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$PROD_CLUSTER_NAME" \
   bash scripts/capture-prod-baseline-evidence.sh
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$PROD_CLUSTER_NAME" \
+  bash scripts/capture-prod-slo-evidence.sh
+AWS_REGION="$AWS_REGION" DEV_CLUSTER_NAME="$DEV_CLUSTER_NAME" PROD_CLUSTER_NAME="$PROD_CLUSTER_NAME" \
+  bash scripts/capture-cleanup-evidence.sh freeze \
+    --dev-context "$DEV_KUBE_CONTEXT" --prod-context "$PROD_KUBE_CONTEXT"
 bash scripts/capture-cleanup-evidence.sh removal --eks-repo-root "$LAB_EKS_REPO" \
   --dev-context "$DEV_KUBE_CONTEXT" --prod-context "$PROD_KUBE_CONTEXT"
 ```

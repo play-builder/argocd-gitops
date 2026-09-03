@@ -1,7 +1,46 @@
 {
   "schemaVersion": "course.cleanup-ownership/v1",
+  "evidenceGrade": "CLOUD_RUNTIME",
+  "courseId": "course-2026",
+  "accountId": "111111111111",
+  "region": "ap-northeast-2",
   "resources": [
-    {"kind":"SecretsManagerSecret","environment":"dev","id":"runtime","arn":"arn:aws:secretsmanager:ap-northeast-2:111111111111:secret:runtime"},
-    {"kind":"PersistentVolumeClaim","environment":"dev","namespace":"app-dev","name":"data","uid":"u-1"}
-  ]
+    {
+      "kind": "Namespace",
+      "id": "app-dev",
+      "environment": "dev",
+      "classification": "application-namespace",
+      "owner": "course",
+      "managedBy": "terraform",
+      "billable": false,
+      "decision": "RETAIN",
+      "reason": "namespace cleanup review",
+      "followUpAction": "delete after explicit approval"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "id": "app-dev/data",
+      "environment": "dev",
+      "classification": "source-pvc",
+      "owner": "course",
+      "managedBy": "terraform",
+      "billable": true,
+      "decision": "RETAIN",
+      "reason": "recovery evidence",
+      "followUpAction": "delete after explicit approval"
+    },
+    {
+      "kind": "SecretsManagerSecret",
+      "id": "arn:aws:secretsmanager:ap-northeast-2:111111111111:secret:runtime",
+      "environment": "shared",
+      "classification": "provider-secret",
+      "owner": "external",
+      "managedBy": "terraform",
+      "billable": false,
+      "decision": "EXTERNAL_SHARED",
+      "reason": "shared provider secret",
+      "followUpAction": "retain and review separately"
+    }
+  ],
+  "observedAt": "2026-09-03T00:00:00Z"
 }
