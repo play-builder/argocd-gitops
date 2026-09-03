@@ -39,6 +39,26 @@ measurement-nan|.metricResults[0].measurements[0].value = "NaN"
 analysis-failed|.analysisRun.phase = "Failed"
 traffic-weight|.rollout.trafficWeight = 50
 CASES
+while IFS='|' read -r label expression; do
+  for whitespace in ascii-space bom; do
+    value=' '
+    [[ "$whitespace" == bom ]] && value=$(printf '\357\273\277')
+    invalid="$tmp_root/$label-$whitespace.json"
+    jq --arg value "$value" "$expression" "$fixture_root/prod-slo-valid.json" >"$invalid"
+    if bash "$script" --fixture "$invalid" >/dev/null 2>&1; then
+      fail "Prod SLO fixture adapter accepted $whitespace-only $label"
+    fi
+    [[ "$before" == "$(fingerprint)" ]] || fail "invalid $label fixture changed canonical runtime evidence"
+  done
+done <<'CASES'
+evidenceId|.evidenceId=$value
+rollout-name|.rollout.name=$value
+rollout-uid|.rollout.uid=$value
+rollout-hashes|.rollout.stableHash=$value | .rollout.currentPodHash=$value
+analysis-name|.analysisRun.name=$value
+analysis-uid|.analysisRun.uid=$value
+analysis-template|.analysisRun.templateName=$value
+CASES
 two_character_fixture="$tmp_root/ecr-two-character.json"
 jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab"' \
   "$fixture_root/prod-slo-valid.json" >"$two_character_fixture"

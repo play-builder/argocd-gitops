@@ -40,11 +40,13 @@ validate_record() {
       . as $value |
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["analysisRun","clusterArn","evidenceGrade","evidenceId","gitopsRevision","image","metricResults","observedAt","region","rollout","schemaVersion","source","status"] and
     .schemaVersion == "course.prod-slo/v1" and .evidenceGrade == $grade and .status == "PASS" and
+    (.evidenceId | nonblank) and
     (.source | (keys | sort) == ["repository","sha"]) and (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
@@ -52,9 +54,13 @@ validate_record() {
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.rollout | (keys | sort) == ["currentPodHash","name","phase","revision","stableHash","trafficWeight","uid"]) and
+    (.rollout.name | nonblank) and (.rollout.uid | nonblank) and
+    (.rollout.stableHash | nonblank) and (.rollout.currentPodHash | nonblank) and
     (.rollout.revision | type == "number" and floor == . and . >= 2) and
     .rollout.phase == "Healthy" and .rollout.trafficWeight == 100 and .rollout.stableHash == .rollout.currentPodHash and
-    (.analysisRun | (keys | sort) == ["name","phase","templateName","uid"]) and .analysisRun.phase == "Successful" and
+    (.analysisRun | (keys | sort) == ["name","phase","templateName","uid"]) and
+    (.analysisRun.name | nonblank) and (.analysisRun.uid | nonblank) and (.analysisRun.templateName | nonblank) and
+    .analysisRun.phase == "Successful" and
     .analysisRun.templateName == "sample-app-success-rate" and
     (.metricResults | type == "array" and length == 2) and
     ([.metricResults[].name] | sort) == ["request-rate","success-rate"] and
