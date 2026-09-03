@@ -25,7 +25,7 @@ validate_deployment() {
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-deployment/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     .status == {sync:"Synced",health:"Healthy"} and
-    (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
+    (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
@@ -46,7 +46,7 @@ validate_slo() {
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
-    (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
+    (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
@@ -98,6 +98,14 @@ case_identity_edges() {
   if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$fixture_root/baseline-valid.json" case_raw) >/dev/null 2>&1; then
     rm -f -- "$invalid" "$invalid_slo"
     fail "raw deployment evidence accepted a noncanonical source/ECR/EKS identity"
+  fi
+  jq '.source.repository="OWNER /cicd-course-sample-app"' \
+    "$fixture_root/deployment-valid.json" >"$invalid"
+  jq '.source.repository="OWNER /cicd-course-sample-app"' \
+    "$fixture_root/slo-valid.json" >"$invalid_slo"
+  if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$fixture_root/baseline-valid.json" case_raw) >/dev/null 2>&1; then
+    rm -f -- "$invalid" "$invalid_slo"
+    fail "raw evidence accepted a source owner containing whitespace"
   fi
   if (DEPLOYMENT="$fixture_root/deployment-valid.json" SLO="$fixture_root/slo-valid.json" \
     BASELINE="$fixture_root/baseline-valid.json" case_real_path) >/dev/null 2>&1; then

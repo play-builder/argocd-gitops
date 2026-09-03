@@ -22,7 +22,7 @@ validate_ready() {
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root |
     .workflow as $workflow |
-    (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
+    (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
@@ -281,6 +281,7 @@ workflow-runid-type|.workflow.runId = 1001
 workflow-runattempt|.workflow.runAttempt = 0
 workflow-runurl-id|.workflow.runUrl = "https://github.com/OWNER/cicd-course-sample-app/actions/runs/9999"
 workflow-runurl-repository|.workflow.runUrl = "https://github.com/OWNER/other-app/actions/runs/1001"
+workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl = "https://github.com/OWNER /cicd-course-sample-app/attestations/1001"
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
 ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"
 attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"

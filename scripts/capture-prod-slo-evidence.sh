@@ -46,7 +46,7 @@ validate_record() {
     (keys | sort) == ["analysisRun","clusterArn","evidenceGrade","evidenceId","gitopsRevision","image","metricResults","observedAt","region","rollout","schemaVersion","source","status"] and
     .schemaVersion == "course.prod-slo/v1" and .evidenceGrade == $grade and .status == "PASS" and
     (.source | (keys | sort) == ["repository","sha"]) and (.image | (keys | sort) == ["indexDigest","repository"]) and
-    (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
+    (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     ($ecr.name | length <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
@@ -125,7 +125,7 @@ jq -e --arg now "$clock_now" '
     (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
   . as $root |
   .workflow as $workflow |
-  (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
+  (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
   (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
   (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["attestation","cluster","environment","expiresAt","gitops","image","issuedAt","region","schemaVersion","slo","sourceSha","workflow"] and
@@ -179,7 +179,7 @@ jq -e --arg now "$clock_now" '
 ' <<<"$baseline_json" >/dev/null || fail "Prod baseline is not a valid initial stable release"
 
 source_sha=$(jq -r '.sourceSha' <<<"$promotion_json")
-source_repository=$(jq -r '.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/[0-9]+$").repository' <<<"$promotion_json")
+source_repository=$(jq -r '.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/cicd-course-sample-app)/actions/runs/[0-9]+$").repository' <<<"$promotion_json")
 expected_repository=$(jq -r '.image.repository' <<<"$promotion_json")
 expected_digest=$(jq -r '.image.indexDigest' <<<"$promotion_json")
 dev_cluster_arn=$(jq -r '.cluster.arn' <<<"$promotion_json")
