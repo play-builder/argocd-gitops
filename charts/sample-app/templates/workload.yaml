@@ -7,6 +7,9 @@ metadata:
   namespace: {{ include "sample-app.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    {{- if .Values.externalSecrets.enabled }}
+    secret.reloader.stakater.com/reload: {{ include "sample-app.runtimeSecretName" . | quote }}
+    {{- end }}
   labels:
     {{- include "sample-app.labels" . | nindent 4 }}
 spec:
@@ -32,6 +35,10 @@ metadata:
   namespace: {{ include "sample-app.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    {{- if .Values.externalSecrets.enabled }}
+    secret.reloader.stakater.com/reload: {{ include "sample-app.runtimeSecretName" . | quote }}
+    reloader.stakater.com/rollout-strategy: rollout
+    {{- end }}
   labels:
     {{- include "sample-app.labels" . | nindent 4 }}
 spec:

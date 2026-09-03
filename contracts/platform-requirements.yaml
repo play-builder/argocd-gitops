@@ -6,6 +6,8 @@ argoHealthCustomizations:
     apiGroup: external-secrets.io
     kind: ExternalSecret
     healthyWhen: Ready=True at observedGeneration
+    requiredBeforeSyncWave: -2
+    implementationOwner: EKS-infra
   - id: volume-snapshot-ready-health/v1
     apiGroup: snapshot.storage.k8s.io
     kind: VolumeSnapshot

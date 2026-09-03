@@ -240,11 +240,72 @@ case_pss_enforce() {
   echo "PASS: PSS and admission enforcement overlay is explicit and version-pinned."
 }
 
+case_reloader_diff() {
+  local environment manifest appset
+
+  for environment in dev prod; do
+    manifest="$render_root/bootstrap-$environment-reloader.yaml"
+    appset="sample-app-$environment"
+    render_bootstrap "$environment" "$manifest"
+
+    APPSET="$appset" yq eval-all -o=json '
+      select(.kind == "ApplicationSet" and .metadata.name == strenv(APPSET)) |
+      .spec.template.spec.ignoreDifferences
+    ' "$manifest" | jq -e '
+      (map(select(.group == "apps" and .kind == "Deployment")) |
+        length == 1 and .[0].jsonPointers ==
+          ["/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"]) and
+      (map(select(.group == "argoproj.io" and .kind == "Rollout")) |
+        length == 1 and .[0].jsonPointers ==
+          ["/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"]) and
+      (map(select(
+        (.jsonPointers // []) | any(
+          . == "/metadata/annotations" or
+          . == "/spec/template/metadata/annotations"
+        )
+      )) | length) == 0
+    ' >/dev/null || fail "$environment ApplicationSet lacks narrow Reloader diff rules"
+  done
+
+  echo "PASS: Reloader-generated metadata has exact narrow diff rules."
+}
+
+case_platform_health_interface() {
+  local contract="$repository_root/contracts/platform-requirements.yaml"
+  local environment manifest
+
+  yq eval -o=json '.' "$contract" | jq -e '
+    .ownerRepository == "EKS-infra" and
+    .argoConfigMap == "argocd-cm" and
+    (.argoHealthCustomizations |
+      map(select(.id == "external-secret-ready-health/v1"))) == [{
+        "id": "external-secret-ready-health/v1",
+        "apiGroup": "external-secrets.io",
+        "kind": "ExternalSecret",
+        "healthyWhen": "Ready=True at observedGeneration",
+        "requiredBeforeSyncWave": -2,
+        "implementationOwner": "EKS-infra"
+      }]
+  ' >/dev/null || fail "ExternalSecret health interface lacks its exact EKS-owned readiness boundary"
+
+  for environment in dev prod; do
+    manifest="$render_root/bootstrap-$environment-health.yaml"
+    render_bootstrap "$environment" "$manifest"
+    if yq eval-all -e '
+      select(.kind == "ConfigMap" and .metadata.name == "argocd-cm")
+    ' "$manifest" >/dev/null 2>&1; then
+      fail "$environment bootstrap must not render the EKS-owned argocd-cm"
+    fi
+  done
+
+  echo "PASS: ExternalSecret readiness contract has one EKS-infra implementation owner."
+}
+
 requested_case=all
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--case <namespace-pss|phase-a-controller|least-privilege|pss-enforce|all>]" >&2
+  echo "Usage: $0 [--case <namespace-pss|phase-a-controller|least-privilege|pss-enforce|reloader-diff|platform-health-interface|all>]" >&2
   exit 2
 fi
 
@@ -253,11 +314,15 @@ case "$requested_case" in
   phase-a-controller) case_phase_a_controller ;;
   least-privilege) case_least_privilege ;;
   pss-enforce) case_pss_enforce ;;
+  reloader-diff) case_reloader_diff ;;
+  platform-health-interface) case_platform_health_interface ;;
   all)
     case_namespace_pss
     case_phase_a_controller
     case_least_privilege
     case_pss_enforce
+    case_reloader_diff
+    case_platform_health_interface
     ;;
   *) fail "unknown bootstrap contract case: $requested_case" ;;
 esac

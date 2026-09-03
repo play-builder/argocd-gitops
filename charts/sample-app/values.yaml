@@ -81,9 +81,13 @@ externalSecrets:
   awsRegion: ""
   readerServiceAccount: external-secrets-reader
   readerRoleArn: ""
-  remoteSecretName: ""
-  targetSecretName: sample-app-secrets
   refreshInterval: 1h
+  runtime:
+    remoteSecretName: ""
+    targetSecretName: sample-app-runtime
+  database:
+    remoteSecretName: ""
+    targetSecretName: sample-app-db
 
 # Lab-only PostgreSQL. Ch01~Ch14 remains Stateless because this is false by default.
 database:
@@ -92,7 +96,6 @@ database:
   port: 5432
   name: commerce
   user: commerce
-  passwordSecretKey: DB_PASSWORD
   storageClassName: course-gp3
   storageSize: 5Gi
   image:

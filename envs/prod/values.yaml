@@ -35,7 +35,12 @@ externalSecrets:
   enabled: true
   awsRegion: "REPLACE_ME_REGION"
   readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/prod-REPLACE_ME_PROJECT-external-secrets-reader-role"
-  remoteSecretName: "sample-app/prod/app-secrets"
+  runtime:
+    remoteSecretName: "sample-app/prod/sample-app-runtime"
+    targetSecretName: sample-app-runtime
+  database:
+    remoteSecretName: "sample-app/prod/sample-app-db"
+    targetSecretName: sample-app-db
 
 gateway:
   enabled: true

@@ -1,5 +1,5 @@
 {{- if .Values.database.enabled }}
-{{- $secretName := required "externalSecrets.targetSecretName is required when database is enabled" .Values.externalSecrets.targetSecretName }}
+{{- $secretName := include "sample-app.databaseSecretName" . }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -50,18 +50,30 @@ spec:
             - name: DATABASE_ENABLED
               value: "true"
             - name: DB_HOST
-              value: {{ default (include "sample-app.databaseFullname" .) .Values.database.host | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_HOST
             - name: DB_PORT
-              value: {{ .Values.database.port | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_PORT
             - name: DB_NAME
-              value: {{ .Values.database.name | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_NAME
             - name: DB_USER
-              value: {{ .Values.database.user | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_USER
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $secretName }}
-                  key: {{ .Values.database.passwordSecretKey }}
+                  key: DB_PASSWORD
             - name: DB_SSL
               value: "false"
       volumes:

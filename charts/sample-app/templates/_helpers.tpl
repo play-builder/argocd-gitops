@@ -45,6 +45,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-postgresql" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "sample-app.runtimeSecretName" -}}
+{{- required "externalSecrets.runtime.targetSecretName is required when External Secrets is enabled" .Values.externalSecrets.runtime.targetSecretName -}}
+{{- end -}}
+
+{{- define "sample-app.databaseSecretName" -}}
+{{- required "externalSecrets.database.targetSecretName is required when database is enabled" .Values.externalSecrets.database.targetSecretName -}}
+{{- end -}}
+
 {{- define "sample-app.databaseImage" -}}
 {{- $repository := required "database.image.repository is required" .Values.database.image.repository -}}
 {{- $digest := required "database.image.digest is required; mutable tags are not accepted" .Values.database.image.digest -}}
@@ -133,24 +141,41 @@ spec:
           value: {{ .Values.app.shutdownDelayMs | quote }}
         - name: SECRET_KEYS
           value: {{ .Values.app.secretKeys | quote }}
-        {{- if .Values.database.enabled }}
         - name: DATABASE_ENABLED
-          value: "true"
+          value: {{ ternary "true" "false" .Values.database.enabled | quote }}
+        {{- if .Values.database.enabled }}
         - name: DB_HOST
-          value: {{ default (include "sample-app.databaseFullname" .) .Values.database.host | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_HOST
         - name: DB_PORT
-          value: {{ .Values.database.port | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_PORT
         - name: DB_NAME
-          value: {{ .Values.database.name | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_NAME
         - name: DB_USER
-          value: {{ .Values.database.user | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "sample-app.databaseSecretName" . }}
+              key: DB_PASSWORD
         - name: DB_SSL
           value: "false"
         {{- end }}
       {{- if .Values.externalSecrets.enabled }}
       envFrom:
         - secretRef:
-            name: {{ .Values.externalSecrets.targetSecretName }}
+            name: {{ include "sample-app.runtimeSecretName" . }}
       {{- end }}
       livenessProbe:
         httpGet:

@@ -50,6 +50,14 @@ spec:
           - ServerSideApply=true
           - RespectIgnoreDifferences=true
       ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers:
+            - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
         - group: ""
           kind: Service
           jqPathExpressions:
