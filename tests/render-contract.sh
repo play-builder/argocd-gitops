@@ -385,10 +385,13 @@ case_telemetry() {
   render_environment dev "$stateful" "$fixture_root/stateful-policy-off.yaml"
   yq eval-all -o=json '
     select(.kind == "Job" and .metadata.name == "sample-app-migration") |
-    .spec.template.spec.securityContext
+    .spec.template.spec
   ' "$stateful" | jq -e '
-    .runAsUser == 10001 and .runAsGroup == 10001
-  ' >/dev/null || fail "migration Job identity is not 10001:10001"
+    .securityContext.runAsUser == 10001 and
+    .securityContext.runAsGroup == 10001 and
+    .securityContext.fsGroup == 10001 and
+    any(.volumes[]; .name == "tmp" and .emptyDir == {})
+  ' >/dev/null || fail "migration Job identity and writable volume ownership are not 10001:10001"
 
   yq -o=json '.telemetryOutputs' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
     .xrayEnabled == "adot_xray_enabled" and
