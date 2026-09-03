@@ -195,7 +195,7 @@ if not isinstance(manifest, dict):
 if manifest.get("curriculumVersion") != "v3.4":
     fail("incident lifecycle manifest curriculumVersion must be v3.4")
 def timestamp(value, label):
-    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,3})?Z", value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", value):
         fail(f"{label} must be an RFC3339 UTC timestamp")
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))

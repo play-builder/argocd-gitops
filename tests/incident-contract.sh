@@ -169,6 +169,8 @@ for number, scenario in enumerate(scenarios, start=1):
         rollout_revision = 0
     elif db04_mismatch == "invalid-recovery-time" and scenario == "git-revert":
         recovery_observed_at = "2025-12-31T23:59:59Z"
+    elif db04_mismatch == "fractional-recovery-time" and scenario == "git-revert":
+        recovery_observed_at = "2026-09-03T01:01:30.123Z"
     elif db04_mismatch == "blank-execution-id" and scenario == "git-revert":
         execution_id = " "
     recovery = {
@@ -315,6 +317,8 @@ elif mutation == "invalid-environment":
     value["environment"] = "staging"
 elif mutation == "invalid-observed-at":
     value["observedAt"] = "2026-09-03 01:00:00"
+elif mutation == "fractional-observed-at":
+    value["observedAt"] = "2026-09-03T01:00:00.123Z"
 elif mutation == "outside-index-window":
     value["observedAt"] = "2025-12-31T23:59:59Z"
 elif mutation == "source-extra":
@@ -389,8 +393,13 @@ case_manifest_metadata() {
   make_runtime_bundle "$work/valid" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z
   run_runtime_producer "$work/valid" >/dev/null || fail "runtime producer rejected canonical manifest metadata"
   jq -e '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value);
     .curriculumVersion == "v3.4" and
     .startedAt == "2026-01-01T00:00:00Z" and
+    (.startedAt | canonical_utc_seconds) and (.generatedAt | canonical_utc_seconds) and
     ((.startedAt | fromdateiso8601) < (.generatedAt | fromdateiso8601))
   ' "$work/valid/repos/argocd-gitops/evidence/incidents/index.json" >/dev/null || fail "runtime index did not preserve valid canonical manifest metadata"
 
@@ -407,6 +416,11 @@ case_manifest_metadata() {
   make_runtime_bundle "$work/invalid-start" INCIDENT_EVIDENCE v3.4 2026-09-03
   if run_runtime_producer "$work/invalid-start" >/dev/null 2>&1; then
     fail "runtime producer accepted a non-RFC3339 manifest startedAt"
+  fi
+
+  make_runtime_bundle "$work/fractional-start" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00.123Z
+  if run_runtime_producer "$work/fractional-start" >/dev/null 2>&1; then
+    fail "runtime producer accepted fractional manifest startedAt"
   fi
 
   make_runtime_bundle "$work/future-start" INCIDENT_EVIDENCE v3.4 2999-01-01T00:00:00Z
@@ -438,7 +452,7 @@ case_db04_recovery_identity() {
     non-ecr-image-repository cross-region-image-repository foreign-account-image-repository \
     one-character-image-repository noncanonical-image-repository recovered-image-repository-mismatch \
     invalid-gitops-revision invalid-rollout-revision \
-    invalid-recovery-time blank-execution-id stable-lineage-mismatch \
+    invalid-recovery-time fractional-recovery-time blank-execution-id stable-lineage-mismatch \
     faulty-lineage-mismatch hotfix-lineage-mismatch; do
     make_runtime_bundle "$work/$variant" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z "$variant"
     if run_runtime_producer "$work/$variant" >/dev/null 2>&1; then
@@ -455,7 +469,7 @@ case_envelope_contract() {
   run_runtime_producer "$work/base" >/dev/null || fail "runtime producer rejected the exact incident envelope contract"
 
   for mutation in producer-extra producer-unknown producer-head-mismatch subject-extra \
-    outcome-extra blank-summary invalid-environment invalid-observed-at outside-index-window \
+    outcome-extra blank-summary invalid-environment invalid-observed-at fractional-observed-at outside-index-window \
     source-extra source-path-base phase-order mitigation-duration; do
     candidate="$work/$mutation"
     cp -R "$work/base" "$candidate"
