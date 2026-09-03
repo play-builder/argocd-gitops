@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "course.cleanup-ownership/v1",
+  "resources": [
+    {"kind":"SecretsManagerSecret","environment":"dev","id":"runtime","arn":"arn:aws:secretsmanager:ap-northeast-2:111111111111:secret:runtime"},
+    {"kind":"PersistentVolumeClaim","environment":"dev","namespace":"app-dev","name":"data","uid":"u-1"}
+  ]
+}

@@ -1,0 +1,13 @@
+id: INC-CLN-03
+chapter: 26
+tier: Core-should
+scope: {environment: dev, namespaces: [app-dev], forbiddenNamespaces: [app-prod]}
+maximumDuration: 5m
+inject: {manifest: envs/dev/cleanup-values.yaml, action: enable-cleanup}
+stop: {action: stop-writers}
+evidence: {baseline: [ok], inject: [ok], detect: [ok], mitigate: [ok], recover: [ok], reconcile: [ok], prevent: [ok], cleanup: [ok]}
+preventionTest: tests/render-contract.sh --case matrix
+cleanup:
+  labels: {course.playbuilder.io/incident: INC-CLN-03}
+  action: delete-provider-secret
+  externalSecretLifecycle: {targetSecretOwnerReferenceGC: true, providerSecretRetained: false, providerSecretDeletion: true}

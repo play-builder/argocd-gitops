@@ -28,6 +28,16 @@ jobs:
         with:
           version: v1.36.0
 
+      - name: Install exact yq
+        run: |
+          GOBIN="$RUNNER_TEMP/yq-bin" go install github.com/mikefarah/yq/v4@v4.53.6
+          echo "$RUNNER_TEMP/yq-bin" >> "$GITHUB_PATH"
+          yq --version | grep -Fq 'v4.53.6'
+
+      - name: Assert compatibility pins
+        run: |
+          yq -e '.tooling.yq == "4.53.6" and .tooling.kubectl == "1.36.0" and .delivery.helmCli == "4.2.4" and .delivery.argoCdController == "3.5.2" and .delivery.argoRolloutsController == "1.9.1" and .delivery.externalSecretsChart == "2.10.0" and .delivery.gatewayApi == "1.6.0"' versions.lock.yaml
+
       - name: Lint Helm chart
         run: |
           helm lint charts/sample-app \
@@ -72,3 +82,9 @@ jobs:
 
       - name: Verify Stateful application contract
         run: bash tests/stateful-contract.sh
+
+      - name: Run static course contracts
+        run: bash tests/test-all.sh
+
+      - name: Package chart
+        run: scripts/package-chart.sh "$RUNNER_TEMP/chart-package"

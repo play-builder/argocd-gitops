@@ -148,3 +148,27 @@ bash scripts/capture-prod-slo-evidence.sh --fixture tests/fixtures/evidence/prod
 
 이 명령들은 EKS admission, Argo Sync/Health, AMP query, 실제 rollback 또는 CNI 동작을 증명하지
 않습니다. 해당 항목은 cloud run에서 별도 `[CLOUD_RUNTIME]` 기록으로 수집해야 합니다.
+
+## Ch25/Ch26 Chaos와 정적 검증 경계
+
+Chaos 리소스는 `envs/dev/chaos-values.yaml`을 명시적으로 추가한 Dev 실습 단계에서만
+렌더됩니다. `PodChaos`와 `NetworkChaos`는 `app-dev`의 명시적 application label을
+선택하고 최대 5분 동안만 실행됩니다. Prod ApplicationSet은 Chaos values를 참조하지
+않으며, Game Day 전후 Namespace annotation 변경은 별도 Git 커밋과 cloud 관찰 증거로
+확인합니다.
+
+다음 명령은 구조·스키마 계약을 검사하는 `[STATIC]` 검증입니다.
+
+```bash
+bash tests/test-all.sh
+bash scripts/build-incident-index.sh --fixture tests/fixtures/incident-index/static-structure.json
+bash tests/cleanup-contract.sh --all
+scripts/package-chart.sh /tmp/argocd-gitops-chart-package
+```
+
+정적 fixture PASS는 실제 Chaos 복구, Argo 동기화, PSS admission, Snapshot restore,
+External Secrets refresh, 또는 cleanup 실행을 증명하지 않습니다. 실제 incident index는
+검토된 non-fixture lifecycle artifact를 재해시한 `evidence/incidents/index.json`만
+생성하며, Ch26 freeze/removal 기록도 live read-only capture에서만
+`evidenceGrade: CLOUD_RUNTIME`으로 기록합니다. Provider Secret은 GitOps가 삭제하지
+않고 canonical ownership inventory에서 보존·분류합니다.

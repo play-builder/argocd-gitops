@@ -1,0 +1,1 @@
+{"schemaVersion":"course.gitops-removal/v1","evidenceGrade":"CLOUD_RUNTIME","status":"REMOVED","remaining":{"rollouts":0,"deployments":0,"statefulSets":0,"jobs":0,"externalSecrets":0,"chaosResources":0},"retained":[{"kind":"PersistentVolumeClaim","name":"data"}]}

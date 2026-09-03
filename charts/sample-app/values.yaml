@@ -204,3 +204,14 @@ snapshot:
   captureEnabled: false
 maintenance:
   writersStopped: false
+
+chaos:
+  enabled: false
+  environment: dev
+  maximumDuration: 5m
+  targetLabels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: application
+
+courseCleanup:
+  workloadsDisabled: false

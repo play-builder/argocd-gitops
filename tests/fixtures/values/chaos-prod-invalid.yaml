@@ -1,0 +1,5 @@
+chaos:
+  enabled: true
+  environment: prod
+  maximumDuration: 5m
+  targetLabels: {app.kubernetes.io/component: application}

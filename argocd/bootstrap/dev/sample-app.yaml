@@ -14,8 +14,11 @@ spec:
           - environment: dev
             namespace: app-dev
             podSecurityVersion: v1.36
+            chaosInjectionEnabled: false
             valuesFile: envs/dev/values.yaml
             statefulValuesFile: envs/dev/stateful-values.yaml
+            recoveryValuesFile: envs/dev/recovery-values.yaml
+            chaosValuesFile: envs/dev/chaos-values.yaml
   template:
     metadata:
       name: "sample-app-{{ .environment }}"
@@ -32,7 +35,16 @@ spec:
           valueFiles:
             - "../../{{ .valuesFile }}"
             - "../../{{ .statefulValuesFile }}"
-            - "../../envs/dev/recovery-values.yaml"
+            - "../../{{ .recoveryValuesFile }}"
+            - "../../{{ .chaosValuesFile }}"
+      templatePatch: |
+        {{- if and (eq .environment "dev") .chaosInjectionEnabled }}
+        spec:
+          syncPolicy:
+            managedNamespaceMetadata:
+              annotations:
+                chaos-mesh.org/inject: enabled
+        {{- end }}
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ .namespace }}"

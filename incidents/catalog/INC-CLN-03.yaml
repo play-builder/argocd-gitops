@@ -1,0 +1,30 @@
+id: INC-CLN-03
+chapter: 26
+tier: Core-should
+scope:
+  environment: dev
+  namespaces: [app-dev]
+  forbiddenNamespaces: [app-prod, app-recovery, argocd, kube-system]
+maximumDuration: 5m
+inject:
+  manifest: tests/fixtures/incident-index/static-structure.json
+  action: reproduce-cln-03
+stop:
+  action: stop-incident-writers
+evidence:
+  baseline: [baseline-observation]
+  inject: [injection-accepted]
+  detect: [detection-signal]
+  mitigate: [mitigation-applied]
+  recover: [recovery-confirmed]
+  reconcile: [gitops-reconciled]
+  prevent: [prevention-test]
+  cleanup: [fault-resource-removed]
+preventionTest: tests/render-contract.sh --case network-policy
+cleanup:
+  labels:
+    course.playbuilder.io/incident: INC-CLN-03
+  action: remove-optional-writers-and-retained-state
+  externalSecretLifecycle:
+    targetSecretOwnerReferenceGC: true
+    providerSecretRetained: true
