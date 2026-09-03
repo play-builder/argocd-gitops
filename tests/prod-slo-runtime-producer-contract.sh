@@ -115,7 +115,7 @@ jq -e '
 ' "$static_output" >/dev/null || fail 'static runtime adapter did not preserve canonical live-selection output'
 [[ "$before" == "$(fingerprint)" ]] || fail 'static runtime adapter changed canonical runtime evidence'
 
-for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn; do
+for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse malformed-cluster-arn promotion-ecr-double-slash promotion-attestation-alpha promotion-calendar-invalid; do
   runtime="$tmp_root/runtime-$label"
   cp -R "$fake_runtime" "$runtime"
   case "$label" in
@@ -139,6 +139,9 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
       jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
       jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
       ;;
+    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"' "$runtime/promotion.yaml" ;;
+    promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"' "$runtime/promotion.yaml" ;;
+    promotion-calendar-invalid) yq -i '.issuedAt="2026-02-31T00:00:00Z"' "$runtime/promotion.yaml" ;;
   esac
   if run_static "$runtime" "$tmp_root/$label-output.json" >/dev/null 2>&1; then
     fail "static runtime adapter accepted $label"

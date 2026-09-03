@@ -16,10 +16,14 @@ validate_ready() {
   json=$(yq -o=json '.' "$evidence") || fail "DEV_READY is not valid YAML"
   REQUIRED="$required" jq -e 'keys | sort == (env.REQUIRED | fromjson | sort)' <<<"$json" >/dev/null || fail "DEV_READY does not match the canonical root schema"
   jq -e --arg now "$now" '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root |
     .workflow as $workflow |
     (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
-    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
     (.region | IN("ap-northeast-2","us-east-1")) and
@@ -32,8 +36,9 @@ validate_ready() {
     (.image | (keys | sort) == ["indexDigest","platforms","repository"]) and
     .image.platforms == ["linux/amd64","linux/arm64"] and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
+    ($ecr.name | length <= 256) and
     (.attestation | (keys | sort) == ["githubId","githubUrl","ociProvenanceDigest","ociSbomDigest"]) and
-    (.attestation.githubId | type == "string" and length > 0) and
+    (.attestation.githubId | type == "string" and test("^[0-9]+$")) and
     .attestation.githubUrl == ("https://github.com/" + $run.repository + "/attestations/" + .attestation.githubId) and
     (.attestation.ociSbomDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.attestation.ociProvenanceDigest | test("^sha256:[0-9a-f]{64}$")) and
@@ -41,6 +46,8 @@ validate_ready() {
     (.cluster | (keys | sort) == ["arn"]) and (.slo | (keys | sort) == ["evidenceId"]) and
     (.slo.evidenceId | type == "string" and length > 0) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    (.issuedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
+    ($now | canonical_utc_seconds) and
     ((.issuedAt | fromdateiso8601) <= ($now | fromdateiso8601) and ($now | fromdateiso8601) < (.expiresAt | fromdateiso8601))
   ' <<<"$json" >/dev/null || {
     if jq -e --arg now "$now" '($now | fromdateiso8601) >= (.expiresAt | fromdateiso8601)' <<<"$json" >/dev/null; then fail "DEV_READY evidence is expired"; fi
@@ -141,13 +148,18 @@ case_promotion() {
   baseline=$(jq -r '.image.indexDigest' "$baseline_file")
   [[ "$candidate" != "$baseline" ]] || fail "prod candidate digest differs from DEV_READY image.indexDigest"
   jq -e '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root |
-    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
     .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.image.repository | type == "string" and length > 0) and
+    ($ecr.name | length <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
     (.rollout.stableHash | type == "string" and length > 0) and
@@ -155,6 +167,7 @@ case_promotion() {
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    (.observedAt | canonical_utc_seconds) and
     (.observedAt | fromdateiso8601) <= now
   ' "$baseline_file" >/dev/null || fail "Prod baseline must prove stable ReplicaSet revision 1 at 100 percent"
   candidate_repository=$(yq -r '.image.repository' "$evidence")
@@ -268,6 +281,11 @@ workflow-runattempt|.workflow.runAttempt = 0
 workflow-runurl-id|.workflow.runUrl = "https://github.com/OWNER/cicd-course-sample-app/actions/runs/9999"
 workflow-runurl-repository|.workflow.runUrl = "https://github.com/OWNER/other-app/actions/runs/1001"
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
+ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"
+attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"
+issued-at-calendar|.issuedAt = "2026-02-31T00:00:00Z"
+expires-at-calendar|.expiresAt = "2026-02-31T02:00:00Z"
+issued-at-fraction|.issuedAt = "2026-09-03T00:30:00.000Z"
 CASES
   if (PROMOTION_REAL_PATH="$valid" BASELINE_REAL_PATH="$fixture_root/evidence/baseline-valid.json" NOW="$now" case_real_path) >/dev/null 2>&1; then
     fail "canonical promotion gate accepted caller-supplied fixture paths"

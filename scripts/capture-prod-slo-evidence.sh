@@ -36,14 +36,19 @@ done
 validate_record() {
   local file=$1 expected_grade=${2:-CLOUD_RUNTIME} observed_limit=${3:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
   jq -e --arg grade "$expected_grade" --arg observedLimit "$observed_limit" '
+    def canonical_utc_seconds:
+      . as $value |
+      type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+      (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root |
-    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+    (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["analysisRun","clusterArn","evidenceGrade","evidenceId","gitopsRevision","image","metricResults","observedAt","region","rollout","schemaVersion","source","status"] and
     .schemaVersion == "course.prod-slo/v1" and .evidenceGrade == $grade and .status == "PASS" and
     (.source | (keys | sort) == ["repository","sha"]) and (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.source.repository | test("^[^/]+/cicd-course-sample-app$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
+    ($ecr.name | length <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
     $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
     (.rollout | (keys | sort) == ["currentPodHash","name","phase","revision","stableHash","trafficWeight","uid"]) and
@@ -57,7 +62,9 @@ validate_record() {
       all(.measurements[]; (keys | sort) == ["finishedAt","phase","startedAt","value"] and
         (.phase | IN("Successful","Failed","Error")) and
         (.value | type == "string" and (try (tonumber | ((isnan or isinfinite) | not)) catch false)) and
+        (.startedAt | canonical_utc_seconds) and (.finishedAt | canonical_utc_seconds) and
         (.startedAt | fromdateiso8601) <= (.finishedAt | fromdateiso8601))) and
+    (.observedAt | canonical_utc_seconds) and ($observedLimit | canonical_utc_seconds) and
     (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601)
   ' "$file" >/dev/null || fail "Prod SLO evidence failed canonical metric or terminal-state validation"
 }
@@ -89,7 +96,13 @@ else
   require_exact_regular_file "$promotion" "$repository_root/envs/prod/promotion-evidence.yaml" "promotion evidence"
   require_exact_regular_file "$baseline" "$repository_root/evidence/prod/baseline.json" "Prod baseline"
 fi
-jq -en --arg now "$clock_now" '($now | fromdateiso8601) != null' >/dev/null ||
+jq -en --arg now "$clock_now" '
+  def canonical_utc_seconds:
+    . as $value |
+    type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+    (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+  $now | canonical_utc_seconds
+' >/dev/null ||
   fail "capture clock must be RFC3339 UTC"
 [[ -f "$promotion" && -f "$baseline" ]] || fail "promotion evidence and Prod baseline are required"
 for required in kubectl argocd aws git jq yq mktemp; do
@@ -106,10 +119,14 @@ local_git_revision=$(git -C "$repository_root" rev-parse HEAD)
 promotion_json=$(yq -o=json -I=0 '.' "$promotion") || fail "promotion evidence is not valid YAML"
 baseline_json=$(jq -c '.' "$baseline") || fail "Prod baseline is not valid JSON"
 jq -e --arg now "$clock_now" '
+  def canonical_utc_seconds:
+    . as $value |
+    type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+    (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
   . as $root |
   .workflow as $workflow |
   (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
-  (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+  (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
   (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["attestation","cluster","environment","expiresAt","gitops","image","issuedAt","region","schemaVersion","slo","sourceSha","workflow"] and
   .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
@@ -122,9 +139,10 @@ jq -e --arg now "$clock_now" '
   $run.id == $workflow.runId and
   (.image | (keys | sort) == ["indexDigest","platforms","repository"]) and
   (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
+  ($ecr.name | length <= 256) and
   .image.platforms == ["linux/amd64","linux/arm64"] and
   (.attestation | (keys | sort) == ["githubId","githubUrl","ociProvenanceDigest","ociSbomDigest"]) and
-  (.attestation.githubId | type == "string" and length > 0) and
+  (.attestation.githubId | type == "string" and test("^[0-9]+$")) and
   .attestation.githubUrl == ("https://github.com/" + $run.repository + "/attestations/" + .attestation.githubId) and
   (.attestation.ociSbomDigest | test("^sha256:[0-9a-f]{64}$")) and
   (.attestation.ociProvenanceDigest | test("^sha256:[0-9a-f]{64}$")) and
@@ -132,23 +150,31 @@ jq -e --arg now "$clock_now" '
   (.cluster | (keys | sort) == ["arn"]) and
   (.slo | (keys | sort) == ["evidenceId"]) and (.slo.evidenceId | type == "string" and length > 0) and
   $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+  (.issuedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
+  ($now | canonical_utc_seconds) and
   (.issuedAt | fromdateiso8601) <= ($now | fromdateiso8601) and
   ($now | fromdateiso8601) < (.expiresAt | fromdateiso8601)
 ' <<<"$promotion_json" >/dev/null || fail "promotion evidence is not canonical DEV_READY"
 jq -e --arg now "$clock_now" '
+  def canonical_utc_seconds:
+    . as $value |
+    type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
+    (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
   . as $root |
-  (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/.+$")) as $ecr |
+  (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
   (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
   .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
   (.image | (keys | sort) == ["indexDigest","repository"]) and
   (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
+  ($ecr.name | length <= 256) and
   (.gitopsRevision | test("^[0-9a-f]{40}$")) and
   (.rollout | (keys | sort) == ["revision","stableHash","trafficWeight"]) and
   (.rollout.stableHash | type == "string" and length > 0) and
   .rollout.revision == 1 and .rollout.trafficWeight == 100 and
   (.region | IN("ap-northeast-2","us-east-1")) and
   $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+  (.observedAt | canonical_utc_seconds) and ($now | canonical_utc_seconds) and
   (.observedAt | fromdateiso8601) <= ($now | fromdateiso8601)
 ' <<<"$baseline_json" >/dev/null || fail "Prod baseline is not a valid initial stable release"
 
