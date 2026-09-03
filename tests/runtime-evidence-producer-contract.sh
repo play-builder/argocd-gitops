@@ -138,6 +138,7 @@ for environment in dev prod; do
     printf '%s\n' '{"apiVersion":"v1","kind":"List","items":[]}' >"$runtime/$environment-$kind.json"
   done
 done
+: >"$runtime/prod-rollback-configmap-name.txt"
 for environment_namespace in dev-app-recovery prod-app-prod; do
   : >"$runtime/$environment_namespace-namespace.json"
   printf '%s\n' '{"apiVersion":"v1","kind":"List","items":[]}' >"$runtime/$environment_namespace-workloads.json"
@@ -287,6 +288,19 @@ if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$workload_runtime" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/existing-workload-removal.json" >/dev/null 2>&1; then
   fail 'static removal execution accepted a remaining workload'
+fi
+
+rollback_configmap_runtime="$tmp_root/cleanup-runtime-existing-rollback-configmap"
+cp -R "$runtime" "$rollback_configmap_runtime"
+jq -n '{apiVersion:"v1",kind:"Namespace",metadata:{name:"app-prod",uid:"namespace-prod-u-1"}}' \
+  >"$rollback_configmap_runtime/prod-app-prod-namespace.json"
+printf '%s\n' 'configmap/sample-app-rollback-candidates' \
+  >"$rollback_configmap_runtime/prod-rollback-configmap-name.txt"
+if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$rollback_configmap_runtime" \
+  bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
+    --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
+    --output "$tmp_root/existing-rollback-configmap-removal.json" >/dev/null 2>&1; then
+  fail 'static removal execution accepted a remaining rollback candidate ConfigMap'
 fi
 
 collision_root="$tmp_root/EKS-infra-collision"

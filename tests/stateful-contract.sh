@@ -39,6 +39,16 @@ yq eval -e '.database.enabled == false' "$repository_root/envs/dev/stateful-valu
   >/dev/null || fail "Dev Stateful opt-in must default to false"
 yq eval -e '.database.enabled == false' "$repository_root/envs/prod/stateful-values.yaml" \
   >/dev/null || fail "Prod Stateful opt-in must default to false"
+yq eval -e '
+  .database.migration.rollbackCandidates.enabled == false and
+  .database.migration.rollbackCandidates.configMapName == ""
+' "$repository_root/charts/sample-app/values.yaml" >/dev/null || \
+  fail "Rollback candidate handoff must default to disabled"
+yq eval -e '
+  .database.migration.rollbackCandidates.enabled == true and
+  .database.migration.rollbackCandidates.configMapName == "sample-app-rollback-candidates"
+' "$repository_root/envs/prod/values.yaml" >/dev/null || \
+  fail "Prod must opt into the fixed rollback candidate handoff"
 
 yq eval -e '
   .spec.generators[].list.elements[] |
@@ -56,6 +66,11 @@ yq eval -e '
 render_environment dev "$render_root/dev-stateless.yaml"
 assert_document_count "$render_root/dev-stateless.yaml" StatefulSet 0
 assert_document_count "$render_root/dev-stateless.yaml" Job 0
+render_environment prod "$render_root/prod-stateless.yaml"
+assert_document_count "$render_root/prod-stateless.yaml" Job 0
+if rg -q 'ROLLBACK_|rollback-candidates' "$render_root/prod-stateless.yaml"; then
+  fail "DB-disabled Prod render must not reference rollback candidate evidence"
+fi
 
 render_environment dev "$render_root/dev-stateful.yaml" \
   "$repository_root/envs/dev/stateful-values.yaml" \
@@ -126,6 +141,61 @@ for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yam
     .spec.ingress[0].ports[0].port == 5432
   ' "Database NetworkPolicy must select PostgreSQL and allow its configured port"
 done
+
+assert_document_count "$render_root/prod-stateful.yaml" ConfigMap 1
+yq eval-all -e '
+  [select(.kind == "ConfigMap" and .metadata.name == "sample-app-rollback-candidates")] | length == 0
+' "$render_root/prod-stateful.yaml" >/dev/null ||
+  fail "Helm must reference, not render, the out-of-band rollback candidate ConfigMap"
+
+yq eval-all -o=json '
+  select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+  .spec.template.spec.containers[] | select(.name == "migrate")
+' "$render_root/dev-stateful.yaml" | jq -e '
+  ([.env[].name | select(startswith("ROLLBACK_"))] | length) == 0 and
+  ([.volumeMounts[].name | select(. == "rollback-candidates")] | length) == 0
+' >/dev/null || fail "Dev migration Job must not consume Prod rollback evidence"
+
+yq eval-all -o=json '
+  select(.kind == "Job" and .metadata.name == "sample-app-migration")
+' "$render_root/prod-stateful.yaml" | jq -e '
+  .spec.template.spec as $pod |
+  ($pod.containers[] | select(.name == "migrate")) as $container |
+  ([ $container.env[] | select(.name | startswith("ROLLBACK_")) ] | sort_by(.name)) ==
+    ([
+      {name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"},
+      {name:"ROLLBACK_EXPECTED_CLUSTER_ARN",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"clusterArn"}}},
+      {name:"ROLLBACK_EXPECTED_ENVIRONMENT",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"environment"}}},
+      {name:"ROLLBACK_EXPECTED_GITOPS_REVISION",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"gitopsRevision"}}},
+      {name:"ROLLBACK_EXPECTED_REGION",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"region"}}},
+      {name:"ROLLBACK_EXPECTED_ROLLOUT_NAME",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"rolloutName"}}},
+      {name:"ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"sourceEvidenceDigest"}}}
+    ] | sort_by(.name)) and
+  ([ $container.volumeMounts[] | select(.name == "rollback-candidates") ] ==
+    [{name:"rollback-candidates",mountPath:"/var/run/course-evidence",readOnly:true}]) and
+  ([ $pod.volumes[] | select(.name == "rollback-candidates") ] == [{
+    name:"rollback-candidates",
+    configMap:{name:"sample-app-rollback-candidates",defaultMode:444,
+      items:[{key:"rollback-candidates.json",path:"rollback-candidates.json"}]}
+  }])
+' >/dev/null || fail "Prod migration Job must receive the exact read-only rollback candidate handoff"
+grep -Fq 'defaultMode: 0444' "$render_root/prod-stateful.yaml" ||
+  fail "Rollback candidate volume must render the Kubernetes 0444 file mode"
+
+printf '%s\n' \
+  'database:' \
+  '  enabled: true' \
+  '  migration:' \
+  '    rollbackCandidates:' \
+  '      enabled: true' \
+  '      configMapName: ""' >"$render_root/invalid-rollback-configmap.yaml"
+if render_environment prod "$render_root/invalid-rollback-configmap-render.yaml" \
+  "$render_root/invalid-rollback-configmap.yaml" 2>"$render_root/invalid-rollback-configmap.err"; then
+  fail "Prod migration render accepted an empty rollback candidate ConfigMap name"
+fi
+grep -Fq 'database.migration.rollbackCandidates.configMapName is required when rollback candidate handoff is enabled' \
+  "$render_root/invalid-rollback-configmap.err" ||
+  fail "Rollback candidate ConfigMap name failed for an unexpected reason"
 
 yq eval-all -o=json '
   select(.kind == "Rollout" and .metadata.name == "sample-app") |

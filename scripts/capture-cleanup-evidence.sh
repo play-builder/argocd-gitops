@@ -557,7 +557,7 @@ else
   }
 
   scan_namespace() {
-    local key=$1 environment=$2 context=$3 namespace=$4 namespace_json api_resources
+    local key=$1 environment=$2 context=$3 namespace=$4 namespace_json api_resources rollback_configmap
     verify_context "$environment" "$context"
     api_resources=$(kubectl --context "$context" api-resources -o name) || {
       echo "FAIL: unable to discover retained-object APIs in $environment" >&2
@@ -589,6 +589,17 @@ else
     }
     jq -n --argjson namespace "$namespace_json" '{apiVersion:"v1",kind:"List",items:[$namespace]}' \
       >"$tmp_dir/$key-namespaces.json"
+    if [[ "$key" == prod ]]; then
+      rollback_configmap=$(kubectl --context "$context" -n "$namespace" get configmap \
+        sample-app-rollback-candidates -o name --ignore-not-found) || {
+        echo "FAIL: unable to query the rollback candidate ConfigMap during removal" >&2
+        return 1
+      }
+      [[ -z "$rollback_configmap" ]] || {
+        echo "FAIL: rollback candidate ConfigMap remains after Contract 003 cleanup" >&2
+        return 1
+      }
+    fi
     kubectl --context "$context" get \
       rollouts.argoproj.io,deployments.apps,statefulsets.apps,jobs.batch,externalsecrets.external-secrets.io,podchaos.chaos-mesh.org,networkchaos.chaos-mesh.org \
       -n "$namespace" -o json >"$tmp_dir/$key-workloads.json" || {

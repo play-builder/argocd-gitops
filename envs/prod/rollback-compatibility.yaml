@@ -11,6 +11,11 @@ completedRollback:
       rolloutRevision: 3
       gitRevertSha: "4444444444444444444444444444444444444444"
       podTemplateHash: target-hash
+    - imageDigest: sha256:4444444444444444444444444444444444444444444444444444444444444444
+      productReadContract: v2prime
+      rolloutRevision: 4
+      gitRevertSha: "4444444444444444444444444444444444444444"
+      podTemplateHash: intermediate-hash
   replicaSetList:
     apiVersion: apps/v1
     kind: ReplicaSetList

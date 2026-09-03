@@ -60,6 +60,7 @@ case "$*" in
   'get testruns.k6.io -A -o json') emit "$FAKE_CLEANUP_DIR/$environment-load.json" ;;
   'get podchaos.chaos-mesh.org,networkchaos.chaos-mesh.org -A -o json') emit "$FAKE_CLEANUP_DIR/$environment-chaos.json" ;;
   'get volumesnapshotcontents.snapshot.storage.k8s.io -o json') emit "$FAKE_CLEANUP_DIR/$environment-snapshotcontents.json" ;;
+  '-n app-prod get configmap sample-app-rollback-candidates -o name --ignore-not-found') emit "$FAKE_CLEANUP_DIR/prod-rollback-configmap-name.txt" ;;
   'get namespace '*'-o json --ignore-not-found')
     namespace=$3
     emit "$FAKE_CLEANUP_DIR/$environment-$namespace-namespace.json"

@@ -167,6 +167,43 @@ strict required status check를 사용하므로 새로운 evidence가 먼저 mer
 갱신하고 이 검증을 다시 통과해야 합니다. PR merge만으로 배포되지는 않으며, 승인된 운영자가
 Prod Application을 Sync한 시점에 Canary가 시작됩니다.
 
+### Contract 003 rollback candidate handoff
+
+Stateful Prod에서 `003_contract_product_name.js`를 적용하는 promotion은 merge된 desired
+revision과 아직 Sync하지 않은 live rollback window를 함께 묶어야 합니다. Promotion PR을
+merge한 뒤 전체 Sync를 시작하기 전에 checkout을 그 merge commit에 맞추고 다음 producer를
+한 번 실행합니다.
+
+```bash
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$PROD_CLUSTER_NAME" \
+  bash scripts/capture-rollback-candidates-evidence.sh
+```
+
+Producer는 clean `HEAD == Argo desired revision`, manual/OutOfSync Application, 현재 EKS
+context, Rollout UID/stable hash, controller-owned non-Experiment ReplicaSet 전체를 fresh query한
+뒤 `envs/prod/rollback-compatibility.yaml`의 exact bytes SHA-256과 결속합니다. 그 결과는
+`course.rollback-candidates/v1`/`CLOUD_RUNTIME`으로 원자적 `0600` 파일에 기록되고,
+`app-prod/sample-app-rollback-candidates` immutable ConfigMap에도 exact bytes와 여섯 identity
+scalar로 저장됩니다. 이 ConfigMap은 Argo가 렌더하거나 prune하는 리소스가 아니며 Secret,
+token, password를 포함하지 않습니다. 기존 ConfigMap이 byte-for-byte 동일하면 재실행은
+idempotent하고, bytes/identity가 다르면 자동 overwrite/delete 없이 실패합니다.
+
+그 뒤에만 selective resource Sync가 아닌 `sample-app-prod` 전체 Sync를 실행합니다. Sync wave는
+PostgreSQL `-2`, migration hook Job `-1`, application Rollout `0`이며, migration Pod는 ConfigMap
+파일을 `0444`/read-only로 mount하고 여섯 expected identity를 같은 ConfigMap key에서 읽습니다.
+Job 성공은 Contract 003 gate가 DB에 기록되었다는 경계입니다. 성공한 Job의 completion time,
+exact mount/env, ConfigMap UID와 content SHA를 재확인한 뒤에만 다음 explicit cleanup을 실행합니다.
+
+```bash
+AWS_REGION="$AWS_REGION" EKS_CLUSTER_NAME="$PROD_CLUSTER_NAME" \
+  bash scripts/capture-rollback-candidates-evidence.sh cleanup
+```
+
+Cleanup은 관찰한 UID를 delete precondition으로 사용하고 삭제 후 부재를 다시 조회합니다. Ch26
+`capture-cleanup-evidence.sh removal`도 이 ConfigMap이 남아 있으면 `REMOVED` 증거를 발급하지
+않습니다. Fixture와 fake adapter 실행은 `[STATIC]`이며 canonical evidence나 live ConfigMap을
+생성·삭제하지 않습니다.
+
 Canonical AnalysisTemplate metric 이름은 `request-rate`와 `success-rate`입니다. Ch19의
 `scripts/capture-prod-slo-evidence.sh`는 실제 Rollout/AnalysisRun/Argo/AWS 조회를 다시 묶어
 성공한 두 metric과 모든 종료 measurement(이전 `Failed`/`Error` 포함)를 보존한 뒤

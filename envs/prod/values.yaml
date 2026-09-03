@@ -15,6 +15,10 @@ database:
   migrationImage:
     repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  migration:
+    rollbackCandidates:
+      enabled: true
+      configMapName: sample-app-rollback-candidates
 
 workload:
   kind: Rollout

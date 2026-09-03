@@ -106,6 +106,7 @@ validate_candidate_set() {
   local file=$1 rollback_json window hash revision count
   rollback_json=$(yq -o=json '.' "$file") || return 1
   jq -e '
+    def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     . as $root |
     .completedRollback as $r |
     ((keys | sort) == ["completedRollback","releaseLineage"] or
@@ -114,9 +115,9 @@ validate_candidate_set() {
     ($r.rollbackWindow | keys) == ["revisions"] and
     ($r.replicaSetList | keys | sort) == ["apiVersion","items","kind"] and
     $r.replicaSetList.apiVersion == "apps/v1" and $r.replicaSetList.kind == "ReplicaSetList" and
-    ($r.rolloutName | type == "string" and length > 0) and
-    ($r.rolloutUid | type == "string" and length > 0) and
-    ($r.stableHash | type == "string" and length > 0) and
+    ($r.rolloutName | nonblank) and
+    ($r.rolloutUid | nonblank) and
+    ($r.stableHash | nonblank) and
     ($root.releaseLineage | keys | sort) == ["v1Compatible","v201HotfixOrderTotal","v2FaultyOrderTotal","v2PrimeContractCompatible"] and
     all($root.releaseLineage[];
       (keys | sort) == ["indexDigest","sourceSha"] and
@@ -125,7 +126,7 @@ validate_candidate_set() {
     ([$root.releaseLineage[].sourceSha] | unique | length) == 4 and
     ([$root.releaseLineage[].indexDigest] | unique | length) == 4 and
     ($r.candidates | type == "array" and length > 0) and
-    ($r.targetHash | type == "string" and length > 0) and
+    ($r.targetHash | nonblank) and
     any($r.candidates[]; .podTemplateHash == $r.targetHash) and
     ([ $r.candidates[].podTemplateHash ] | unique | length) == ($r.candidates | length) and
     ([ $r.candidates[].rolloutRevision ] | unique | length) == ($r.candidates | length) and
@@ -135,7 +136,7 @@ validate_candidate_set() {
       .productReadContract == "v2prime" and
       (.rolloutRevision | type == "number" and floor == . and . >= 1) and
       (.gitRevertSha | test("^[0-9a-f]{40}$")) and
-      (.podTemplateHash | type == "string" and length > 0) and
+      (.podTemplateHash | nonblank) and
       .imageDigest == $root.releaseLineage.v2PrimeContractCompatible.indexDigest and
       .gitRevertSha == $root.releaseLineage.v2PrimeContractCompatible.sourceSha)
   ' <<<"$rollback_json" >/dev/null || return 1
@@ -234,7 +235,7 @@ case_rollback_edges() {
   local inside="$fixture_root/rollback/inside-window.json"
   local multi="$fixture_root/rollback/multi-candidate.json"
   local outside="$fixture_root/rollback/outside-window.json"
-  local fixture invalid
+  local fixture invalid label expression value
 
   validate_candidate_set "$inside" || fail "inside-window rollback fixture must remain within rollbackWindow"
   validate_candidate_set "$multi" || fail "all multi-candidate rollback entries must be independently eligible"
@@ -268,6 +269,22 @@ case_rollback_edges() {
   invalid="$render_root/rollback-noncanonical-revision.json"
   jq '.completedRollback.replicaSetList.items[0].metadata.annotations["rollout.argoproj.io/revision"] = "3.0"' "$inside" >"$invalid"
   validate_candidate_set "$invalid" >/dev/null 2>&1 && fail "noncanonical ReplicaSet revision annotation was accepted"
+
+  for label in ascii-space bom; do
+    value=' '
+    [[ "$label" == bom ]] && value=$(printf '\357\273\277')
+    while IFS='|' read -r identity expression; do
+      invalid="$render_root/rollback-$identity-$label.json"
+      jq --arg value "$value" "$expression" "$inside" >"$invalid"
+      validate_candidate_set "$invalid" >/dev/null 2>&1 &&
+        fail "rollback candidate set accepted $label-only $identity"
+    done <<'CASES'
+rollout-name|.completedRollback.rolloutName=$value | .completedRollback.replicaSetList.items[].metadata.ownerReferences[] |= if .kind=="Rollout" then .name=$value else . end
+rollout-uid|.completedRollback.rolloutUid=$value | .completedRollback.replicaSetList.items[].metadata.ownerReferences[] |= if .kind=="Rollout" then .uid=$value else . end
+stable-hash|.completedRollback.stableHash=$value | .completedRollback.replicaSetList.items[] |= if .metadata.name=="sample-app-stable" then .metadata.labels["rollouts-pod-template-hash"]=$value else . end
+target-and-candidate-hash|.completedRollback.targetHash=$value | .completedRollback.candidates[0].podTemplateHash=$value | .completedRollback.replicaSetList.items[] |= if .metadata.name=="sample-app-target" then .metadata.labels["rollouts-pod-template-hash"]=$value else . end
+CASES
+  done
 
   for fixture in "$fixture_root"/rollback/{malformed-owned-replicaset,missing-stable,missing-target,target-newer-than-stable}.json; do
     if validate_candidate_set "$fixture" >/dev/null 2>&1; then

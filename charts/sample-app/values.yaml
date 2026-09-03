@@ -111,6 +111,9 @@ database:
     enabled: true
     backoffLimit: 3
     activeDeadlineSeconds: 600
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""
   resources:
     requests:
       cpu: 100m
