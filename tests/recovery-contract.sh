@@ -76,7 +76,8 @@ case_restore_only() {
   ' "$repository_root/envs/dev/recovery-values.yaml" >/dev/null ||
     fail "baseline recovery values contain runtime identity or enable restore"
   bash "$renderer" --fixture \
-    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$generated" >/dev/null ||
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$generated" \
+    --now 2026-09-03T01:10:30Z >/dev/null ||
     fail "valid ready snapshot evidence was rejected"
   render_recovery "$manifest" "$generated"
   yq eval-all -o=json -I=0 '[select(.kind == "VolumeSnapshotContent")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.name == "sample-app-postgresql-recovery-content" and .[0].spec.driver == "ebs.csi.aws.com" and .[0].spec.sourceVolumeMode == "Filesystem" and .[0].spec.source.snapshotHandle == "snap-0123456789abcdef0" and .[0].spec.volumeSnapshotRef.namespace == "app-recovery" and .[0].spec.volumeSnapshotRef.name == "sample-app-postgresql-recovery-snapshot"' >/dev/null || fail "restore content lacks immutable driver/handle/local binding"
@@ -106,9 +107,28 @@ case_restore_only() {
 
 case_evidence_gate() {
   local output="$render_root/invalid-output.yaml" sentinel=unchanged fixture
+  if bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$output" \
+    >/dev/null 2>&1; then
+    fail "fixture renderer accepted snapshot evidence without an explicit clock"
+  fi
+  if bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$output" \
+    --now 2026-09-03T01:09:59Z >/dev/null 2>&1; then
+    fail "fixture renderer accepted future snapshot evidence"
+  fi
+  if bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$output" \
+    --now 2026-09-03T02:10:00Z >/dev/null 2>&1; then
+    fail "fixture renderer accepted expired snapshot evidence"
+  fi
+  if bash "$renderer" --now 2026-09-03T01:10:30Z >/dev/null 2>&1; then
+    fail "live renderer accepted a caller-controlled clock"
+  fi
   printf '%s\n' "$sentinel" >"$output"
   for fixture in snapshot-ready-fake-handle snapshot-ready-wrong-class snapshot-ready-normal-reader-role; do
-    if bash "$renderer" --fixture "$test_root/fixtures/recovery/$fixture.json" "$output" >/dev/null 2>&1; then
+    if bash "$renderer" --fixture "$test_root/fixtures/recovery/$fixture.json" "$output" \
+      --now 2026-09-03T01:10:30Z >/dev/null 2>&1; then
       fail "renderer accepted invalid evidence fixture $fixture"
     fi
     [[ "$(cat "$output")" == "$sentinel" ]] || fail "invalid evidence truncated the existing output"
