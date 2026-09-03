@@ -27,6 +27,31 @@ argocd/bootstrap/prod/          prod 클러스터만 읽는 root 구성
 dev Argo CD가 실수로 prod values를 배포하거나, prod Argo CD가 dev 자동화 정책을 상속하지
 않도록 경계를 나눴습니다.
 
+## Helm과 Kustomize의 적용 경계
+
+현재 애플리케이션과 외부 패키지는 Argo CD의 Helm source로 직접 렌더링하고,
+환경별 차이는 `valueFiles` 또는 `valuesObject`로 관리합니다. Kustomize는 Helm 렌더링
+결과를 후처리하지 않으며, bootstrap의 `ApplicationSet`, `AppProject`, namespace label,
+admission policy처럼 GitOps 제어 계층의 객체를 조합하고 패치하는 데 사용합니다.
+
+외부 Chart가 제공하는 values만으로 필수 보안·운영 설정을 표현할 수 없는 경우에는 해당
+Chart 하나에 한해 `helmCharts` 기반 Kustomize 렌더링 또는 격리된 Config Management
+Plugin을 검토합니다. 단순 label 추가처럼 values로 해결 가능한 요구에는 이 방식을
+도입하지 않습니다.
+
+예외 방식을 도입할 때는 다음 조건을 모두 만족해야 합니다.
+
+- upstream values로 필요한 필드를 설정할 수 없고, 그 필드가 필수 보안·운영 계약이다.
+- Chart 버전과 repository를 고정하고 CI에서 Helm 및 Kustomize 최종 산출물을 검증한다.
+- patch 대상이 사라지거나 이름이 바뀌면 upgrade 검증이 즉시 실패한다.
+- 영향 범위를 해당 Application으로 제한한다. 전역 `--enable-helm`은 모든 Kustomize
+  Application에 영향을 주므로 별도 위험 검토 없이 활성화하지 않는다.
+
+현재 외부 Chart인 External Secrets는 `valuesObject`로 필요한 설정을 충족하므로 예외
+연동을 사용하지 않습니다. 향후 Chart values에 없는 필수 설정이 생기면 첫 적용 후보로
+검토하되, 그전까지는 미완성 Kustomization이나 사용되지 않는 CMP 구성을 저장소에
+남기지 않습니다.
+
 ## 처음 한 번 바꿀 값
 
 다음 placeholder는 계정과 저장소가 만들어진 뒤 실제 값으로 교체합니다. `REPLACE_ME_REGION`은
