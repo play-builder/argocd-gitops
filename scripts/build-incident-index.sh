@@ -72,7 +72,10 @@ def fail(message):
     print(f"FAIL: {message}", file=sys.stderr)
     raise SystemExit(1)
 
-if not course_id.strip():
+def nonblank(value):
+    return isinstance(value, str) and any(not (character.isspace() or character == "\ufeff") for character in value)
+
+if not nonblank(course_id):
     fail("course ID must be nonblank")
 if not re.fullmatch(r"[0-9]{12}", account_id):
     fail("account ID must contain exactly 12 digits")
@@ -236,10 +239,10 @@ def artifact_record(record):
     if producer["revision"] != reviewed_revisions[producer["repository"]]:
         fail(f"{path.name} producer revision does not match the reviewed repository HEAD")
     subject = envelope.get("subject")
-    if not isinstance(subject, dict) or set(subject) != {"kind","id"} or not all(isinstance(subject.get(key), str) and subject[key].strip() for key in ("kind","id")):
+    if not isinstance(subject, dict) or set(subject) != {"kind","id"} or not all(nonblank(subject.get(key)) for key in ("kind","id")):
         fail(f"{path.name} subject identity is not exact")
     outcome = envelope.get("outcome")
-    if not isinstance(outcome, dict) or set(outcome) != {"status","summary"} or outcome.get("status") != "PASS" or not isinstance(outcome.get("summary"), str) or not outcome["summary"].strip():
+    if not isinstance(outcome, dict) or set(outcome) != {"status","summary"} or outcome.get("status") != "PASS" or not nonblank(outcome.get("summary")):
         fail(f"{path.name} outcome is not an exact completed result")
     if envelope.get("environment") not in {"dev","prod","shared"}:
         fail(f"{path.name} environment is not canonical")
@@ -340,7 +343,7 @@ def validate_db04(selected):
         expected_run_url = f"https://github.com/{canonical_repository}/actions/runs/{run_id}"
         if run_url != expected_run_url:
             fail(f"INC-DB-04/{scenario} workflow runUrl does not bind the canonical repository and runId")
-        if not isinstance(recovery.get("executionId"), str) or not recovery["executionId"].strip():
+        if not nonblank(recovery.get("executionId")):
             fail(f"INC-DB-04/{scenario} executionId must be nonblank")
         if not isinstance(recovery.get("gitopsRevision"), str) or not re.fullmatch(sha_pattern, recovery["gitopsRevision"]):
             fail(f"INC-DB-04/{scenario} gitopsRevision must be a 40-character lowercase SHA")
@@ -396,7 +399,7 @@ executed_ids = {incident_id for incident_id, _, _ in by_key}
 expected_not_run = set(ids) - executed_ids
 if set(not_run) != expected_not_run:
     fail("incident lifecycle manifest must explicitly classify every unexecuted incident as NOT_RUN")
-if any(not isinstance(reason, str) or not reason.strip() for reason in not_run.values()):
+if any(not nonblank(reason) for reason in not_run.values()):
     fail("every NOT_RUN incident requires an explicit nonblank reason")
 incidents = []
 phase_order = ("baseline","inject","detect","mitigate","recover","reconcile","prevent","cleanup")

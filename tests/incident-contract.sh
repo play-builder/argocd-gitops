@@ -173,6 +173,8 @@ for number, scenario in enumerate(scenarios, start=1):
         recovery_observed_at = "2026-09-03T01:01:30.123Z"
     elif db04_mismatch == "blank-execution-id" and scenario == "git-revert":
         execution_id = " "
+    elif db04_mismatch == "bom-execution-id" and scenario == "git-revert":
+        execution_id = "\ufeff"
     recovery = {
         "schemaVersion": "course.db04-recovery/v1",
         "evidenceGrade": grade,
@@ -270,6 +272,8 @@ if db04_mismatch == "missing-not-run":
     manifest["notRun"].pop(next(iter(manifest["notRun"])))
 elif db04_mismatch == "blank-not-run":
     manifest["notRun"][next(iter(manifest["notRun"]))] = " "
+elif db04_mismatch == "bom-not-run":
+    manifest["notRun"][next(iter(manifest["notRun"]))] = "\ufeff"
 if started_at != "MISSING":
     manifest["startedAt"] = started_at
 (target / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")) + "\n")
@@ -313,6 +317,12 @@ elif mutation == "outcome-extra":
     value["outcome"]["details"] = "unreviewed"
 elif mutation == "blank-summary":
     value["outcome"]["summary"] = " "
+elif mutation == "bom-summary":
+    value["outcome"]["summary"] = "\ufeff"
+elif mutation == "bom-subject-kind":
+    value["subject"]["kind"] = "\ufeff"
+elif mutation == "bom-subject-id":
+    value["subject"]["id"] = "\ufeff"
 elif mutation == "invalid-environment":
     value["environment"] = "staging"
 elif mutation == "invalid-observed-at":
@@ -452,7 +462,7 @@ case_db04_recovery_identity() {
     non-ecr-image-repository cross-region-image-repository foreign-account-image-repository \
     one-character-image-repository noncanonical-image-repository recovered-image-repository-mismatch \
     invalid-gitops-revision invalid-rollout-revision \
-    invalid-recovery-time fractional-recovery-time blank-execution-id stable-lineage-mismatch \
+    invalid-recovery-time fractional-recovery-time blank-execution-id bom-execution-id stable-lineage-mismatch \
     faulty-lineage-mismatch hotfix-lineage-mismatch; do
     make_runtime_bundle "$work/$variant" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z "$variant"
     if run_runtime_producer "$work/$variant" >/dev/null 2>&1; then
@@ -469,7 +479,7 @@ case_envelope_contract() {
   run_runtime_producer "$work/base" >/dev/null || fail "runtime producer rejected the exact incident envelope contract"
 
   for mutation in producer-extra producer-unknown producer-head-mismatch subject-extra \
-    outcome-extra blank-summary invalid-environment invalid-observed-at fractional-observed-at outside-index-window \
+    outcome-extra blank-summary bom-summary bom-subject-kind bom-subject-id invalid-environment invalid-observed-at fractional-observed-at outside-index-window \
     source-extra source-path-base phase-order mitigation-duration; do
     candidate="$work/$mutation"
     cp -R "$work/base" "$candidate"
@@ -485,7 +495,7 @@ case_not_run_contract() {
   work=$(mktemp -d)
   trap 'rm -rf -- "$work"' RETURN
 
-  for variant in missing-not-run blank-not-run; do
+  for variant in missing-not-run blank-not-run bom-not-run; do
     make_runtime_bundle "$work/$variant" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z "$variant"
     if run_runtime_producer "$work/$variant" >/dev/null 2>&1; then
       fail "runtime producer synthesized or accepted invalid NOT_RUN reason: $variant"
@@ -507,7 +517,7 @@ case_scenario_contract() {
 }
 
 case_scope_contract() {
-  local work label course_id account_id region
+  local work label course_id account_id region bom
   work=$(mktemp -d)
   trap 'rm -rf -- "$work"' RETURN
   while IFS='|' read -r label course_id account_id region; do
@@ -521,6 +531,12 @@ blank-course| |123456789012|us-east-1
 invalid-account|course-ci|1234|us-east-1
 unsupported-region|course-ci|123456789012|eu-west-1
 CASES
+  bom=$(printf '\357\273\277')
+  make_runtime_bundle "$work/bom-course" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z none \
+    "$bom" 123456789012 us-east-1
+  if run_runtime_producer "$work/bom-course" "$bom" 123456789012 us-east-1 >/dev/null 2>&1; then
+    fail "runtime producer accepted invalid index scope: bom-course"
+  fi
 }
 
 case_root_boundary() {
