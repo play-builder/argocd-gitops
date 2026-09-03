@@ -1,0 +1,7 @@
+database:
+  migration:
+    phase: initial
+    target: 001_initial_commerce
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""

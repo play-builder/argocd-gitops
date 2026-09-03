@@ -110,6 +110,8 @@ database:
     pullPolicy: IfNotPresent
   migration:
     enabled: true
+    phase: initial
+    target: 001_initial_commerce
     backoffLimit: 3
     activeDeadlineSeconds: 600
     rollbackCandidates:

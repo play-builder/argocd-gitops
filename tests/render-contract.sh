@@ -127,6 +127,15 @@ YAML
   project_allows_manifest "$prod_project" course-prod "$manifest" || \
     fail "prod Stateful render exceeds course-prod authorization"
 
+  local phase
+  for phase in initial expand contract finalize; do
+    manifest="$render_root/prod-$phase-project-scope.yaml"
+    render_environment prod "$manifest" "$fixture_root/stateful-policy-off.yaml" \
+      "$repository_root/envs/prod/migration-$phase-values.yaml"
+    project_allows_manifest "$prod_project" course-prod "$manifest" || \
+      fail "prod $phase migration render exceeds course-prod authorization"
+  done
+
   echo "PASS: rendered phase resources are a subset of environment AppProject scopes."
 }
 

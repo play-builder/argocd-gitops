@@ -1,0 +1,6 @@
+database:
+  migration:
+    target: 003_contract_product_name
+    rollbackCandidates:
+      enabled: true
+      configMapName: sample-app-rollback-candidates

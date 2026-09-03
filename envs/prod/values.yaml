@@ -17,8 +17,8 @@ database:
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   migration:
     rollbackCandidates:
-      enabled: true
-      configMapName: sample-app-rollback-candidates
+      enabled: false
+      configMapName: ""
 
 workload:
   kind: Rollout

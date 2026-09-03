@@ -222,6 +222,30 @@ validate_application_binding() {
     fail 'fresh Argo desired revision or pre-Sync state differs from rollback evidence'
 }
 
+validate_finalize_binding() {
+  local application revision
+  [[ -z $(git -C "$repository_root" status --porcelain --untracked-files=all -- . ':(exclude)evidence') ]] ||
+    fail 'GitOps source outside evidence/ must match the reviewed finalize commit'
+  revision=$(git -C "$repository_root" rev-parse HEAD) || fail 'unable to read the finalize GitOps revision'
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'finalize GitOps revision is not a full commit SHA'
+  application=$(argocd app get sample-app-prod -o json) ||
+    fail 'unable to re-query sample-app-prod before rollback evidence cleanup'
+  jq -e --arg revision "$revision" '
+    .metadata.name == "sample-app-prod" and
+    .status.sync.status == "Synced" and .status.sync.revision == $revision and
+    .status.health.status == "Healthy" and
+    ((.status.operationState.phase // "") | IN("", "Succeeded")) and
+    (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
+    ((.spec.syncPolicy.automated // null) == null) and
+    .spec.source.helm.valueFiles == [
+      "../../envs/prod/values.yaml",
+      "../../envs/prod/stateful-values.yaml",
+      "../../envs/prod/migration-finalize-values.yaml"
+    ]
+  ' <<<"$application" >/dev/null ||
+    fail 'Prod Application is not Synced and Healthy at the reviewed finalize revision'
+}
+
 validate_cluster_binding() {
   local evidence=$1 cluster live_endpoint kubeconfig kube_server
   cluster=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --output json) ||
@@ -263,6 +287,7 @@ write_configmap_payload() {
 cleanup_configmap() {
   local evidence=$1 cleanup_now=$2 existing uid job deleted payload delete_options
   validate_record "$evidence" CLOUD_RUNTIME
+  validate_finalize_binding
   validate_cluster_binding "$evidence"
   [[ $(kubectl auth can-i delete configmaps --namespace "$namespace") == yes ]] ||
     fail 'caller is not authorized to delete the rollback candidate ConfigMap'
@@ -301,23 +326,12 @@ cleanup_configmap() {
     ((.status.completionTime | fromdateiso8601) < ($evidence.expiresAt | fromdateiso8601)) and
     ((.status.completionTime | fromdateiso8601) <= ($now | fromdateiso8601)) and
     (.spec.template.spec.containers[] | select(.name == "migrate")) as $container |
-    ([ $container.env[] | select(.name | startswith("ROLLBACK_")) ] | sort_by(.name)) ==
-      ([
-        {name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"},
-        {name:"ROLLBACK_EXPECTED_CLUSTER_ARN",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"clusterArn"}}},
-        {name:"ROLLBACK_EXPECTED_ENVIRONMENT",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"environment"}}},
-        {name:"ROLLBACK_EXPECTED_GITOPS_REVISION",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"gitopsRevision"}}},
-        {name:"ROLLBACK_EXPECTED_REGION",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"region"}}},
-        {name:"ROLLBACK_EXPECTED_ROLLOUT_NAME",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"rolloutName"}}},
-        {name:"ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"sourceEvidenceDigest"}}}
-      ] | sort_by(.name)) and
-    ([ $container.volumeMounts[] | select(.name == "rollback-candidates") ] ==
-      [{name:"rollback-candidates",mountPath:"/var/run/course-evidence",readOnly:true}]) and
-    ([ .spec.template.spec.volumes[] | select(.name == "rollback-candidates") ] == [{
-      name:"rollback-candidates",configMap:{name:"sample-app-rollback-candidates",defaultMode:292,
-        items:[{key:"rollback-candidates.json",path:"rollback-candidates.json"}]}
-    }])
-  ' <<<"$job" >/dev/null || fail 'Contract 003 migration Job has not safely consumed the exact ConfigMap'
+    $container.command == ["node", "scripts/migrate.mjs"] and
+    $container.args == ["--target", "003_contract_product_name"] and
+    ([ $container.env[]? | select(.name | startswith("ROLLBACK_")) ] | length) == 0 and
+    ([ $container.volumeMounts[]? | select(.name == "rollback-candidates") ] | length) == 0 and
+    ([ .spec.template.spec.volumes[]? | select(.name == "rollback-candidates") ] | length) == 0
+  ' <<<"$job" >/dev/null || fail 'finalize migration Job is not complete or still consumes rollback evidence'
   delete_options=$(mktemp)
   jq -n --arg uid "$uid" \
     '{apiVersion:"v1",kind:"DeleteOptions",propagationPolicy:"Background",preconditions:{uid:$uid}}' \
@@ -359,12 +373,12 @@ if [[ "$mode" == cleanup ]]; then
     fail 'AWS_REGION must be ap-northeast-2 or us-east-1 for rollback ConfigMap cleanup'
   [[ ${EKS_CLUSTER_NAME:-} =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] ||
     fail 'EKS_CLUSTER_NAME is invalid for rollback ConfigMap cleanup'
-  for command in aws kubectl; do command -v "$command" >/dev/null || fail "$command is required for rollback ConfigMap cleanup"; done
+  for command in argocd aws git kubectl; do command -v "$command" >/dev/null || fail "$command is required for rollback ConfigMap cleanup"; done
   cleanup_configmap "$cleanup_evidence" "$cleanup_now"
   if [[ -n "$adapter_dir" ]]; then
     echo '[STATIC] simulated UID-bound rollback ConfigMap cleanup; no live cluster was changed.'
   else
-    echo "[CLOUD_RUNTIME] removed $namespace/$configmap_name after successful Contract 003 migration"
+    echo "[CLOUD_RUNTIME] removed $namespace/$configmap_name after successful finalize migration"
   fi
   exit 0
 fi

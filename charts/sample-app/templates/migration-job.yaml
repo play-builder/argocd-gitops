@@ -1,5 +1,6 @@
 {{- if and .Values.database.enabled .Values.database.migration.enabled (not .Values.maintenance.writersStopped) }}
 {{- $secretName := include "sample-app.databaseSecretName" . }}
+{{- $migrationTarget := required "database.migration.target is required when migration is enabled" .Values.database.migration.target }}
 {{- $rollbackConfigMapName := "" }}
 {{- if .Values.database.migration.rollbackCandidates.enabled }}
 {{- $rollbackConfigMapName = required "database.migration.rollbackCandidates.configMapName is required when rollback candidate handoff is enabled" .Values.database.migration.rollbackCandidates.configMapName }}
@@ -42,6 +43,7 @@ spec:
           image: {{ include "sample-app.migrationImage" . }}
           imagePullPolicy: {{ .Values.database.migrationImage.pullPolicy }}
           command: ["node", "scripts/migrate.mjs"]
+          args: ["--target", {{ $migrationTarget | quote }}]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

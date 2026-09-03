@@ -296,10 +296,31 @@ done
 cleanup_runtime="$tmp_root/runtime-cleanup"
 cp -R "$runtime" "$cleanup_runtime"
 jq '.metadata.uid="88888888-8888-8888-8888-888888888888"' "$created" >"$cleanup_runtime/existing-configmap.json"
+printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$cleanup_runtime/git-revision.txt"
+jq -n '{
+  metadata:{name:"sample-app-prod"},
+  spec:{
+    source:{
+      repoURL:"https://github.com/OWNER/argocd-gitops.git",
+      helm:{valueFiles:[
+        "../../envs/prod/values.yaml",
+        "../../envs/prod/stateful-values.yaml",
+        "../../envs/prod/migration-finalize-values.yaml"
+      ]}
+    },
+    syncPolicy:{}
+  },
+  status:{
+    sync:{status:"Synced",revision:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    health:{status:"Healthy"},
+    operationState:{phase:"Succeeded"}
+  }
+}' >"$cleanup_runtime/application.json"
 helm template sample-app "$repository_root/charts/sample-app" \
   --values "$repository_root/envs/prod/values.yaml" \
   --values "$repository_root/envs/prod/stateful-values.yaml" \
   --values "$test_root/fixtures/values/stateful-policy-on.yaml" \
+  --values "$repository_root/envs/prod/migration-finalize-values.yaml" \
   --set-string image.repository=example.invalid/sample-app \
   --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set-string database.migrationImage.repository=example.invalid/sample-app \
@@ -309,14 +330,20 @@ helm template sample-app "$repository_root/charts/sample-app" \
       .status={succeeded:1,failed:0,completionTime:"2026-09-03T01:05:00Z"}' \
     >"$cleanup_runtime/migration-job.json"
 
-for label in configmap-drift missing-uid failed-job early-job delete-denied; do
+for label in configmap-drift missing-uid app-outofsync app-wrong-revision app-wrong-phase \
+  failed-job early-job wrong-target stale-evidence delete-denied; do
   invalid_cleanup="$tmp_root/cleanup-$label"
   cp -R "$cleanup_runtime" "$invalid_cleanup"
   case "$label" in
     configmap-drift) jq '.data.region="us-east-1"' "$invalid_cleanup/existing-configmap.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/existing-configmap.json" ;;
     missing-uid) jq '.metadata.uid="\uFEFF"' "$invalid_cleanup/existing-configmap.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/existing-configmap.json" ;;
+    app-outofsync) jq '.status.sync.status="OutOfSync"' "$invalid_cleanup/application.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/application.json" ;;
+    app-wrong-revision) jq '.status.sync.revision="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$invalid_cleanup/application.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/application.json" ;;
+    app-wrong-phase) jq '.spec.source.helm.valueFiles[2]="../../envs/prod/migration-contract-values.yaml"' "$invalid_cleanup/application.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/application.json" ;;
     failed-job) jq '.status.succeeded=0 | .status.failed=1' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     early-job) jq '.status.completionTime="2026-09-03T00:59:58Z"' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
+    wrong-target) jq '.spec.template.spec.containers[0].args[1]="002_expand_product_display_name"' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
+    stale-evidence) jq '.spec.template.spec.containers[0].env += [{name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"}]' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     delete-denied) printf '%s\n' no >"$invalid_cleanup/configmap-delete-permission.txt" ;;
   esac
   if run_cleanup_fixture "$invalid_cleanup" "$cloud_fixture" >/dev/null 2>&1; then

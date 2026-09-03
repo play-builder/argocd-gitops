@@ -40,15 +40,44 @@ yq eval -e '.database.enabled == false' "$repository_root/envs/dev/stateful-valu
 yq eval -e '.database.enabled == false' "$repository_root/envs/prod/stateful-values.yaml" \
   >/dev/null || fail "Prod Stateful opt-in must default to false"
 yq eval -e '
+  .database.migration.target == "001_initial_commerce" and
   .database.migration.rollbackCandidates.enabled == false and
   .database.migration.rollbackCandidates.configMapName == ""
 ' "$repository_root/charts/sample-app/values.yaml" >/dev/null || \
   fail "Rollback candidate handoff must default to disabled"
 yq eval -e '
-  .database.migration.rollbackCandidates.enabled == true and
-  .database.migration.rollbackCandidates.configMapName == "sample-app-rollback-candidates"
+  .database.migration.rollbackCandidates.enabled == false and
+  .database.migration.rollbackCandidates.configMapName == ""
 ' "$repository_root/envs/prod/values.yaml" >/dev/null || \
-  fail "Prod must opt into the fixed rollback candidate handoff"
+  fail "Prod baseline must not require rollback candidate evidence"
+
+validate_migration_phase() {
+  local file=$1 phase=$2 target=$3 enabled=$4 configmap=$5
+  PHASE="$phase" TARGET="$target" ENABLED="$enabled" CONFIGMAP="$configmap" yq eval -e '
+    .database.migration.phase == strenv(PHASE) and
+    .database.migration.target == strenv(TARGET) and
+    .database.migration.rollbackCandidates.enabled == (strenv(ENABLED) == "true") and
+    .database.migration.rollbackCandidates.configMapName == strenv(CONFIGMAP)
+  ' "$file" >/dev/null
+}
+
+validate_migration_phase "$repository_root/envs/prod/migration-initial-values.yaml" \
+  initial 001_initial_commerce false "" || fail "initial migration phase is invalid"
+validate_migration_phase "$repository_root/envs/prod/migration-expand-values.yaml" \
+  expand 002_expand_product_display_name false "" || fail "expand migration phase is invalid"
+validate_migration_phase "$repository_root/envs/prod/migration-contract-values.yaml" \
+  contract 003_contract_product_name true sample-app-rollback-candidates || \
+  fail "contract migration phase is invalid"
+validate_migration_phase "$repository_root/envs/prod/migration-finalize-values.yaml" \
+  finalize 003_contract_product_name false "" || fail "finalize migration phase is invalid"
+if validate_migration_phase "$fixture_root/migration-contract-without-evidence.yaml" \
+  contract 003_contract_product_name true sample-app-rollback-candidates 2>/dev/null; then
+  fail "contract phase accepted missing rollback evidence"
+fi
+if validate_migration_phase "$fixture_root/migration-finalize-with-evidence.yaml" \
+  finalize 003_contract_product_name false "" 2>/dev/null; then
+  fail "finalize phase accepted stale rollback evidence"
+fi
 
 yq eval -e '
   .spec.generators[].list.elements[] |
@@ -62,6 +91,19 @@ yq eval -e '
   .statefulValuesFile == "envs/prod/stateful-values.yaml"
 ' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" >/dev/null || \
   fail "Prod ApplicationSet must consume the Prod Stateful opt-in file"
+yq eval -e '
+  .spec.generators[].list.elements[] |
+  select(.environment == "prod") |
+  .phaseValuesFile == "envs/prod/migration-initial-values.yaml"
+' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" >/dev/null || \
+  fail "Prod ApplicationSet must select the explicit initial migration phase"
+yq eval -o=json '.spec.template.spec.source.helm.valueFiles' \
+  "$repository_root/argocd/bootstrap/prod/sample-app.yaml" | jq -e '. == [
+    "../../{{ .valuesFile }}",
+    "../../{{ .statefulValuesFile }}",
+    "../../{{ .phaseValuesFile }}"
+  ]' >/dev/null || \
+  fail "Prod ApplicationSet must render environment, Stateful, then migration phase values"
 
 render_environment dev "$render_root/dev-stateless.yaml"
 assert_document_count "$render_root/dev-stateless.yaml" StatefulSet 0
@@ -77,7 +119,15 @@ render_environment dev "$render_root/dev-stateful.yaml" \
   "$fixture_root/stateful-policy-on.yaml"
 render_environment prod "$render_root/prod-stateful.yaml" \
   "$repository_root/envs/prod/stateful-values.yaml" \
-  "$fixture_root/stateful-policy-on.yaml"
+  "$fixture_root/stateful-policy-on.yaml" \
+  "$repository_root/envs/prod/migration-initial-values.yaml"
+
+for phase in initial expand contract finalize; do
+  render_environment prod "$render_root/prod-$phase.yaml" \
+    "$repository_root/envs/prod/stateful-values.yaml" \
+    "$fixture_root/stateful-policy-on.yaml" \
+    "$repository_root/envs/prod/migration-$phase-values.yaml"
+done
 
 database_image='docker.io/library/postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94'
 application_image='example.invalid/sample-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -100,12 +150,15 @@ for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yam
     .image == strenv(DATABASE_IMAGE)
   ' "PostgreSQL image must be pinned by digest"
 
-  assert_manifest "$manifest" '
-    select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+  yq eval-all -o=json '
+    select(.kind == "Job" and .metadata.name == "sample-app-migration")
+  ' "$manifest" | jq -e '
     .metadata.annotations["argocd.argoproj.io/sync-wave"] == "-1" and
     .metadata.annotations["argocd.argoproj.io/hook"] == "Sync" and
-    .metadata.annotations["argocd.argoproj.io/hook-delete-policy"] == "BeforeHookCreation"
-  ' "Migration Job must be a replaceable sync hook at wave -1"
+    .metadata.annotations["argocd.argoproj.io/hook-delete-policy"] == "BeforeHookCreation" and
+    .spec.template.spec.containers[0].command == ["node", "scripts/migrate.mjs"] and
+    .spec.template.spec.containers[0].args == ["--target", "001_initial_commerce"]
+  ' >/dev/null || fail "Migration Job must be a target-bound replaceable sync hook at wave -1"
 
   APPLICATION_IMAGE="$application_image" assert_manifest "$manifest" '
     select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app") |
@@ -156,9 +209,10 @@ yq eval-all -o=json '
   ([.volumeMounts[].name | select(. == "rollback-candidates")] | length) == 0
 ' >/dev/null || fail "Dev migration Job must not consume Prod rollback evidence"
 
+contract_manifest="$render_root/prod-contract.yaml"
 yq eval-all -o=json '
   select(.kind == "Job" and .metadata.name == "sample-app-migration")
-' "$render_root/prod-stateful.yaml" | jq -e '
+' "$contract_manifest" | jq -e '
   .spec.template.spec as $pod |
   ($pod.containers[] | select(.name == "migrate")) as $container |
   ([ $container.env[] | select(.name | startswith("ROLLBACK_")) ] | sort_by(.name)) ==
@@ -179,8 +233,35 @@ yq eval-all -o=json '
       items:[{key:"rollback-candidates.json",path:"rollback-candidates.json"}]}
   }])
 ' >/dev/null || fail "Prod migration Job must receive the exact read-only rollback candidate handoff"
-grep -Fq 'defaultMode: 0444' "$render_root/prod-stateful.yaml" ||
-  fail "Rollback candidate volume must render the Kubernetes 0444 file mode"
+grep -Fq 'defaultMode: 0444' "$contract_manifest" ||
+  fail "Contract rollback candidate volume must render the Kubernetes 0444 file mode"
+
+for phase_target in \
+  initial:001_initial_commerce:false \
+  expand:002_expand_product_display_name:false \
+  contract:003_contract_product_name:true \
+  finalize:003_contract_product_name:false; do
+  phase=${phase_target%%:*}
+  remainder=${phase_target#*:}
+  target=${remainder%%:*}
+  evidence=${remainder##*:}
+  yq eval-all -o=json '
+    select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+    .spec.template.spec.containers[0]
+  ' "$render_root/prod-$phase.yaml" | jq -e --arg target "$target" --argjson evidence "$evidence" '
+    .args == ["--target", $target] and
+    (([.env[] | select(.name | startswith("ROLLBACK_"))] | length) > 0) == $evidence and
+    (([.volumeMounts[]? | select(.name == "rollback-candidates")] | length) == 1) == $evidence
+  ' >/dev/null || fail "$phase migration phase target or evidence binding is invalid"
+done
+
+if render_environment prod "$render_root/migration-missing-target-render.yaml" \
+  "$fixture_root/stateful-policy-on.yaml" \
+  "$fixture_root/migration-missing-target.yaml" 2>"$render_root/migration-missing-target.err"; then
+  fail "migration render accepted an empty target"
+fi
+grep -Fq 'database.migration.target is required when migration is enabled' \
+  "$render_root/migration-missing-target.err" || fail "missing migration target failed for an unexpected reason"
 
 printf '%s\n' \
   'database:' \
