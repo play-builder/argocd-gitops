@@ -1,0 +1,24 @@
+cluster		Namespace
+cluster	gateway.networking.k8s.io	GatewayClass
+cluster	snapshot.storage.k8s.io	VolumeSnapshotContent
+namespace		ConfigMap
+namespace		PersistentVolumeClaim
+namespace		Service
+namespace		ServiceAccount
+namespace	apps	Deployment
+namespace	apps	StatefulSet
+namespace	argoproj.io	AnalysisTemplate
+namespace	argoproj.io	Rollout
+namespace	autoscaling	HorizontalPodAutoscaler
+namespace	batch	Job
+namespace	chaos-mesh.org	NetworkChaos
+namespace	chaos-mesh.org	PodChaos
+namespace	external-secrets.io	ExternalSecret
+namespace	external-secrets.io	SecretStore
+namespace	gateway.k8s.aws	LoadBalancerConfiguration
+namespace	gateway.k8s.aws	TargetGroupConfiguration
+namespace	gateway.networking.k8s.io	Gateway
+namespace	gateway.networking.k8s.io	HTTPRoute
+namespace	networking.k8s.io	NetworkPolicy
+namespace	policy	PodDisruptionBudget
+namespace	snapshot.storage.k8s.io	VolumeSnapshot

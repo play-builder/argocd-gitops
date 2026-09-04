@@ -1,0 +1,8 @@
+database:
+  enabled: true
+  migration:
+    phase: expand
+    target: 003_contract_product_name
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""

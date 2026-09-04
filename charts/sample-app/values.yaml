@@ -110,6 +110,8 @@ database:
     pullPolicy: IfNotPresent
   migration:
     enabled: true
+    phase: initial
+    target: 001_initial_commerce
     backoffLimit: 3
     activeDeadlineSeconds: 600
     rollbackCandidates:
@@ -171,9 +173,12 @@ rollout:
 
 telemetry:
   enabled: false
+  platformXrayEnabled: false
   serviceName: sample-app
   otlpEndpoint: ""
   otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""
 
 networkPolicy:
   enabled: false
@@ -192,7 +197,8 @@ networkPolicy:
 recovery:
   restoreEnabled: false
   namespace: app-recovery
-  snapshotClassName: ebs.csi.aws.com
+  readerRoleArn: ""
+  snapshotClassName: course-ebs-snapshots
   snapshotDriver: ebs.csi.aws.com
   snapshotContentName: sample-app-postgresql-recovery-content
   snapshotName: sample-app-postgresql-recovery-snapshot

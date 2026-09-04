@@ -8,6 +8,7 @@ render_root=$(mktemp -d "${TMPDIR:-/tmp}/gitops-recovery-contract.XXXXXX")
 trap 'rm -rf -- "$render_root"' EXIT
 source "$test_root/lib/render.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
+renderer="$repository_root/scripts/render-recovery-values.sh"
 
 render_recovery() {
   local output=$1 overlay=$2
@@ -64,15 +65,82 @@ case_quiesce_phases() {
 }
 
 case_restore_only() {
-  local manifest="$render_root/restore.yaml"
-  render_recovery "$manifest" "$repository_root/envs/dev/recovery-values.yaml"
-  yq eval-all -o=json -I=0 '[select(.kind == "VolumeSnapshotContent")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.name == "sample-app-postgresql-recovery-content" and .[0].spec.driver == "ebs.csi.aws.com" and .[0].spec.sourceVolumeMode == "Filesystem" and .[0].spec.source.snapshotHandle == "snap-0123456789abcdef" and .[0].spec.volumeSnapshotRef.namespace == "app-recovery" and .[0].spec.volumeSnapshotRef.name == "sample-app-postgresql-recovery-snapshot"' >/dev/null || fail "restore content lacks immutable driver/handle/local binding"
+  local manifest="$render_root/restore.yaml" generated="$render_root/recovery-values.yaml"
+  [[ -x "$renderer" ]] || fail "validated recovery values renderer is missing"
+  yq eval -e '
+    .recovery.restoreEnabled == false and
+    .recovery.snapshotClassName == "course-ebs-snapshots" and
+    .recovery.snapshotDriver == "ebs.csi.aws.com" and
+    .recovery.snapshotHandle == "" and
+    .recovery.readerRoleArn == ""
+  ' "$repository_root/envs/dev/recovery-values.yaml" >/dev/null ||
+    fail "baseline recovery values contain runtime identity or enable restore"
+  bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$generated" \
+    --now 2026-09-03T01:10:30Z >/dev/null ||
+    fail "valid ready snapshot evidence was rejected"
+  render_recovery "$manifest" "$generated"
+  yq eval-all -o=json -I=0 '[select(.kind == "VolumeSnapshotContent")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.name == "sample-app-postgresql-recovery-content" and .[0].spec.driver == "ebs.csi.aws.com" and .[0].spec.sourceVolumeMode == "Filesystem" and .[0].spec.source.snapshotHandle == "snap-0123456789abcdef0" and .[0].spec.volumeSnapshotRef.namespace == "app-recovery" and .[0].spec.volumeSnapshotRef.name == "sample-app-postgresql-recovery-snapshot"' >/dev/null || fail "restore content lacks immutable driver/handle/local binding"
   yq eval-all -o=json -I=0 '[select(.kind == "PersistentVolumeClaim" and .metadata.name == "sample-app-postgresql-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.namespace == "app-recovery" and .[0].spec.dataSource.kind == "VolumeSnapshot" and .[0].spec.dataSource.name == "sample-app-postgresql-recovery-snapshot"' >/dev/null || fail "recovery PVC is not isolated to local snapshot"
   yq eval-all -o=json -I=0 '[select(.kind == "ExternalSecret" and .metadata.name == "sample-app-db-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.namespace == "app-recovery" and .[0].spec.secretStoreRef.name == "aws-secrets-manager-recovery" and .[0].spec.target.name == "sample-app-db-recovery" and .[0].spec.target.creationPolicy == "Owner" and .[0].spec.target.deletionPolicy == "Retain"' >/dev/null || fail "recovery DB Secret is not local Owner/Retain"
-  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].metadata.namespace == "app-recovery" and .[0].spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name == "sample-app-db-recovery"' >/dev/null || fail "recovery PostgreSQL does not consume local DB Secret"
+  yq eval-all -o=json -I=0 '[select(.kind == "SecretStore" and .metadata.name == "aws-secrets-manager-recovery")]' "$manifest" | jq -e 'length == 1 and .[0].spec.provider.aws.auth.jwt.serviceAccountRef.name == "sample-app-recovery-secret-reader"' >/dev/null || fail "recovery SecretStore is not bound to the IRSA reader ServiceAccount"
+  yq eval-all -o=json -I=0 '[select(.kind == "ServiceAccount")]' "$manifest" | jq -e '
+    ([.[] | select(.metadata.name | startswith("sample-app-recovery"))] | length) == 2 and
+    ([.[] | select(.metadata.name == "sample-app-recovery-secret-reader" and
+      .metadata.annotations["eks.amazonaws.com/role-arn"] == "arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role" and
+      .automountServiceAccountToken == true)] | length) == 1 and
+    ([.[] | select(.metadata.name == "sample-app-recovery-postgresql" and
+      ((.metadata.annotations // {}) | has("eks.amazonaws.com/role-arn") | not) and
+      .automountServiceAccountToken == false)] | length) == 1
+  ' >/dev/null || fail "recovery SecretStore and PostgreSQL ServiceAccounts are not privilege-separated"
+  yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql-recovery")]' "$manifest" | jq -e '
+    length == 1 and .[0].metadata.namespace == "app-recovery" and
+    .[0].spec.template.spec.serviceAccountName == "sample-app-recovery-postgresql" and
+    .[0].spec.template.spec.automountServiceAccountToken == false and
+    .[0].spec.template.spec.serviceAccountName != "sample-app-recovery-secret-reader" and
+    .[0].spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name == "sample-app-db-recovery"
+  ' >/dev/null || fail "recovery PostgreSQL is not isolated from the IRSA reader identity"
   yq eval-all -o=json -I=0 '[select(.kind == "VolumeSnapshotContent" or .kind == "VolumeSnapshot" or .kind == "PersistentVolumeClaim" or (.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql-recovery"))]' "$manifest" | jq -e 'length == 4 and all(.[]; .metadata.labels["course.playbuilder.io/cleanup-scope"] == "recovery")' >/dev/null || fail "recovery objects lack cleanup identity"
   yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql")]' "$manifest" | jq -e 'length == 1 and .[0].spec.persistentVolumeClaimRetentionPolicy == {whenDeleted:"Retain",whenScaled:"Retain"}' >/dev/null || fail "source StatefulSet retention policy was changed"
   echo "PASS: isolated recovery resources and local Secret access are valid."
+}
+
+case_evidence_gate() {
+  local output="$render_root/invalid-output.yaml" sentinel=unchanged fixture
+  if bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$output" \
+    >/dev/null 2>&1; then
+    fail "fixture renderer accepted snapshot evidence without an explicit clock"
+  fi
+  if bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$output" \
+    --now 2026-09-03T01:09:59Z >/dev/null 2>&1; then
+    fail "fixture renderer accepted future snapshot evidence"
+  fi
+  if bash "$renderer" --fixture \
+    "$test_root/fixtures/recovery/snapshot-ready-valid.json" "$output" \
+    --now 2026-09-03T02:10:00Z >/dev/null 2>&1; then
+    fail "fixture renderer accepted expired snapshot evidence"
+  fi
+  if bash "$renderer" --now 2026-09-03T01:10:30Z >/dev/null 2>&1; then
+    fail "live renderer accepted a caller-controlled clock"
+  fi
+  printf '%s\n' "$sentinel" >"$output"
+  for fixture in snapshot-ready-fake-handle snapshot-ready-wrong-class snapshot-ready-normal-reader-role snapshot-ready-volume-handle-mismatch; do
+    if bash "$renderer" --fixture "$test_root/fixtures/recovery/$fixture.json" "$output" \
+      --now 2026-09-03T01:10:30Z >/dev/null 2>&1; then
+      fail "renderer accepted invalid evidence fixture $fixture"
+    fi
+    [[ "$(cat "$output")" == "$sentinel" ]] || fail "invalid evidence truncated the existing output"
+  done
+  yq -o=json '.' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
+    .recoveryOutputs == {
+      volumeSnapshotClassName:"volume_snapshot_class_name",
+      snapshotDriver:"snapshot_driver",
+      recoveryReaderRoleArn:"recovery_db_secret_reader_role_arn"
+    }
+  ' >/dev/null || fail "recovery consumer does not name the exact EKS platform outputs"
+  echo "PASS: recovery values renderer rejects fake, wrong-class, and shared-role evidence atomically."
 }
 
 case_ordering() {
@@ -88,7 +156,8 @@ case "$requested" in
   quiesce-phases) case_quiesce_phases ;;
   capture-only) case_capture_only ;;
   restore-only) case_restore_only ;;
+  evidence-gate) case_evidence_gate ;;
   ordering) case_ordering ;;
-  all) case_invalid_same_pvc; case_quiesce_phases; case_capture_only; case_restore_only; case_ordering ;;
-  *) echo "Usage: $0 --case invalid-same-pvc|quiesce-phases|capture-only|restore-only|ordering|all" >&2; exit 2 ;;
+  all) case_invalid_same_pvc; case_quiesce_phases; case_capture_only; case_restore_only; case_evidence_gate; case_ordering ;;
+  *) echo "Usage: $0 --case invalid-same-pvc|quiesce-phases|capture-only|restore-only|evidence-gate|ordering|all" >&2; exit 2 ;;
 esac

@@ -14,3 +14,18 @@ argoHealthCustomizations:
     healthyWhen: readyToUse=true with a bound content name
     requiredBeforeSyncWave: -2
     implementationOwner: EKS-infra
+recoveryOutputs:
+  volumeSnapshotClassName: volume_snapshot_class_name
+  snapshotDriver: snapshot_driver
+  recoveryReaderRoleArn: recovery_db_secret_reader_role_arn
+telemetryOutputs:
+  xrayEnabled: adot_xray_enabled
+  endpoint: otlp_http_traces_endpoint
+  protocol: otlp_traces_protocol
+  port: otlp_http_port
+  path: otlp_http_traces_path
+prometheusLabels:
+  - namespace
+  - pod
+  - app
+  - rollouts_pod_template_hash

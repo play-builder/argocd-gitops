@@ -1,0 +1,4 @@
+database:
+  enabled: true
+  migration:
+    target: ""

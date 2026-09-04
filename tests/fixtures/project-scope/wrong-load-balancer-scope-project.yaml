@@ -1,0 +1,11 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: wrong-load-balancer-scope
+spec:
+  clusterResourceWhitelist:
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
