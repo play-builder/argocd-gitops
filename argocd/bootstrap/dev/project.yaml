@@ -9,12 +9,9 @@ spec:
   description: Bootstrap and Phase A platform handoff resources in the dev cluster
   sourceRepos:
     - https://github.com/REPLACE_ME/argocd-gitops.git
-    - https://charts.external-secrets.io
   destinations:
     - server: https://kubernetes.default.svc
       namespace: argocd
-    - server: https://kubernetes.default.svc
-      namespace: external-secrets
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -53,11 +50,13 @@ spec:
       kind: Namespace
     - group: gateway.networking.k8s.io
       kind: GatewayClass
-    - group: gateway.k8s.aws
-      kind: LoadBalancerConfiguration
     - group: snapshot.storage.k8s.io
       kind: VolumeSnapshotContent
   namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
     - group: ""
       kind: ServiceAccount
     - group: ""
@@ -84,6 +83,14 @@ spec:
       kind: HTTPRoute
     - group: gateway.k8s.aws
       kind: TargetGroupConfiguration
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+    - group: snapshot.storage.k8s.io
+      kind: VolumeSnapshot
+    - group: chaos-mesh.org
+      kind: PodChaos
+    - group: chaos-mesh.org
+      kind: NetworkChaos
     - group: argoproj.io
       kind: Rollout
     - group: argoproj.io

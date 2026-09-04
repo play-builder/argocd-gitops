@@ -29,6 +29,116 @@ assert_document_count() {
   fi
 }
 
+project_allows_manifest() {
+  local project_manifest=$1
+  local project_name=$2
+  local rendered_manifest=$3
+  local registry="$test_root/fixtures/project-scope/resource-scopes.tsv"
+  local allowed resource api_version group kind scope
+
+  allowed=$(PROJECT="$project_name" yq eval-all -o=json '
+    select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
+  ' "$project_manifest" | jq -r '
+    [
+      (.spec.clusterResourceWhitelist[]? | ["cluster", .group, .kind]),
+      (.spec.namespaceResourceWhitelist[]? | ["namespace", .group, .kind])
+    ] | .[] | @tsv
+  ') || return 1
+
+  while IFS=$'\t' read -r api_version kind; do
+    [[ -n "$kind" ]] || continue
+    if [[ "$api_version" == */* ]]; then
+      group=${api_version%%/*}
+    else
+      group=""
+    fi
+    scope=$(awk -F '\t' -v group="$group" -v kind="$kind" \
+      '$2 == group && $3 == kind { print $1 }' "$registry")
+    [[ -n "$scope" ]] || {
+      echo "unregistered resource: $group/$kind" >&2
+      return 1
+    }
+    resource=$(printf '%s\t%s\t%s' "$scope" "$group" "$kind")
+    grep -Fqx "$resource" <<<"$allowed" || {
+      echo "unauthorized resource: $resource" >&2
+      return 1
+    }
+  done < <(yq eval-all -o=json -I=0 '
+    select(.apiVersion != null and .kind != null)
+  ' "$rendered_manifest" | jq -s -r '.[] | [.apiVersion, .kind] | @tsv' | sort -u)
+}
+
+case_project_scope() {
+  local synthetic="$render_root/project-scope-synthetic.yaml"
+  local dev_project="$repository_root/argocd/bootstrap/dev/project.yaml"
+  local prod_project="$repository_root/argocd/bootstrap/prod/project.yaml"
+  local manifest
+
+  cat >"$synthetic" <<'YAML'
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: contract}
+---
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata: {name: contract}
+YAML
+  if project_allows_manifest \
+    "$test_root/fixtures/project-scope/missing-configmap-project.yaml" missing-configmap "$synthetic" 2>/dev/null; then
+    fail "project without ConfigMap permission accepted the rendered resource"
+  fi
+  if project_allows_manifest \
+    "$test_root/fixtures/project-scope/wrong-load-balancer-scope-project.yaml" wrong-load-balancer-scope "$synthetic" 2>/dev/null; then
+    fail "project accepted namespaced LoadBalancerConfiguration as a cluster resource"
+  fi
+
+  manifest="$render_root/dev-stateless-project-scope.yaml"
+  render_environment dev "$manifest"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev stateless render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-stateful-project-scope.yaml"
+  render_environment dev "$manifest" "$fixture_root/stateful-policy-off.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev Stateful render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-snapshot-project-scope.yaml"
+  render_environment dev "$manifest" "$repository_root/envs/dev/snapshot-capture-values.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev snapshot render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-recovery-project-scope.yaml"
+  render_environment dev "$manifest" "$repository_root/envs/dev/recovery-values.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev recovery render exceeds course-dev authorization"
+
+  manifest="$render_root/dev-chaos-project-scope.yaml"
+  render_environment dev "$manifest" "$repository_root/envs/dev/chaos-values.yaml"
+  project_allows_manifest "$dev_project" course-dev "$manifest" || \
+    fail "dev Chaos render exceeds course-dev authorization"
+
+  manifest="$render_root/prod-stateless-project-scope.yaml"
+  render_environment prod "$manifest"
+  project_allows_manifest "$prod_project" course-prod "$manifest" || \
+    fail "prod stateless render exceeds course-prod authorization"
+
+  manifest="$render_root/prod-stateful-project-scope.yaml"
+  render_environment prod "$manifest" "$fixture_root/stateful-policy-off.yaml"
+  project_allows_manifest "$prod_project" course-prod "$manifest" || \
+    fail "prod Stateful render exceeds course-prod authorization"
+
+  local phase
+  for phase in initial expand contract finalize; do
+    manifest="$render_root/prod-$phase-project-scope.yaml"
+    render_environment prod "$manifest" "$fixture_root/stateful-policy-off.yaml" \
+      "$repository_root/envs/prod/migration-$phase-values.yaml"
+    project_allows_manifest "$prod_project" course-prod "$manifest" || \
+      fail "prod $phase migration render exceeds course-prod authorization"
+  done
+
+  echo "PASS: rendered phase resources are a subset of environment AppProject scopes."
+}
+
 run_case() {
   local case_name=$1
   local expected_network_policies
@@ -178,19 +288,30 @@ case_network_policy() {
 }
 
 case_telemetry() {
-  local dev_stateless="$render_root/dev-stateless-telemetry.yaml"
-  local prod_stateless="$render_root/prod-stateless-telemetry.yaml"
-  local environment manifest namespace
+  local dev_baseline="$render_root/dev-baseline-telemetry.yaml"
+  local prod_baseline="$render_root/prod-baseline-telemetry.yaml"
+  local dev_ready="$render_root/dev-platform-ready-telemetry.yaml"
+  local prod_ready="$render_root/prod-platform-ready-telemetry.yaml"
+  local stateful="$render_root/dev-stateful-identity.yaml"
+  local environment manifest namespace invalid_fixture invalid_name
 
-  render_environment dev "$dev_stateless" "$fixture_root/stateless-policy-off.yaml"
-  render_environment prod "$prod_stateless" "$fixture_root/stateless-policy-off.yaml"
+  render_environment dev "$dev_baseline" "$fixture_root/stateless-policy-off.yaml"
+  render_environment prod "$prod_baseline" "$fixture_root/stateless-policy-off.yaml"
+
+  assert_document_count "$dev_baseline" ConfigMap 0
+  assert_document_count "$prod_baseline" ConfigMap 0
+
+  render_environment dev "$dev_ready" "$fixture_root/stateless-policy-off.yaml" \
+    "$fixture_root/telemetry-platform-ready.yaml"
+  render_environment prod "$prod_ready" "$fixture_root/stateless-policy-off.yaml" \
+    "$fixture_root/telemetry-platform-ready.yaml"
 
   for environment in dev prod; do
     if [[ "$environment" == "dev" ]]; then
-      manifest="$dev_stateless"
+      manifest="$dev_ready"
       namespace=app-dev
     else
-      manifest="$prod_stateless"
+      manifest="$prod_ready"
       namespace=app-prod
     fi
 
@@ -228,7 +349,72 @@ case_telemetry() {
     ' >/dev/null || fail "$environment workload lacks correlated stateless telemetry inputs"
   done
 
-  echo "PASS: Stateless telemetry correlates metrics, logs, and traces without DB runtime claims."
+  for invalid_name in xray-inactive wrong-protocol wrong-path; do
+    invalid_fixture="$fixture_root/telemetry-$invalid_name.yaml"
+    if render_environment dev "$render_root/telemetry-$invalid_name-render.yaml" \
+      "$fixture_root/stateless-policy-off.yaml" "$invalid_fixture" \
+      2>"$render_root/telemetry-$invalid_name.err"; then
+      fail "telemetry accepted the $invalid_name platform contract"
+    fi
+    case "$invalid_name" in
+      xray-inactive)
+        grep -Fq 'telemetry.platformXrayEnabled must be true' \
+          "$render_root/telemetry-$invalid_name.err" || \
+          fail "inactive X-Ray contract failed for an unexpected reason"
+        ;;
+      wrong-protocol)
+        grep -Fq 'telemetry.otlpProtocol must be http/protobuf' \
+          "$render_root/telemetry-$invalid_name.err" || \
+          fail "invalid OTLP protocol failed for an unexpected reason"
+        ;;
+      wrong-path)
+        grep -Fq 'telemetry.otlpTracesPath must be /v1/traces' \
+          "$render_root/telemetry-$invalid_name.err" || \
+          fail "invalid OTLP traces path failed for an unexpected reason"
+        ;;
+    esac
+  done
+
+  yq eval-all -o=json '
+    select(.kind == "Deployment" and .metadata.name == "sample-app") |
+    .spec.template.spec.securityContext
+  ' "$dev_ready" | jq -e '
+    .runAsUser == 10001 and .runAsGroup == 10001 and .fsGroup == 10001
+  ' >/dev/null || fail "application Pod identity is not 10001:10001"
+
+  render_environment dev "$stateful" "$fixture_root/stateful-policy-off.yaml"
+  yq eval-all -o=json '
+    select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+    .spec.template.spec
+  ' "$stateful" | jq -e '
+    .securityContext.runAsUser == 10001 and
+    .securityContext.runAsGroup == 10001 and
+    .securityContext.fsGroup == 10001 and
+    any(.volumes[]; .name == "tmp" and .emptyDir == {})
+  ' >/dev/null || fail "migration Job identity and writable volume ownership are not 10001:10001"
+
+  yq -o=json '.telemetryOutputs' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
+    .xrayEnabled == "adot_xray_enabled" and
+    .endpoint == "otlp_http_traces_endpoint" and
+    .protocol == "otlp_traces_protocol" and
+    .port == "otlp_http_port" and
+    .path == "otlp_http_traces_path"
+  ' >/dev/null || fail "platform telemetry output names do not match the EKS producer"
+
+  yq -o=json '.prometheusLabels' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
+    . == ["namespace", "pod", "app", "rollouts_pod_template_hash"]
+  ' >/dev/null || fail "AMP label interface does not match the AnalysisTemplate selectors"
+
+  yq eval-all -o=json '
+    select(.kind == "AnalysisTemplate" and .metadata.name == "sample-app-success-rate")
+  ' "$prod_ready" | jq -e '
+    ([.spec.metrics[].provider.prometheus.query] | join("\n")) as $queries |
+    ($queries | contains("app=\"sample-app\"")) and
+    ($queries | contains("namespace=\"app-prod\"")) and
+    ($queries | contains("rollouts_pod_template_hash="))
+  ' >/dev/null || fail "AnalysisTemplate selectors do not match the AMP label interface"
+
+  echo "PASS: Telemetry requires a complete X-Ray platform contract and runtime identities match the image."
 }
 
 case_secret_reload() {
@@ -284,13 +470,13 @@ case_secret_reload() {
     yq eval-all -o=json '
       select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app")
     ' "$manifest" | jq -e '
+      (.spec.template.spec.containers[0].env |
+        map(select(.name == "DB_HOST" or .name == "DB_PORT" or .name == "DB_NAME" or
+          .name == "DB_USER" or .name == "DB_PASSWORD"))) as $db_env |
       .metadata.annotations["secret.reloader.stakater.com/reload"] == "sample-app-runtime" and
       ([.metadata.annotations[]] | index("sample-app-db")) == null and
       .spec.template.spec.containers[0].envFrom ==
         [{"secretRef":{"name":"sample-app-runtime"}}] and
-      (.spec.template.spec.containers[0].env |
-        map(select(.name == "DB_HOST" or .name == "DB_PORT" or .name == "DB_NAME" or
-          .name == "DB_USER" or .name == "DB_PASSWORD"))) as $db_env |
       ($db_env | length) == 5 and
       all($db_env[]; .valueFrom.secretKeyRef.name == "sample-app-db")
     ' >/dev/null || fail "application Secret consumption or Reloader target is invalid"
@@ -355,7 +541,7 @@ requested_case=matrix
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--case <matrix|secret-reload|network-policy|telemetry|case-name>]" >&2
+  echo "Usage: $0 [--case <matrix|secret-reload|network-policy|telemetry|project-scope|case-name>]" >&2
   exit 2
 fi
 
@@ -365,6 +551,8 @@ elif [[ "$requested_case" == "network-policy" ]]; then
   case_network_policy
 elif [[ "$requested_case" == "telemetry" ]]; then
   case_telemetry
+elif [[ "$requested_case" == "project-scope" ]]; then
+  case_project_scope
 elif [[ "$requested_case" == "matrix" ]]; then
   run_case stateless-policy-off
   run_case stateless-policy-on

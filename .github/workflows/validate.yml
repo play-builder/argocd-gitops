@@ -75,6 +75,15 @@ jobs:
           kubectl kustomize argocd/bootstrap/dev > /tmp/argocd-dev.yaml
           kubectl kustomize argocd/bootstrap/prod > /tmp/argocd-prod.yaml
 
+      - name: Verify External Secrets Chart authorization
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm template external-secrets external-secrets/external-secrets --version 2.10.0 \
+            --namespace external-secrets --set installCRDs=true --set serviceMonitor.enabled=false \
+            > "$RUNNER_TEMP/external-secrets-2.10.0.yaml"
+          EXTERNAL_SECRETS_RENDERED_MANIFEST="$RUNNER_TEMP/external-secrets-2.10.0.yaml" \
+            bash tests/bootstrap-contract.sh --case external-secrets-project
+
       - name: Verify production rollback window
         run: |
           awk '
@@ -90,6 +99,9 @@ jobs:
 
       - name: Verify Stateful application contract
         run: bash tests/stateful-contract.sh
+
+      - name: Verify repository governance contract
+        run: bash tests/governance-contract.sh docs/github-ruleset.example.json
 
       - name: Run static course contracts
         run: bash tests/test-all.sh

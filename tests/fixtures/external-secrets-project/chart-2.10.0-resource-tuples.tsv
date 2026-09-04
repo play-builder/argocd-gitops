@@ -1,0 +1,10 @@
+cluster	apiextensions.k8s.io	CustomResourceDefinition
+cluster	rbac.authorization.k8s.io	ClusterRole
+cluster	rbac.authorization.k8s.io	ClusterRoleBinding
+cluster	admissionregistration.k8s.io	ValidatingWebhookConfiguration
+namespace	apps	Deployment
+namespace	rbac.authorization.k8s.io	Role
+namespace	rbac.authorization.k8s.io	RoleBinding
+namespace		Secret
+namespace		Service
+namespace		ServiceAccount

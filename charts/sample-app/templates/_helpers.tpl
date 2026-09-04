@@ -62,6 +62,27 @@ app.kubernetes.io/component: application
 {{- printf "%s-telemetry" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "sample-app.validateTelemetry" -}}
+{{- if .Values.telemetry.enabled -}}
+{{- if not .Values.telemetry.platformXrayEnabled -}}
+{{- fail "telemetry.platformXrayEnabled must be true when telemetry is enabled" -}}
+{{- end -}}
+{{- if ne .Values.telemetry.otlpProtocol "http/protobuf" -}}
+{{- fail "telemetry.otlpProtocol must be http/protobuf" -}}
+{{- end -}}
+{{- if ne (int .Values.telemetry.otlpPort) 4318 -}}
+{{- fail "telemetry.otlpPort must be 4318" -}}
+{{- end -}}
+{{- if ne .Values.telemetry.otlpTracesPath "/v1/traces" -}}
+{{- fail "telemetry.otlpTracesPath must be /v1/traces" -}}
+{{- end -}}
+{{- $endpoint := required "telemetry.otlpEndpoint is required when telemetry is enabled" .Values.telemetry.otlpEndpoint -}}
+{{- if not (regexMatch "^http://[a-z0-9]([-a-z0-9]*[a-z0-9])?\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?\\.svc\\.cluster\\.local:4318/v1/traces$" $endpoint) -}}
+{{- fail "telemetry.otlpEndpoint must be a cluster-local OTLP HTTP traces endpoint on port 4318" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "sample-app.validateNetworkPolicy" -}}
 {{- if .Values.networkPolicy.enabled -}}
 {{- if eq (len .Values.networkPolicy.gateway.sourceCidrs) 0 -}}

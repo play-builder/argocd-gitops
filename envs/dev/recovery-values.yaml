@@ -4,14 +4,15 @@ database:
   migration:
     enabled: true
 recovery:
-  restoreEnabled: true
+  restoreEnabled: false
   namespace: app-recovery
-  snapshotClassName: ebs.csi.aws.com
+  readerRoleArn: ""
+  snapshotClassName: course-ebs-snapshots
   snapshotDriver: ebs.csi.aws.com
   snapshotContentName: sample-app-postgresql-recovery-content
   snapshotName: sample-app-postgresql-recovery-snapshot
   pvcName: sample-app-postgresql-recovery
-  snapshotHandle: snap-0123456789abcdef
+  snapshotHandle: ""
   cleanupLabel: recovery
   source:
     namespace: app-dev
