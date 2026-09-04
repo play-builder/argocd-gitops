@@ -284,13 +284,13 @@ case_secret_reload() {
     yq eval-all -o=json '
       select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app")
     ' "$manifest" | jq -e '
+      (.spec.template.spec.containers[0].env |
+        map(select(.name == "DB_HOST" or .name == "DB_PORT" or .name == "DB_NAME" or
+          .name == "DB_USER" or .name == "DB_PASSWORD"))) as $db_env |
       .metadata.annotations["secret.reloader.stakater.com/reload"] == "sample-app-runtime" and
       ([.metadata.annotations[]] | index("sample-app-db")) == null and
       .spec.template.spec.containers[0].envFrom ==
         [{"secretRef":{"name":"sample-app-runtime"}}] and
-      (.spec.template.spec.containers[0].env |
-        map(select(.name == "DB_HOST" or .name == "DB_PORT" or .name == "DB_NAME" or
-          .name == "DB_USER" or .name == "DB_PASSWORD"))) as $db_env |
       ($db_env | length) == 5 and
       all($db_env[]; .valueFrom.secretKeyRef.name == "sample-app-db")
     ' >/dev/null || fail "application Secret consumption or Reloader target is invalid"
