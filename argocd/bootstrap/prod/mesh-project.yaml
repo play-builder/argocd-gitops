@@ -133,6 +133,10 @@
       {
         "group": "gateway.k8s.aws",
         "kind": "LoadBalancerConfiguration"
+      },
+      {
+        "group": "gateway.k8s.aws",
+        "kind": "TargetGroupConfiguration"
       }
     ],
     "orphanedResources": {

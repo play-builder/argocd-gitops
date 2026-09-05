@@ -27,6 +27,8 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
  routes=mesh.select{|d|d['kind']=='HTTPRoute'}
  check(routes.flat_map{|d|d['spec']['rules']}.flat_map{|r|r['backendRefs']}.all?{|r|r['name']=='istio-ingress-stable' && r['port']==80},'public management exposure or wrong ingress')
  waf=mesh.find{|d|d['kind']=='LoadBalancerConfiguration'}
+ target=mesh.find{|d|d['kind']=='TargetGroupConfiguration'}
+ check(target && target.dig('spec','targetReference','name')=='istio-ingress-stable' && target.dig('spec','defaultConfiguration','targetType')=='ip' && target.dig('spec','defaultConfiguration','healthCheckConfig','healthCheckPort')=='15021','ClusterIP ingress requires explicit IP target and gateway readiness check')
  check(waf.dig('spec','wafV2','webACL')=='REPLACE_FROM_EKS_MINI_COMMERCE_WAF_WEB_ACL_ARN','typed WAF reference absent')
 end
 puts 'PASS: revisioned Istio, one base/tag owner and scoped mesh/HTTPS edge'
