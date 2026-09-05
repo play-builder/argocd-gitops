@@ -1,4 +1,25 @@
-schemaVersion: course.platform-requirements/v1
+schemaVersion: platform.requirements/v2
+owners:
+  argocdGlobal: EKS-infra
+  sigstoreController: EKS-infra
+  applicationDesiredState: argocd-gitops
+  applicationAttestation: cicd-course-sample-app
+  argocdSecretStore: EKS-infra
+  argocdExternalSecrets: argocd-gitops
+argocd:
+  namespace: argocd
+  chartVersion: 10.4.3
+  controllerVersion: v3.5.2
+  prodRequiresHA: true
+  bootstrapMode: public
+  secretStoreRef: {kind: SecretStore, name: argocd-secrets}
+  handoffRenderer: scripts/render-platform-credentials.rb
+  sourceOutput: argocd
+sigstoreController:
+  sourceOutput: sigstore_controller
+  namespace: cosign-system
+  chartVersion: 0.10.5
+  appVersion: 0.13.1
 ownerRepository: EKS-infra
 applicationAttestation:
   repositoryId: 1352247019

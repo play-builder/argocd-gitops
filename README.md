@@ -362,3 +362,10 @@ IPv4 policy contract. Public-port `sourceCidrs` can contain a bounded public
 network; it does not grant access to management port 3001. Use the actual
 platform-approved ALB source ranges rather than assuming a private prefix is
 sufficient for the deployment.
+# Enterprise platform handoff (Batch 2)
+
+EKS owns Argo globals, the namespace-scoped `argocd-secrets` SecretStore, its IRSA/ServiceAccount, ESO and Sigstore controllers. GitOps owns only the three Argo ExternalSecrets. The current public repository bootstraps without repository credentials; private bootstrap requires pre-existing credentials. No secret values belong in this repository.
+
+Before a sync, assemble the EKS `argocd` and `sigstore_controller` outputs as `platform.requirements/v2`, then run `ruby scripts/render-platform-credentials.rb HANDOFF.json prod` and review its output as `argocd/bootstrap/prod/platform-credentials.yaml` (or `dev`). Committed `REPLACE_FROM_EKS_*` references intentionally cannot retrieve secrets. Source containers must already contain the declared properties. Wait for ESO/SecretStore Ready before Argo credential sync and for all three ExternalSecrets Ready before dependent applications. EKS supplies OIDC client ID as nonsecret configuration and exposes the client secret via `$argocd-oidc:clientSecret`.
+
+The pre-cutover legacy Application remains the sole owner of its namespace, SecretStore, GatewayClass and shared data resources. Phase A External Secrets Application remains manual/noncascading until runtime adoption evidence. No ownership transfer, secret hydration, SSO, admission or cluster sync has been executed.
