@@ -16,10 +16,13 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
  check(docs.count{|d|d['kind']=='TrustRoot'}==1,'GitHub TrustRoot missing')
  policies.each do |d|
   check(d['spec']['mode']==(env=='prod' ? 'enforce':'warn'),'incorrect enforcement mode')
+  check(d['spec']['authorities'].map{|a|a['name']}.sort==['github','public-good'],'public GitHub attestations need public-good trust authority')
   check(d['spec']['images']==[{'glob'=>'REPLACE_FROM_EKS_MINI_COMMERCE_ECR@sha256:*'}],'trusted digest scope missing')
-  auth=d['spec']['authorities'][0]
+  d['spec']['authorities'].each do |auth|
   check(auth['signatureFormat']=='bundle' && auth.dig('keyless','identities').length==2,'bundle cutover identity pair missing')
   check(auth['keyless']['identities'].all?{|i|i['issuer']=='https://token.actions.githubusercontent.com' && i['subject'].start_with?('https://github.com/play-builder/')},'wrong issuer/workflow')
+  check(auth['attestations']==d['spec']['authorities'][0]['attestations'],'public authority must enforce the same predicate')
+  end
  end
  check(policies.map{|d|d.dig('spec','authorities',0,'attestations',0,'predicateType')}.sort==['https://slsa.dev/provenance/v1','https://spdx.dev/Document/v2.3'],'two predicates required')
  # Local policy contract evaluation, not cryptographic admission verification.

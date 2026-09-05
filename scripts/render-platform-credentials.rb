@@ -13,6 +13,11 @@ begin
   raise 'EKS namespace-scoped SecretStore required' unless s.values_at('kind','name','namespace')==['SecretStore','argocd-secrets','argocd']
   raise 'invalid RBAC policy hash' unless a.fetch('rbacPolicyHash').match?(/\A[0-9a-f]{64}\z/)
   raise 'Sigstore prerequisite mismatch' unless c.values_at('namespace','chartVersion','appVersion')==['cosign-system','0.10.5','0.13.1']
+  repository=h.fetch('outputs').fetch('mini_commerce_ecr_repository_url')
+  raise 'typed ECR repository URL required' unless repository.match?(/\A[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/[a-z0-9][a-z0-9._\/-]*\z/)
+  routes=a.fetch('notifications').fetch('routes')
+  expected_routes={'paging'=>{'service'=>'pagerdutyv2','recipient'=>'platform-prod'},'deployment'=>{'service'=>'slack','recipient'=>'platform-deployments','secretKey'=>'slack-token'}}
+  raise 'notification route handoff mismatch' unless routes==expected_routes
   expected={
     'oidc'=>['argocd-oidc',{'clientSecret'=>'clientSecret'}],
     'notifications'=>['argocd-notifications-secret',{'pagerduty-integration-key'=>'pagerdutyIntegrationKey','slack-token'=>'slackToken'}],
@@ -40,4 +45,3 @@ begin
 rescue KeyError, ArgumentError, JSON::ParserError, RuntimeError => e
   warn "FAIL: #{e.message}"; exit 1
 end
-

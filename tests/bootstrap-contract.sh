@@ -37,7 +37,9 @@ assert_manifest() {
   local expression=$2
   local message=$3
 
-  yq eval-all -e "$expression" "$manifest" >/dev/null || fail "$message"
+  # Each expression selects one Kubernetes object. eval-all combines document
+  # contexts under boolean/variable expressions and grows rapidly with bootstrap size.
+  yq eval -e "$expression" "$manifest" >/dev/null || fail "$message"
 }
 
 case_namespace_pss() {

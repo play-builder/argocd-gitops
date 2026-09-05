@@ -25,6 +25,9 @@ check(validate(fixture), 'valid producer handoff rejected')
   ->(v) { v['argocd']['oidc']['properties']['clientSecret']='wrong' },
   ->(v) { v['argocd']['oidc']['targetName']='argocd-secret' },
   ->(v) { v['argocd']['notifications']['token']='literal-secret' },
+  ->(v) { v['argocd']['notifications'].delete('routes') },
+  ->(v) { v['argocd']['notifications']['routes']['deployment']['service']='pagerdutyv2' },
+  ->(v) { v['outputs'].delete('mini_commerce_ecr_repository_url') },
   ->(v) { v['sigstoreController']['namespace']='default' }
 ].each_with_index do |mutate, i|
   v=Marshal.load(Marshal.dump(fixture)); mutate.call(v)
@@ -42,4 +45,3 @@ end
 check(docs[0].dig('spec','target','template','metadata','labels','app.kubernetes.io/part-of')=='argocd','OIDC label absent')
 check(docs[2].dig('spec','target','template','metadata','labels','argocd.argoproj.io/secret-type')=='repo-creds','repository label absent')
 puts 'PASS: typed platform handoff rejects missing/malformed prerequisites and renders bounded credentials'
-

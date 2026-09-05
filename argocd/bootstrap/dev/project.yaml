@@ -5,7 +5,7 @@ metadata:
   name: platform-bootstrap-dev
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "-3"
+    argocd.argoproj.io/sync-wave: "-50"
 spec:
   description: Bootstrap and Phase A platform handoff resources in the dev cluster
   sourceRepos:

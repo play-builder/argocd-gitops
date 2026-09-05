@@ -357,12 +357,6 @@
         "hostname": "mini-commerce.prod.example.com",
         "port": 443,
         "protocol": "HTTPS",
-        "tls": {
-          "mode": "Terminate",
-          "options": {
-            "gateway.k8s.aws/certificate-arn": "REPLACE_WITH_APPROVED_ACM_CERTIFICATE_ARN"
-          }
-        },
         "allowedRoutes": {
           "namespaces": {
             "from": "Same"

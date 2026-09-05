@@ -4,6 +4,10 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
 %w[dev prod].each do |env|
  out,s=Open3.capture2e('kubectl','kustomize',"argocd/bootstrap/#{env}");check(s.success?,'bootstrap render failed')
  docs=YAML.load_stream(out); apps=docs.select{|d|d['kind']=='Application' && d.dig('spec','source','repoURL')=='https://blob.istio.io/istio-release/charts'}
+ docs.select{|d|d['kind']=='Application'}.each do |a|
+  owner=docs.find{|d|d['kind']=='AppProject' && d['metadata']['name']==a['spec']['project']}
+  check(owner && owner.dig('metadata','annotations','argocd.argoproj.io/sync-wave').to_i < a.dig('metadata','annotations','argocd.argoproj.io/sync-wave').to_i,'project must precede its earliest child Application')
+ end
  check(apps.length==5,'need one base, two istiod and two gateways')
  base=apps.select{|d|d.dig('spec','source','chart')=='base'}
  check(base.length==1 && base[0].dig('spec','source','targetRevision')=='1.31.0' && base[0].dig('spec','source','helm','valuesObject','defaultRevision')=='1-30-4','shared base revision wrong')
@@ -19,6 +23,7 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
  check(mesh.any?{|d|d['kind']=='NetworkPolicy'},'mesh traffic paths unbounded')
  edge=mesh.find{|d|d['kind']=='Gateway' && d['apiVersion'].start_with?('gateway.networking')}
  check(edge && edge['spec']['listeners'].all?{|l|l['protocol']=='HTTPS' && l['port']==443 && !l['hostname'].include?('*')},'public TLS listener invalid')
+ check(edge['spec']['listeners'].all?{|l|!l.key?('tls')},'LBC uses LoadBalancerConfiguration ACM certificates, not unsupported Gateway TLS fields')
  routes=mesh.select{|d|d['kind']=='HTTPRoute'}
  check(routes.flat_map{|d|d['spec']['rules']}.flat_map{|r|r['backendRefs']}.all?{|r|r['name']=='istio-ingress-stable' && r['port']==80},'public management exposure or wrong ingress')
  waf=mesh.find{|d|d['kind']=='LoadBalancerConfiguration'}

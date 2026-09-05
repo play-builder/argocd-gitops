@@ -41,6 +41,32 @@
             "predicateType": "https://slsa.dev/provenance/v1"
           }
         ]
+      },
+      {
+        "name": "public-good",
+        "signatureFormat": "bundle",
+        "keyless": {
+          "url": "https://fulcio.sigstore.dev",
+          "identities": [
+            {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": "https://github.com/play-builder/cicd-course-sample-app/.github/workflows/ci.yml@refs/heads/main"
+            },
+            {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": "https://github.com/play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "name": "require-slsa",
+            "predicateType": "https://slsa.dev/provenance/v1"
+          }
+        ],
+        "ctlog": {
+          "url": "https://rekor.sigstore.dev"
+        }
       }
     ]
   }
