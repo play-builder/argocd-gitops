@@ -1,0 +1,29 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "mesh-policies-prod",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-mesh-prod",
+    "source": {
+      "repoURL": "https://github.com/REPLACE_ME/argocd-gitops.git",
+      "targetRevision": "main",
+      "path": "platform/istio/overlays/prod"
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}

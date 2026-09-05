@@ -143,7 +143,7 @@ case_least_privilege() {
   render_bootstrap prod "$bootstrap_prod"
 
   for manifest in "$bootstrap_dev" "$bootstrap_prod"; do
-    assert_document_count "$manifest" AppProject 3
+    assert_document_count "$manifest" AppProject 4
     yq eval-all -o=json '[select(.kind == "AppProject")]' "$manifest" | jq -e '
       all(.[].spec.sourceRepos[]; . != "*") and
       all(.[].spec.destinations[]; .namespace != "*") and

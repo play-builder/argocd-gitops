@@ -15,7 +15,7 @@ fail() {
   exit 1
 }
 
-yq -e '.schemaVersion == "course.rename-aliases/v1" and (.entries | length) == 30 and ([.entries[] | select(.path != "" and .literal != "" and (.count | type == "!!int") and .count > 0 and .reason != "" and .removalEvidence == "course.rename-cutover/v1")] | length) == 30' "$allowlist" >/dev/null || fail "legacy migration allowlist shape is invalid"
+yq -e '.schemaVersion == "course.rename-aliases/v1" and (.entries | length) == 32 and ([.entries[] | select(.path != "" and .literal != "" and (.count | type == "!!int") and .count > 0 and .reason != "" and .removalEvidence == "course.rename-cutover/v1")] | length) == 32' "$allowlist" >/dev/null || fail "legacy migration allowlist shape is invalid"
 LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '[.entries[] | select(.path == "tests/fixtures/rename/live-cutover.yaml" and (.literal == strenv(LEGACY_APPLICATION) or .literal == strenv(LEGACY_PVC)))] | length == 2' "$allowlist" >/dev/null || fail "legacy migration allowlist must retain the live cutover identities"
 
 LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '

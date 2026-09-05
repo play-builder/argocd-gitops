@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "platform.mesh-migration/v1",
+  "initialMode": "PERMISSIVE",
+  "finalMode": "STRICT",
+  "currentTrafficProvider": "argoproj-labs/gatewayAPI",
+  "injectionOwner": "legacy-namespace-application",
+  "stages": [
+    "controller-and-edge-ready",
+    "dev-permissive-scoped-observation",
+    "candidate-reinjection",
+    "proxy-status-synced",
+    "strict-authz-traffic-check",
+    "native-rollouts-task-9"
+  ],
+  "retirementRequires": [
+    "CLOUD_RUNTIME-proxy-status",
+    "CLOUD_RUNTIME-SLO",
+    "CLOUD_RUNTIME-rollback",
+    "operator-approval"
+  ]
+}
+

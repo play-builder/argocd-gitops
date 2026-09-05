@@ -1,0 +1,253 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "istio-base-dev",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-35",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-mesh-dev",
+    "source": {
+      "repoURL": "https://blob.istio.io/istio-release/charts",
+      "chart": "base",
+      "targetRevision": "1.31.0",
+      "helm": {
+        "releaseName": "istio-base",
+        "valuesObject": {
+          "defaultRevision": "1-30-4"
+        }
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}
+---
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "istiod-stable-dev",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-30",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-mesh-dev",
+    "source": {
+      "repoURL": "https://blob.istio.io/istio-release/charts",
+      "chart": "istiod",
+      "targetRevision": "1.30.4",
+      "helm": {
+        "releaseName": "istiod-stable",
+        "valuesObject": {
+          "revision": "1-30-4",
+          "revisionTags": [
+            "dev-stable"
+          ],
+          "meshConfig": {
+            "accessLogFile": "/dev/stdout",
+            "enablePrometheusMerge": true,
+            "defaultConfig": {
+              "holdApplicationUntilProxyStarts": true
+            }
+          },
+          "pilot": {
+            "autoscaleMin": 1
+          }
+        }
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}
+---
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "istio-ingress-stable-dev",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-25",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-mesh-dev",
+    "source": {
+      "repoURL": "https://blob.istio.io/istio-release/charts",
+      "chart": "gateway",
+      "targetRevision": "1.30.4",
+      "helm": {
+        "releaseName": "istio-ingress-stable",
+        "valuesObject": {
+          "revision": "1-30-4",
+          "labels": {
+            "istio": "ingressgateway-stable"
+          },
+          "service": {
+            "type": "ClusterIP",
+            "ports": [
+              {
+                "name": "status-port",
+                "port": 15021,
+                "targetPort": 15021
+              },
+              {
+                "name": "http2",
+                "port": 80,
+                "targetPort": 8080
+              }
+            ]
+          },
+          "autoscaling": {
+            "minReplicas": 1,
+            "maxReplicas": 5
+          },
+          "serviceAccount": {
+            "name": "istio-ingress-stable"
+          }
+        }
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}
+---
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "istiod-candidate-dev",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-30",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-mesh-dev",
+    "source": {
+      "repoURL": "https://blob.istio.io/istio-release/charts",
+      "chart": "istiod",
+      "targetRevision": "1.31.0",
+      "helm": {
+        "releaseName": "istiod-candidate",
+        "valuesObject": {
+          "revision": "1-31-0",
+          "revisionTags": [],
+          "meshConfig": {
+            "accessLogFile": "/dev/stdout",
+            "enablePrometheusMerge": true,
+            "defaultConfig": {
+              "holdApplicationUntilProxyStarts": true
+            }
+          },
+          "pilot": {
+            "autoscaleMin": 1
+          }
+        }
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}
+---
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "istio-ingress-candidate-dev",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-25",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-mesh-dev",
+    "source": {
+      "repoURL": "https://blob.istio.io/istio-release/charts",
+      "chart": "gateway",
+      "targetRevision": "1.31.0",
+      "helm": {
+        "releaseName": "istio-ingress-candidate",
+        "valuesObject": {
+          "revision": "1-31-0",
+          "labels": {
+            "istio": "ingressgateway-candidate"
+          },
+          "service": {
+            "type": "ClusterIP",
+            "ports": [
+              {
+                "name": "status-port",
+                "port": 15021,
+                "targetPort": 15021
+              },
+              {
+                "name": "http2",
+                "port": 80,
+                "targetPort": 8080
+              }
+            ]
+          },
+          "autoscaling": {
+            "minReplicas": 1,
+            "maxReplicas": 5
+          },
+          "serviceAccount": {
+            "name": "istio-ingress-candidate"
+          }
+        }
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}

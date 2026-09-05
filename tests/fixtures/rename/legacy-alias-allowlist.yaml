@@ -1,5 +1,15 @@
 schemaVersion: course.rename-aliases/v1
 entries:
+  - path: argocd/overlays/mesh-enable/dev/kustomization.yaml
+    literal: "sample\u002dapp"
+    count: 1
+    reason: gated mesh revision label updates the existing namespace owner only
+    removalEvidence: course.rename-cutover/v1
+  - path: argocd/overlays/mesh-enable/prod/kustomization.yaml
+    literal: "sample\u002dapp"
+    count: 1
+    reason: gated mesh revision label updates the existing namespace owner only
+    removalEvidence: course.rename-cutover/v1
   - path: argocd/overlays/sigstore-enable/dev/kustomization.yaml
     literal: "sample\u002dapp"
     count: 1

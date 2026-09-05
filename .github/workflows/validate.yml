@@ -98,7 +98,21 @@ jobs:
         run: |
           GOBIN="$RUNNER_TEMP/schema-bin" go install github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0
           export PATH="$RUNNER_TEMP/schema-bin:$PATH"
+          export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
           bash tests/kubeconform-contract.sh
+          bash tests/render-lock-contract.sh
+
+      - name: Analyze both locked Istio revisions locally
+        run: |
+          mkdir -p "$RUNNER_TEMP/istio-bin"
+          curl -fsSL "$(yq -r '.tooling.istioctl.linuxAmd64Url' versions.lock.yaml)" -o "$RUNNER_TEMP/istioctl.tgz"
+          printf '%s  %s\n' "$(yq -r '.tooling.istioctl.linuxAmd64Sha256' versions.lock.yaml)" "$RUNNER_TEMP/istioctl.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/istioctl.tgz" -C "$RUNNER_TEMP/istio-bin"
+          export PATH="$RUNNER_TEMP/istio-bin:$PATH"
+          export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
+          ruby tests/istio-analyze-contract.rb
+          bash tests/istio-platform-contract.sh
+          bash tests/edge-waf-contract.sh
 
       - name: Package chart
         run: scripts/package-chart.sh "$RUNNER_TEMP/chart-package"

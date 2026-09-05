@@ -1,0 +1,434 @@
+{
+  "apiVersion": "security.istio.io/v1",
+  "kind": "PeerAuthentication",
+  "metadata": {
+    "name": "mini-commerce-strict",
+    "namespace": "app-dev",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "mtls": {
+      "mode": "STRICT"
+    }
+  }
+}
+---
+{
+  "apiVersion": "security.istio.io/v1",
+  "kind": "AuthorizationPolicy",
+  "metadata": {
+    "name": "default-deny",
+    "namespace": "app-dev",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {}
+}
+---
+{
+  "apiVersion": "security.istio.io/v1",
+  "kind": "AuthorizationPolicy",
+  "metadata": {
+    "name": "mini-commerce-ingress",
+    "namespace": "app-dev",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "selector": {
+      "matchLabels": {
+        "app.kubernetes.io/name": "mini-commerce"
+      }
+    },
+    "action": "ALLOW",
+    "rules": [
+      {
+        "from": [
+          {
+            "source": {
+              "principals": [
+                "cluster.local/ns/istio-system/sa/istio-ingress-stable",
+                "cluster.local/ns/istio-system/sa/istio-ingress-candidate"
+              ]
+            }
+          }
+        ],
+        "to": [
+          {
+            "operation": {
+              "ports": [
+                "3000"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "from": [
+          {
+            "source": {
+              "principals": [
+                "cluster.local/ns/opentelemetry-operator-system/sa/adot-collector-prometheus-collector"
+              ]
+            }
+          }
+        ],
+        "to": [
+          {
+            "operation": {
+              "ports": [
+                "3001"
+              ],
+              "paths": [
+                "/metrics"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "telemetry.istio.io/v1",
+  "kind": "Telemetry",
+  "metadata": {
+    "name": "mesh-metrics",
+    "namespace": "app-dev",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "metrics": [
+      {
+        "providers": [
+          {
+            "name": "prometheus"
+          }
+        ]
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "mini-commerce-mesh",
+    "namespace": "app-dev",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "podSelector": {
+      "matchLabels": {
+        "app.kubernetes.io/name": "mini-commerce"
+      }
+    },
+    "policyTypes": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "from": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "istio-system"
+              }
+            },
+            "podSelector": {
+              "matchExpressions": [
+                {
+                  "key": "istio",
+                  "operator": "In",
+                  "values": [
+                    "ingressgateway-stable",
+                    "ingressgateway-candidate"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 3000
+          }
+        ]
+      },
+      {
+        "from": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "opentelemetry-operator-system"
+              }
+            },
+            "podSelector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "adot-collector-prometheus-collector"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 3001
+          }
+        ]
+      }
+    ],
+    "egress": [
+      {
+        "to": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "kube-system"
+              }
+            },
+            "podSelector": {
+              "matchLabels": {
+                "k8s-app": "kube-dns"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "UDP",
+            "port": 53
+          },
+          {
+            "protocol": "TCP",
+            "port": 53
+          }
+        ]
+      },
+      {
+        "to": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "istio-system"
+              }
+            },
+            "podSelector": {
+              "matchLabels": {
+                "app": "istiod"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 15012
+          }
+        ]
+      },
+      {
+        "to": [
+          {
+            "namespaceSelector": {
+              "matchLabels": {
+                "kubernetes.io/metadata.name": "opentelemetry-operator-system"
+              }
+            },
+            "podSelector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "adot-collector-prometheus-collector"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 4318
+          }
+        ]
+      },
+      {
+        "to": [
+          {
+            "podSelector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "postgresql",
+                "app.kubernetes.io/instance": "mini-commerce"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 5432
+          }
+        ]
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "networking.istio.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+    "name": "mini-commerce-internal",
+    "namespace": "istio-system",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "selector": {
+      "istio": "ingressgateway-stable"
+    },
+    "servers": [
+      {
+        "port": {
+          "number": 80,
+          "name": "http-from-alb",
+          "protocol": "HTTP"
+        },
+        "hosts": [
+          "mini-commerce.dev.example.com"
+        ]
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "gateway.k8s.aws/v1beta1",
+  "kind": "LoadBalancerConfiguration",
+  "metadata": {
+    "name": "mini-commerce-mesh",
+    "namespace": "istio-system",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "scheme": "internet-facing",
+    "wafV2": {
+      "webACL": "REPLACE_FROM_EKS_MINI_COMMERCE_WAF_WEB_ACL_ARN"
+    },
+    "listenerConfigurations": [
+      {
+        "protocolPort": "HTTPS:443",
+        "defaultCertificate": "REPLACE_WITH_APPROVED_ACM_CERTIFICATE_ARN",
+        "sslPolicy": "ELBSecurityPolicy-TLS13-1-2-2021-06"
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "GatewayClass",
+  "metadata": {
+    "name": "mini-commerce-mesh-alb-dev",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "controllerName": "gateway.k8s.aws/alb",
+    "parametersRef": {
+      "group": "gateway.k8s.aws",
+      "kind": "LoadBalancerConfiguration",
+      "name": "mini-commerce-mesh",
+      "namespace": "istio-system"
+    }
+  }
+}
+---
+{
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+    "name": "mini-commerce-mesh",
+    "namespace": "istio-system",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "gatewayClassName": "mini-commerce-mesh-alb-dev",
+    "listeners": [
+      {
+        "name": "https",
+        "hostname": "mini-commerce.dev.example.com",
+        "port": 443,
+        "protocol": "HTTPS",
+        "tls": {
+          "mode": "Terminate",
+          "options": {
+            "gateway.k8s.aws/certificate-arn": "REPLACE_WITH_APPROVED_ACM_CERTIFICATE_ARN"
+          }
+        },
+        "allowedRoutes": {
+          "namespaces": {
+            "from": "Same"
+          }
+        }
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "HTTPRoute",
+  "metadata": {
+    "name": "mini-commerce-mesh",
+    "namespace": "istio-system",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "parentRefs": [
+      {
+        "name": "mini-commerce-mesh",
+        "sectionName": "https"
+      }
+    ],
+    "hostnames": [
+      "mini-commerce.dev.example.com"
+    ],
+    "rules": [
+      {
+        "matches": [
+          {
+            "path": {
+              "type": "PathPrefix",
+              "value": "/"
+            }
+          }
+        ],
+        "backendRefs": [
+          {
+            "name": "istio-ingress-stable",
+            "port": 80,
+            "weight": 1
+          }
+        ]
+      }
+    ]
+  }
+}

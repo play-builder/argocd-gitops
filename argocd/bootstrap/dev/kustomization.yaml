@@ -2,6 +2,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  - mesh-project.yaml
+  - ../../../platform/istio/base
+  - istio-platform.yaml
+  - mesh-policies.yaml
   - supply-chain-policy.yaml
   - platform-credentials.yaml
   - project.yaml
