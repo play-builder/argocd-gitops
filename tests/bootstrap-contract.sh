@@ -47,10 +47,10 @@ case_namespace_pss() {
 
   render_bootstrap dev "$bootstrap_dev"
   render_bootstrap prod "$bootstrap_prod"
-  render_environment dev "$helm_dev"
+  render_environment dev "$helm_dev" "$repository_root/envs/dev/pre-cutover-ownership-values.yaml"
 
   assert_manifest "$bootstrap_dev" '
-    select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-dev") |
+    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev") |
     .spec.generators[0].list.elements[0].podSecurityVersion as $version |
     $version == "v1.36" and
     .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
@@ -62,7 +62,7 @@ case_namespace_pss() {
   ' "dev ApplicationSet lacks version-pinned PSS warn/audit labels"
 
   assert_manifest "$bootstrap_prod" '
-    select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-prod") |
+    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-prod") |
     .spec.generators[0].list.elements[0].podSecurityVersion as $version |
     $version == "v1.36" and
     .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
@@ -78,23 +78,30 @@ case_namespace_pss() {
   ' "$bootstrap_dev" | jq -e '
     .spec.template.spec.syncPolicy.automated.prune == true and
     .spec.template.spec.syncPolicy.automated.selfHeal == true and
-    (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) != null and
+    (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null and
     (.spec.template.spec.syncPolicy.syncOptions | index("Replace=true")) == null
-  ' >/dev/null || fail "Dev must retain auto-sync/prune/self-heal without Replace=true"
+  ' >/dev/null || fail "Dev current Application must auto-sync without claiming the legacy-owned Namespace"
 
   yq eval-all -o=json '
     select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-prod")
   ' "$bootstrap_prod" | jq -e '
     .spec.template.spec.syncPolicy.automated == null and
-    (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) != null and
+    (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null and
     (.spec.template.spec.syncPolicy.syncOptions | index("Replace=true")) == null
-  ' >/dev/null || fail "Prod must remain manual without Replace=true"
+  ' >/dev/null || fail "Prod current Application must remain manual without claiming the legacy-owned Namespace"
 
-  assert_document_count "$helm_dev" Namespace 1
-  assert_manifest "$helm_dev" '
-    select(.kind == "Namespace" and .metadata.name == "app-dev") |
-    .metadata.annotations["argocd.argoproj.io/sync-options"] == "Prune=false"
-  ' "Phase A Helm Namespace must carry Prune=false"
+  assert_document_count "$helm_dev" Namespace 0
+
+  for manifest in "$bootstrap_dev" "$bootstrap_prod"; do
+    yq eval-all -o=json '
+      select(.kind == "ApplicationSet" and (.metadata.name == "sample-app-dev" or .metadata.name == "sample-app-prod"))
+    ' "$manifest" | jq -e '
+      .spec.syncPolicy.preserveResourcesOnDeletion == true and
+      (.spec.template.metadata.finalizers // []) == [] and
+      .spec.template.spec.syncPolicy.automated == null and
+      (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) != null
+    ' >/dev/null || fail "Legacy Application must exclusively own and preserve the Namespace during cutover"
+  done
 
   assert_manifest "$bootstrap_dev" '
     select(.kind == "Namespace" and .metadata.name == "app-recovery") |
@@ -215,15 +222,17 @@ case_pss_enforce() {
 
   for environment in dev prod; do
     manifest="$render_root/bootstrap-$environment-enforce.yaml"
-    appset="mini-commerce-$environment"
+    appset="sample-app-$environment"
     kubectl kustomize "$repository_root/argocd/overlays/pss-enforce/$environment" >"$manifest"
 
-    assert_manifest "$manifest" "
-      select(.kind == \"ApplicationSet\" and .metadata.name == \"$appset\") |
-      .spec.generators[0].list.elements[0].podSecurityVersion == \"v1.36\" and
-      .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels[\"pod-security.kubernetes.io/enforce\"] == \"restricted\" and
-      .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels[\"pod-security.kubernetes.io/enforce-version\"] == \"{{ .podSecurityVersion }}\"
-    " "$environment PSS enforcement must use the generator-pinned version"
+    APPSET="$appset" yq eval-all -o=json -I=0 '
+      [select(.kind == "ApplicationSet" and .metadata.name == strenv(APPSET))]
+    ' "$manifest" | jq -e '
+      length == 1 and
+      .[0].spec.generators[0].list.elements[0].podSecurityVersion == "v1.36" and
+      .[0].spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce"] == "restricted" and
+      .[0].spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce-version"] == "{{ .podSecurityVersion }}"
+    ' >/dev/null || fail "$environment PSS enforcement must target the namespace owner with the generator-pinned version"
 
     yq eval-all -o=json '
       select(.kind == "ValidatingAdmissionPolicyBinding" and .metadata.name == "course-workload-security")
@@ -312,12 +321,14 @@ case_recovery_wiring() {
   ' >/dev/null || fail "Dev bootstrap must explicitly wire app-recovery and VolumeSnapshotContent"
   yq -o=json '.' "$appset" | jq -e '
     .spec.generators[0].list.elements[0].phaseValuesFile == "envs/dev/phase-default-values.yaml" and
-    .spec.template.spec.source.helm.valueFiles == ["../../{{ .valuesFile }}","../../{{ .statefulValuesFile }}","../../{{ .phaseValuesFile }}"]
+    .spec.generators[0].list.elements[0].ownershipValuesFile == "envs/dev/pre-cutover-ownership-values.yaml" and
+    .spec.template.spec.source.helm.valueFiles == ["../../{{ .valuesFile }}","../../{{ .statefulValuesFile }}","../../{{ .phaseValuesFile }}","../../{{ .ownershipValuesFile }}"]
   ' >/dev/null || fail "Dev must select exactly one explicit safe-default lifecycle phase values file"
   helm template mini-commerce "$repository_root/charts/mini-commerce" \
     --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].valuesFile' "$appset")" \
     --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].statefulValuesFile' "$appset")" \
-    --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].phaseValuesFile' "$appset")" >"$default_manifest"
+    --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].phaseValuesFile' "$appset")" \
+    --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].ownershipValuesFile' "$appset")" >"$default_manifest"
   yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" or .kind == "Job" or .kind == "VolumeSnapshot" or .kind == "VolumeSnapshotContent" or .kind == "PodChaos" or .kind == "NetworkChaos")]' "$default_manifest" | jq -e 'length == 0' >/dev/null || fail "default Dev ApplicationSet values rendered stateful, recovery, or Chaos resources"
   if yq -o=json '.' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles[] | select(contains("recovery-values.yaml"))' >/dev/null; then fail "Prod ApplicationSet must not consume recovery values"; fi
   yq -o=json '.' "$repository_root/contracts/platform-requirements.yaml" | jq -e '.argoHealthCustomizations | any(.[]; .id == "volume-snapshot-ready-health/v1" and .implementationOwner == "EKS-infra" and .healthyWhen == "readyToUse=true with a bound content name")' >/dev/null || fail "VolumeSnapshot health must remain EKS-infra owned"

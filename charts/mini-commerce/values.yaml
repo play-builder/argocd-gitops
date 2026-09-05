@@ -81,6 +81,8 @@ externalSecrets:
   enabled: false
   awsRegion: ""
   readerServiceAccount: external-secrets-reader
+  createReaderServiceAccount: true
+  createSecretStore: true
   readerRoleArn: ""
   refreshInterval: 1h
   runtime:
@@ -125,6 +127,7 @@ database:
 
 gateway:
   enabled: true
+  createClass: true
   className: aws-alb
   controllerName: gateway.k8s.aws/alb
   name: mini-commerce

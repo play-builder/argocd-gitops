@@ -5,3 +5,15 @@ legacyApplication: sample-app-prod
 legacyPvc: data-sample-app-postgresql-0
 requiredEvidence: course.rename-cutover/v1
 forbiddenActions: [direct-prune, pvc-delete]
+sharedResourceOwnership:
+  preCutover:
+    owner: legacy-application
+    currentApplicationMode: reference-only
+  handoff:
+    removeLegacyApplicationFirst: true
+    preserveResourcesOnDeletion: true
+    legacyFinalizersMustBeAbsent: true
+    deletionMode: non-cascading
+    approveLegacyResourcePrune: false
+  postCutover:
+    owner: mini-commerce-application

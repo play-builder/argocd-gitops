@@ -9,6 +9,8 @@ metadata:
 spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
+  syncPolicy:
+    preserveResourcesOnDeletion: true
   generators:
     - list:
         elements:
@@ -22,7 +24,6 @@ spec:
       name: "sample-app-{{ .environment }}"
       annotations:
         argocd.argoproj.io/sync-options: Prune=confirm
-      finalizers: [resources-finalizer.argocd.argoproj.io]
     spec:
       project: course-prod
       source:
@@ -34,4 +35,13 @@ spec:
           valueFiles: ["../../{{ .valuesFile }}", "../../{{ .statefulValuesFile }}"]
       destination: {server: https://kubernetes.default.svc, namespace: "{{ .namespace }}"}
       syncPolicy:
+        managedNamespaceMetadata:
+          labels:
+            course.playbuilder.io/admission: enabled
+            gateway-access: "true"
+            environment: "{{ .environment }}"
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
+            pod-security.kubernetes.io/warn-version: "{{ .podSecurityVersion }}"
+            pod-security.kubernetes.io/audit-version: "{{ .podSecurityVersion }}"
         syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]

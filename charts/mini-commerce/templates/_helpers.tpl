@@ -62,23 +62,55 @@ app.kubernetes.io/component: application
 {{- printf "%s-telemetry" (include "mini-commerce.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "mini-commerce.validateGatewayCIDR" -}}
+{{- $cidr := .cidr -}}
+{{- $error := printf "networkPolicy.gateway.%s must contain bounded CIDRs in canonical IPv4 network notation" .field -}}
+{{- if not (regexMatch "^((0|[1-9][0-9]{0,2})\\.){3}(0|[1-9][0-9]{0,2})/([1-9]|[12][0-9]|3[0-2])$" $cidr) -}}
+{{- fail $error -}}
+{{- end -}}
+{{- $parts := splitList "/" $cidr -}}
+{{- $octets := splitList "." (index $parts 0) -}}
+{{- $prefix := int (index $parts 1) -}}
+{{- $first := int (index $octets 0) -}}
+{{- $second := int (index $octets 1) -}}
+{{- $third := int (index $octets 2) -}}
+{{- $fourth := int (index $octets 3) -}}
+{{- if or (gt $first 255) (gt $second 255) (gt $third 255) (gt $fourth 255) -}}
+{{- fail $error -}}
+{{- end -}}
+{{- if .privateOnly -}}
+{{- $inTen := and (eq $first 10) (ge $prefix 8) -}}
+{{- $inOneSevenTwo := and (eq $first 172) (ge $second 16) (le $second 31) (ge $prefix 12) -}}
+{{- $inOneNineTwo := and (eq $first 192) (eq $second 168) (ge $prefix 16) -}}
+{{- if not (or $inTen $inOneSevenTwo $inOneNineTwo) -}}
+{{- fail $error -}}
+{{- end -}}
+{{- end -}}
+{{/* The host portion must be zero; checking the address text alone permits
+     broad prefixes and noncanonical networks interpreted differently by CNI. */}}
+{{- $address := add (mul $first 16777216) (mul $second 65536) (mul $third 256) $fourth -}}
+{{- $blockSize := int64 1 -}}
+{{- range until (int (sub 32 $prefix)) -}}
+{{- $blockSize = mul $blockSize 2 -}}
+{{- end -}}
+{{- if ne (mod $address $blockSize) 0 -}}
+{{- fail $error -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "mini-commerce.validateNetworkPolicy" -}}
 {{- if .Values.networkPolicy.enabled -}}
 {{- if eq (len .Values.networkPolicy.gateway.sourceCidrs) 0 -}}
 {{- fail "networkPolicy.gateway.sourceCidrs must contain platform-validated CIDRs when NetworkPolicy is enabled" -}}
 {{- end -}}
 {{- range $cidr := .Values.networkPolicy.gateway.sourceCidrs -}}
-{{- if or (eq $cidr "0.0.0.0/0") (eq $cidr "::/0") (not (regexMatch "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" $cidr)) -}}
-{{- fail "networkPolicy.gateway.sourceCidrs must contain bounded CIDRs and must not contain a wildcard" -}}
-{{- end -}}
+{{- include "mini-commerce.validateGatewayCIDR" (dict "cidr" $cidr "field" "sourceCidrs" "privateOnly" false) -}}
 {{- end -}}
 {{- if eq (len .Values.networkPolicy.gateway.healthCheckSourceCidrs) 0 -}}
 {{- fail "networkPolicy.gateway.healthCheckSourceCidrs must contain private ALB health-check CIDRs when NetworkPolicy is enabled" -}}
 {{- end -}}
 {{- range $cidr := .Values.networkPolicy.gateway.healthCheckSourceCidrs -}}
-{{- if or (eq $cidr "0.0.0.0/0") (eq $cidr "::/0") (not (regexMatch "^(10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}|172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]{1,3}\\.[0-9]{1,3})/[0-9]{1,2}$" $cidr)) -}}
-{{- fail "networkPolicy.gateway.healthCheckSourceCidrs must contain bounded private CIDRs and must not contain a wildcard" -}}
-{{- end -}}
+{{- include "mini-commerce.validateGatewayCIDR" (dict "cidr" $cidr "field" "healthCheckSourceCidrs" "privateOnly" true) -}}
 {{- end -}}
 {{- if eq (len .Values.networkPolicy.telemetry.namespaceLabels) 0 -}}
 {{- fail "networkPolicy.telemetry.namespaceLabels must select the platform collector" -}}

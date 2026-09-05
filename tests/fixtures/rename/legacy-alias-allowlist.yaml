@@ -107,8 +107,28 @@ entries:
     removalEvidence: course.rename-cutover/v1
   - path: tests/rename-cutover-contract.sh
     literal: "sample\u002dapp"
-    count: 5
+    count: 6
     reason: executable pre-cutover ownership guard validates the immutable legacy source
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/bootstrap-contract.sh
+    literal: "sample\u002dapp"
+    count: 5
+    reason: bootstrap contract verifies that the legacy Application exclusively owns namespace metadata before handoff
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/chaos-contract.sh
+    literal: "sample\u002dapp"
+    count: 1
+    reason: namespace injection remains attached to the legacy namespace owner before handoff
+    removalEvidence: course.rename-cutover/v1
+  - path: argocd/overlays/pss-enforce/dev/kustomization.yaml
+    literal: "sample\u002dapp"
+    count: 1
+    reason: the pre-cutover enforcement overlay targets the current namespace owner
+    removalEvidence: course.rename-cutover/v1
+  - path: argocd/overlays/pss-enforce/prod/kustomization.yaml
+    literal: "sample\u002dapp"
+    count: 1
+    reason: the pre-cutover enforcement overlay targets the current namespace owner
     removalEvidence: course.rename-cutover/v1
   - path: tests/source-integrity-contract.sh
     literal: "sample\u002dapp"

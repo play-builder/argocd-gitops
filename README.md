@@ -316,7 +316,49 @@ bash scripts/capture-cleanup-evidence.sh removal --eks-repo-root "$LAB_EKS_REPO"
 ```
 # Static verification boundary
 
-`bash tests/test-all.sh` establishes local static contract coverage only. Use
-`bash tests/test-all.sh` validates the available local contracts and aggregate
+`bash tests/test-all.sh` establishes local static contract coverage only. It
+validates the available local contracts and aggregate
 dispatch behavior. It does not prove cloud admission, notification delivery,
 mesh traffic, alert delivery, or recovery.
+
+## Pre-cutover resource ownership
+
+The new Dev/Prod ApplicationSets apply `pre-cutover-ownership-values.yaml` last.
+This prevents the new chart from rendering the shared Namespace, GatewayClass,
+SecretStore, and External Secrets reader ServiceAccount. Gateways and
+ExternalSecrets reference the retained resources. The legacy ApplicationSets
+remain pinned to the immutable base revision, have no automated sync, and own
+namespace metadata, including the staged PSS and Dev Chaos settings.
+
+`preserveResourcesOnDeletion: true` and an absent generated Application finalizer
+declare non-cascading deletion. Existing Applications can still carry a finalizer
+from their earlier configuration; the live object must be checked before deletion.
+See [Argo CD ApplicationSet deletion](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Application-Deletion/).
+
+The later ownership handoff requires these ordered gates:
+
+1. Collect and approve fresh cutover evidence. Confirm the retained Application
+   has no automated sync or running operation. Confirm both resource deletion
+   finalizers (foreground and background) are absent on the live Application;
+   an existing finalizer must be explicitly removed before proceeding.
+2. Retire the legacy ApplicationSet and Application non-cascading, preserving
+   the shared objects and PVCs. Do not approve resource prune on the legacy
+   Application or allow its generator to recreate it.
+3. Verify the legacy Application is gone and the shared objects remain. Remove
+   the new Application's pre-cutover ownership overlay to adopt them. Move the
+   namespace metadata/PSS/Chaos configuration to the new owner in that same
+   reviewed change, then verify its tracking metadata and sync status.
+
+The repository describes and statically tests this order; it does not perform
+the live handoff. Keep the ownership overlay in place until those gates are met.
+
+## NetworkPolicy CIDRs
+
+Both gateway source lists accept canonical IPv4 network CIDRs only, with valid
+octets, zero host bits, no leading zeros, and prefixes from `/1` to `/32`.
+`healthCheckSourceCidrs` additionally requires the entire network to be inside
+`10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. IPv6 is rejected by this
+IPv4 policy contract. Public-port `sourceCidrs` can contain a bounded public
+network; it does not grant access to management port 3001. Use the actual
+platform-approved ALB source ranges rather than assuming a private prefix is
+sufficient for the deployment.

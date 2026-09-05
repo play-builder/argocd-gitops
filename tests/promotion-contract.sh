@@ -412,7 +412,12 @@ case_render() {
   yq eval-all -e 'select(.kind == "AnalysisTemplate") | .spec.metrics[0].name == "request-rate" and .spec.metrics[1].name == "success-rate"' "$candidate" >/dev/null || fail "AnalysisTemplate metrics must use canonical request-rate and success-rate names"
   yq eval-all -o=json 'select(.kind == "Rollout") | .spec.strategy.canary.steps' "$candidate" | jq -e '(to_entries | map(select(.value.pause == {})) | last.key) as $p | (to_entries | map(select(.value.setWeight == 100)) | last.key) as $w | $p == ($w - 1)' >/dev/null || fail "manual pause must immediately precede final 100 percent"
   yq -e '.spec.template.spec.syncPolicy.automated == null' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" >/dev/null || fail "Prod ApplicationSet must remain manually synced"
-  yq -o=json '.' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" | jq -e '.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true") != null' >/dev/null || fail "Prod ApplicationSet must retain explicit namespace creation"
+  yq -o=json '.' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" | jq -e '
+    (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null and
+    .spec.template.spec.syncPolicy.managedNamespaceMetadata == null and
+    .spec.generators[0].list.elements[0].ownershipValuesFile == "envs/prod/pre-cutover-ownership-values.yaml" and
+    .spec.template.spec.source.helm.valueFiles[-1] == "../../{{ .ownershipValuesFile }}"
+  ' >/dev/null || fail "Prod ApplicationSet must reference the existing namespace during pre-cutover promotion"
   echo "PASS: Prod baseline/candidate desired state is equivalent except approved images."
 }
 

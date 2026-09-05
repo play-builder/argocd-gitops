@@ -1,4 +1,5 @@
 {{- if .Values.gateway.enabled }}
+{{- if .Values.gateway.createClass }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
@@ -8,6 +9,7 @@ metadata:
 spec:
   controllerName: {{ .Values.gateway.controllerName }}
 ---
+{{- end }}
 apiVersion: gateway.k8s.aws/v1
 kind: LoadBalancerConfiguration
 metadata:
