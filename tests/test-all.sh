@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 bash "$test_root/rename-contract.sh"
+ruby "$test_root/ci-tool-path-contract.rb"
 bash "$test_root/observability-contract.sh"
 bash "$test_root/application-evidence-contract.sh"
 bash "$test_root/source-integrity-contract.sh"

@@ -34,7 +34,7 @@ jobs:
         run: |
           GOBIN="$RUNNER_TEMP/yq-bin" go install github.com/mikefarah/yq/v4@v4.53.6
           echo "$RUNNER_TEMP/yq-bin" >> "$GITHUB_PATH"
-          yq --version | grep -Fq 'v4.53.6'
+          "$RUNNER_TEMP/yq-bin/yq" --version | grep -Fq 'v4.53.6'
 
       - name: Assert compatibility pins
         run: |
