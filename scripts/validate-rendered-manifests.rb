@@ -5,6 +5,7 @@ require 'digest'
 require 'open3'
 require 'tmpdir'
 require 'fileutils'
+require 'uri'
 require_relative 'lib/platform_mirror'
 def run(*cmd)
  out,status=Open3.capture2e(*cmd)
@@ -13,6 +14,14 @@ def run(*cmd)
 end
 def download(url,path,headers=[])
  run('curl','-fsSL','--retry','2','--max-time','90',*headers,url,'-o',path)
+rescue StandardError => e
+ begin
+  source=URI(url)
+  source.user=nil;source.password=nil;source.query=nil;source.fragment=nil
+ rescue URI::Error
+  raise "download failed for #{File.basename(path)} from [invalid URL]"
+ end
+ raise "download failed for #{File.basename(path)} from #{source}: #{e.message}"
 end
 def strict(schema)
  return unless schema.is_a?(Hash)
