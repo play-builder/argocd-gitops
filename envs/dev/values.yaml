@@ -7,13 +7,13 @@ namespace:
     environment: dev
 
 image:
-  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
+  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
   digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 database:
   enabled: false
   migrationImage:
-    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
+    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 workload:
@@ -33,17 +33,17 @@ externalSecrets:
   awsRegion: "REPLACE_ME_REGION"
   readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/dev-REPLACE_ME_PROJECT-external-secrets-reader-role"
   runtime:
-    remoteSecretName: "sample-app/dev/sample-app-runtime"
-    targetSecretName: sample-app-runtime
+    remoteSecretName: "REPLACE_FROM_EKS_dev_mini_commerce_secrets_sources_runtime_sourceArn"
+    targetSecretName: mini-commerce-runtime
   database:
-    remoteSecretName: "sample-app/dev/sample-app-db"
-    targetSecretName: sample-app-db
+    remoteSecretName: "REPLACE_FROM_EKS_dev_mini_commerce_secrets_sources_database_sourceArn"
+    targetSecretName: mini-commerce-database
+  migration:
+    remoteSecretName: "REPLACE_FROM_EKS_dev_mini_commerce_secrets_sources_migration_sourceArn"
+    targetSecretName: mini-commerce-migration
 
-gateway:
-  enabled: true
-  hostname: "sample-app.dev.example.com"
-  httpEnabled: true
-  httpsEnabled: false
+routing:
+  hostname: "mini-commerce.dev.example.com"
 
 rollout:
   analysis:

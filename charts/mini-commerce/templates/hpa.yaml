@@ -1,0 +1,32 @@
+{{- if and .Values.autoscaling.enabled (not .Values.maintenance.writersStopped) }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
+  labels:
+    {{- include "mini-commerce.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: {{ if eq .Values.workload.kind "Rollout" }}argoproj.io/v1alpha1{{ else }}apps/v1{{ end }}
+    kind: {{ .Values.workload.kind }}
+    name: {{ include "mini-commerce.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - {type: Percent, value: 100, periodSeconds: 60}
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - {type: Percent, value: 25, periodSeconds: 60}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

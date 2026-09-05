@@ -1,0 +1,9 @@
+namespace:
+  create: true
+
+gateway:
+  createClass: true
+
+externalSecrets:
+  createReaderServiceAccount: true
+  createSecretStore: true

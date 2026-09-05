@@ -19,9 +19,9 @@ if [[ "$tool" == git ]]; then
 elif [[ "$tool" == kubectl ]]; then
   case "$*" in
     'config view --minify -o json') source="$FAKE_RUNTIME_DIR/kubeconfig.json" ;;
-    '-n app-prod get rollout sample-app -o json') source="$FAKE_RUNTIME_DIR/rollout.json" ;;
+    '-n app-prod get rollout mini-commerce -o json') source="$FAKE_RUNTIME_DIR/rollout.json" ;;
     -n\ app-prod\ get\ replicasets\ -l\ rollouts-pod-template-hash=*\ -o\ json) source="$FAKE_RUNTIME_DIR/replicasets.json" ;;
-    '-n app-prod get httproute sample-app -o json') source="$FAKE_RUNTIME_DIR/httproute.json" ;;
+    '-n app-prod get virtualservice mini-commerce -o json') source="$FAKE_RUNTIME_DIR/virtualservice.json" ;;
     '-n app-prod get analysisruns.argoproj.io -o json') source="$FAKE_RUNTIME_DIR/analysisruns.json" ;;
     *)
       echo "FAIL: unexpected fake CLI invocation: $tool $*" >&2
@@ -30,7 +30,7 @@ elif [[ "$tool" == kubectl ]]; then
   esac
 else
 case "$tool:$*" in
-  'argocd:app get sample-app-prod -o json') source="$FAKE_RUNTIME_DIR/application.json" ;;
+  'argocd:app get mini-commerce-prod -o json') source="$FAKE_RUNTIME_DIR/application.json" ;;
   'aws:eks describe-cluster --name course-prod --region ap-northeast-2 --output json') source="$FAKE_RUNTIME_DIR/cluster.json" ;;
   *)
     echo "FAIL: unexpected fake CLI invocation: $tool $*" >&2

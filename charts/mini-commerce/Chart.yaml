@@ -1,0 +1,7 @@
+apiVersion: v2
+name: mini-commerce
+description: Helm desired state for a development Deployment and production Argo Rollout
+type: application
+version: 1.1.0
+appVersion: "1.1.0"
+kubeVersion: ">=1.31.0-0"

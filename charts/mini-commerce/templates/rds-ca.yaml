@@ -1,0 +1,12 @@
+{{- if and .Values.database.enabled (eq .Values.environment "prod") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mini-commerce-rds-ca
+  namespace: {{ include "mini-commerce.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+data:
+  global-bundle.pem: |
+{{ .Files.Get "files/global-bundle.pem" | indent 4 }}
+{{- end }}

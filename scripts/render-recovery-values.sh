@@ -55,14 +55,14 @@ jq -e --arg now "$validation_now" '
   (.gitopsRevision | test("^[0-9a-f]{40}$")) and
   .source == {
     namespace:"app-dev",
-    pvcName:"data-sample-app-postgresql-0",
+    pvcName:"data-mini-commerce-postgresql-0",
     pvcUid:.source.pvcUid,
     volumeName:.source.volumeName,
     volumeHandle:.source.volumeHandle
   } and
   (.source.pvcUid | test("^[0-9a-f-]{36}$")) and (.source.volumeName | test("^pvc-[0-9a-f-]{36}$")) and
   (.source.volumeHandle | test("^vol-[0-9a-f]{8,64}$")) and
-  .snapshot.namespace == "app-dev" and .snapshot.name == "sample-app-postgresql-snapshot" and
+  .snapshot.namespace == "app-dev" and .snapshot.name == "mini-commerce-postgresql-snapshot" and
   (.snapshot.uid | test("^[0-9a-f-]{36}$")) and (.snapshot.contentUid | test("^[0-9a-f-]{36}$")) and
   (.snapshot.contentName | test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")) and
   .snapshot.className == "course-ebs-snapshots" and .snapshot.driver == "ebs.csi.aws.com" and
@@ -88,21 +88,10 @@ trap 'rm -f -- "$tmp"' EXIT
 jq -n --arg handle "$(jq -r '.snapshot.handle' "$evidence")" \
   --arg role "$(jq -r '.recovery.readerRoleArn' "$evidence")" '
   {
-    database:{enabled:true,replicaCount:1,migration:{enabled:true}},
-    recovery:{
-      restoreEnabled:true,
-      namespace:"app-recovery",
-      readerRoleArn:$role,
-      snapshotClassName:"course-ebs-snapshots",
-      snapshotDriver:"ebs.csi.aws.com",
-      snapshotContentName:"sample-app-postgresql-recovery-content",
-      snapshotName:"sample-app-postgresql-recovery-snapshot",
-      pvcName:"sample-app-postgresql-recovery",
-      snapshotHandle:$handle,
-      cleanupLabel:"recovery",
-      source:{namespace:"app-dev",pvcName:"data-sample-app-postgresql-0",snapshotName:"sample-app-postgresql-snapshot"}
-    },
-    snapshot:{captureEnabled:false}
+    environment:"dev",namespace:"app-recovery",snapshotHandle:$handle,
+    source:{namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0"},
+    snapshotClassName:"course-ebs-snapshots",
+    snapshotEvidence:{readerRoleArn:$role}
   }
 ' | yq -P >"$tmp"
 chmod 600 "$tmp"
@@ -110,7 +99,7 @@ mv -f "$tmp" "$output"
 trap - EXIT
 
 if [[ "$mode" == live ]]; then
-  echo "[CLOUD_RUNTIME] wrote reviewed recovery values to $output"
+  echo "[STATIC] rendered $output from validated CLOUD_RUNTIME receipt; no cloud queries performed"
 else
   echo "[STATIC] wrote noncanonical recovery values to $output"
 fi

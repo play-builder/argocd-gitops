@@ -1,0 +1,6 @@
+database:
+  replicaCount: 1
+snapshot:
+  captureEnabled: false
+maintenance:
+  writersStopped: false

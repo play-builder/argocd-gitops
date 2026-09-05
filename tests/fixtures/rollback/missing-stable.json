@@ -1,6 +1,6 @@
 {
   "completedRollback": {
-    "rolloutName": "sample-app",
+    "rolloutName": "mini-commerce",
     "rolloutUid": "11111111-1111-1111-1111-111111111111",
     "stableHash": "stable-hash",
     "targetHash": "target-hash",
@@ -22,7 +22,7 @@
       "items": [
         {
           "metadata": {
-            "name": "sample-app-target",
+            "name": "mini-commerce-target",
             "creationTimestamp": "2026-09-03T00:00:00Z",
             "labels": {
               "rollouts-pod-template-hash": "target-hash"
@@ -34,7 +34,7 @@
               {
                 "apiVersion": "argoproj.io/v1alpha1",
                 "kind": "Rollout",
-                "name": "sample-app",
+                "name": "mini-commerce",
                 "uid": "11111111-1111-1111-1111-111111111111",
                 "controller": true
               }
@@ -43,7 +43,7 @@
         },
         {
           "metadata": {
-            "name": "sample-app-experiment",
+            "name": "mini-commerce-experiment",
             "creationTimestamp": "2026-09-03T00:01:00Z",
             "labels": {
               "rollouts-pod-template-hash": "experiment-hash"
@@ -55,7 +55,7 @@
               {
                 "apiVersion": "argoproj.io/v1alpha1",
                 "kind": "Rollout",
-                "name": "sample-app",
+                "name": "mini-commerce",
                 "uid": "11111111-1111-1111-1111-111111111111",
                 "controller": true
               }
@@ -64,7 +64,7 @@
         },
         {
           "metadata": {
-            "name": "sample-app-intermediate",
+            "name": "mini-commerce-intermediate",
             "creationTimestamp": "2026-09-03T00:02:00Z",
             "labels": {
               "rollouts-pod-template-hash": "intermediate-hash"
@@ -76,7 +76,7 @@
               {
                 "apiVersion": "argoproj.io/v1alpha1",
                 "kind": "Rollout",
-                "name": "sample-app",
+                "name": "mini-commerce",
                 "uid": "11111111-1111-1111-1111-111111111111",
                 "controller": true
               }

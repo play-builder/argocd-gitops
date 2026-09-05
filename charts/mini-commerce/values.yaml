@@ -1,0 +1,198 @@
+nameOverride: ""
+fullnameOverride: ""
+
+environment: dev
+
+namespace:
+  create: true
+  name: app-dev
+  labels:
+    gateway-access: "true"
+
+image:
+  repository: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+workload:
+  kind: Deployment
+  revisionHistoryLimit: 3
+
+replicaCount: 2
+
+deployment:
+  maxSurge: 1
+  maxUnavailable: 0
+
+serviceAccount:
+  create: true
+  name: mini-commerce
+
+app:
+  readyDelayMs: "0"
+  shutdownDelayMs: "5000"
+  secretKeys: "DB_HOST,DB_PASSWORD,API_KEY"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+terminationGracePeriodSeconds: 30
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    failureThreshold: 3
+
+service:
+  port: 3000
+  publicPort: 3000
+  managementPort: 3001
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: DoNotSchedule
+
+externalSecrets:
+  enabled: false
+  awsRegion: ""
+  readerServiceAccount: mini-commerce-secrets-reader
+  createReaderServiceAccount: false
+  createSecretStore: false
+  readerRoleArn: ""
+  refreshInterval: 1h
+  runtime:
+    remoteSecretName: ""
+    targetSecretName: mini-commerce-runtime
+  database:
+    remoteSecretName: ""
+    targetSecretName: mini-commerce-database
+  migration:
+    remoteSecretName: ""
+    targetSecretName: mini-commerce-migration
+
+# Database endpoint and credentials are external to this chart.
+database:
+  enabled: false
+  allowedCidrs: []
+  terminationGracePeriodSeconds: 120
+  host: ""
+  port: 5432
+  name: commerce
+  user: commerce
+  storageClassName: course-gp3
+  storageSize: 5Gi
+  image:
+    repository: docker.io/library/postgres
+    digest: sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    pullPolicy: IfNotPresent
+  migrationImage:
+    repository: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  migration:
+    enabled: true
+    phase: expand
+    target: 002_expand_product_display_name
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+routing:
+  hostname: mini-commerce.dev.example.com
+
+rollout:
+  rollbackWindow:
+    revisions: 0
+  analysis:
+    enabled: false
+    prometheusAddress: ""
+    awsRegion: ""
+    interval: 30s
+    count: 5
+    failureLimit: 3
+    consecutiveErrorLimit: 5
+    minimumRequestRate: 0.1
+    successRateThreshold: 99
+    latencyThresholdMs: 500
+  canary:
+    manualPromotion: false
+    steps:
+      - setWeight: 5
+      - pause:
+          duration: 1m
+      - analysis:
+          templates:
+            - templateName: mini-commerce-success-rate
+          args:
+            - name: latest-hash
+              valueFrom:
+                podTemplateHashValue: Latest
+      - setWeight: 20
+      - pause:
+          duration: 1m
+      - setWeight: 50
+      - pause:
+          duration: 2m
+      - setWeight: 100
+
+telemetry:
+  enabled: false
+  platformXrayEnabled: false
+  serviceName: mini-commerce
+  otlpEndpoint: ""
+  otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""
+
+networkPolicy:
+  enabled: false
+  gateway:
+    sourceCidrs: []
+    healthCheckSourceCidrs: []
+  dns:
+    namespaceLabels:
+      kubernetes.io/metadata.name: kube-system
+    podLabels:
+      k8s-app: kube-dns
+  telemetry:
+    namespaceLabels: {}
+    podLabels: {}
+    port: 4318
+
+maintenance:
+  writersStopped: false
+
+courseCleanup:
+  workloadsDisabled: false

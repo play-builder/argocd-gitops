@@ -1,0 +1,19 @@
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: istio-ingress-stable
+  namespace: istio-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  targetReference:
+    name: istio-ingress-stable
+  defaultConfiguration:
+    targetType: ip
+    protocol: HTTP
+    healthCheckConfig:
+      healthCheckProtocol: HTTP
+      healthCheckPort: "15021"
+      healthCheckPath: /healthz/ready
+      matcher:
+        httpCode: "200"

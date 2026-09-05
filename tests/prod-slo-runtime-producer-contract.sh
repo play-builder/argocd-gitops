@@ -32,7 +32,7 @@ while IFS='|' read -r label expression; do
 done <<'CASES'
 source-repository|.source.repository = "play-builder/other-app"
 source-owner-whitespace|.source.repository = "play-builder /cicd-course-sample-app"
-image-account|.image.repository = "999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app"
+image-account|.image.repository = "999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce"
 image-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 measurement-number|.metricResults[0].measurements[0].value = 12.5
 measurement-nan|.metricResults[0].measurements[0].value = "NaN"
@@ -81,7 +81,7 @@ if grep -Fq '.status.rolloutRevision' "$script"; then
 fi
 grep -Fq '.metadata.annotations["rollout.argoproj.io/revision"]' "$script" ||
   fail 'Prod SLO producer does not bind AnalysisRuns to the controller revision annotation'
-grep -Fq 'get httproute sample-app' "$script" || fail 'Prod SLO producer does not inspect live 100/0 routing'
+grep -Fq 'get virtualservice mini-commerce' "$script" || fail 'Prod SLO producer does not inspect live 100/0 routing'
 grep -Fq 'config view --minify -o json' "$script" || fail 'Prod SLO producer does not bind active context endpoint'
 grep -Fq 'existing canonical Prod SLO evidence belongs to a different immutable release identity' "$script" ||
   fail 'Prod SLO producer does not preserve existing immutable release identity'
@@ -104,22 +104,22 @@ printf '%s\n' fedcba9876543210fedcba9876543210fedcba98 >"$fake_runtime/git-revis
 : >"$fake_runtime/git-status.txt"
 cp "$test_root/fixtures/promotion/valid-ap-northeast-2.yaml" "$fake_runtime/promotion.yaml"
 cp "$fixture_root/baseline-valid.json" "$fake_runtime/baseline.json"
-jq -n '{metadata:{name:"sample-app-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$fake_runtime/application.json"
+jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$fake_runtime/application.json"
 jq -n '{cluster:{name:"course-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$fake_runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$fake_runtime/kubeconfig.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
-  {metadata:{name:"sample-app",namespace:"app-prod",uid:"22222222-2222-2222-2222-222222222222"},
-   spec:{template:{spec:{containers:[{name:"sample-app",image:$image}]}},strategy:{canary:{analysis:{templates:[{templateName:"sample-app-success-rate"}]}}}},
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
+  {metadata:{name:"mini-commerce",namespace:"app-prod",uid:"22222222-2222-2222-2222-222222222222"},
+   spec:{template:{spec:{containers:[{name:"mini-commerce",image:$image}]}},strategy:{canary:{steps:[{analysis:{templates:[{templateName:"mini-commerce-success-rate"}]}}]}}},
    status:{phase:"Healthy",stableRS:"stable-v2",currentPodHash:"stable-v2",replicas:3,readyReplicas:3,availableReplicas:3,pauseConditions:[]}}
 ' >"$fake_runtime/rollout.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
-  {items:[{metadata:{name:"sample-app-stable-v2",labels:{"rollouts-pod-template-hash":"stable-v2"},annotations:{"rollout.argoproj.io/revision":"2"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"sample-app",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
-   spec:{replicas:3,template:{spec:{containers:[{name:"sample-app",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
+  {items:[{metadata:{name:"mini-commerce-stable-v2",labels:{"rollouts-pod-template-hash":"stable-v2"},annotations:{"rollout.argoproj.io/revision":"2"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
+   spec:{replicas:3,template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
 ' >"$fake_runtime/replicasets.json"
-jq -n '{metadata:{name:"sample-app",namespace:"app-prod"},spec:{rules:[{backendRefs:[{name:"sample-app-stable",port:80,weight:100},{name:"sample-app-canary",port:80,weight:0}]}]}}' >"$fake_runtime/httproute.json"
+jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{http:[{name:"primary",route:[{destination:{host:"mini-commerce-stable",port:{number:3000}},weight:100},{destination:{host:"mini-commerce-canary",port:{number:3000}},weight:0}]}]}}' >"$fake_runtime/virtualservice.json"
 jq -n --argjson metrics "$(jq -c '.metricResults' "$fixture_root/prod-slo-valid.json")" '
-  {items:[{metadata:{name:"sample-app-2",uid:"33333333-3333-3333-3333-333333333333",annotations:{"rollout.argoproj.io/revision":"2"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"sample-app",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
-   spec:{metrics:[{name:"request-rate"},{name:"success-rate"}]},status:{phase:"Successful",metricResults:$metrics}}]}
+  {items:[{metadata:{name:"mini-commerce-2",uid:"33333333-3333-3333-3333-333333333333",annotations:{"rollout.argoproj.io/revision":"2"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
+   spec:{metrics:[{name:"request-rate"},{name:"success-rate"},{name:"latency"}]},status:{phase:"Successful",metricResults:$metrics}}]}
 ' >"$fake_runtime/analysisruns.json"
 
 run_static() {
@@ -174,9 +174,9 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
     no-successful-measurement) jq '.items[0].status.metricResults[0].measurements |= map(.phase="Failed")' "$runtime/analysisruns.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/analysisruns.json" ;;
     nonfinite) jq '.items[0].status.metricResults[0].measurements[1].value="NaN"' "$runtime/analysisruns.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/analysisruns.json" ;;
     reversed-time) jq '.items[0].status.metricResults[0].measurements[1].finishedAt="2026-09-03T01:20:00Z"' "$runtime/analysisruns.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/analysisruns.json" ;;
-    nonfinal-route) jq '.spec.rules[0].backendRefs[0].weight=50 | .spec.rules[0].backendRefs[1].weight=50' "$runtime/httproute.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/httproute.json" ;;
-    extra-route-backend) jq '.spec.rules[0].backendRefs += [{name:"shadow",port:80,weight:0}]' "$runtime/httproute.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/httproute.json" ;;
-    extra-route-rule) jq '.spec.rules += [.spec.rules[0]]' "$runtime/httproute.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/httproute.json" ;;
+    nonfinal-route) jq '.spec.http[0].route[0].weight=50 | .spec.http[0].route[1].weight=50' "$runtime/virtualservice.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/virtualservice.json" ;;
+    extra-route-backend) jq '.spec.http[0].route += [{destination:{host:"shadow",port:{number:3000}},weight:0}]' "$runtime/virtualservice.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/virtualservice.json" ;;
+    extra-route-rule) jq '.spec.http += [.spec.http[0]]' "$runtime/virtualservice.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/virtualservice.json" ;;
     image-mismatch) jq '.spec.template.spec.containers[0].image |= sub("c{64}$";"d" * 64)' "$runtime/rollout.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/rollout.json" ;;
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$runtime/git-revision.txt" ;;
     baseline-reuse) yq -o=json '.' "$runtime/promotion.yaml" | jq '.image.indexDigest="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' | yq -P >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/promotion.yaml" ;;
@@ -186,7 +186,7 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
       jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
       jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
       ;;
-    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"' "$runtime/promotion.yaml" ;;
+    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce"' "$runtime/promotion.yaml" ;;
     promotion-ecr-name-too-short) set_release_repository "$runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"' "$runtime/promotion.yaml" ;;
     promotion-owner-whitespace) yq -i '.workflow.runUrl="https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl="https://github.com/OWNER /cicd-course-sample-app/attestations/1001"' "$runtime/promotion.yaml" ;;

@@ -1,31 +1,44 @@
+---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: course-bootstrap-dev
+  name: platform-bootstrap-dev
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "-3"
+    argocd.argoproj.io/sync-wave: "-50"
 spec:
   description: Bootstrap and Phase A platform handoff resources in the dev cluster
   sourceRepos:
-    - https://github.com/REPLACE_ME/argocd-gitops.git
+  # Git signing key distribution is EKS-owned; HEAD precedes strict/seal migration.
+  - https://github.com/REPLACE_ME/argocd-gitops.git
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+          gpg: {mode: head, keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]}
   destinations:
-    - server: https://kubernetes.default.svc
-      namespace: argocd
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  - server: https://kubernetes.default.svc
+    namespace: cosign-system
   clusterResourceWhitelist:
-    - group: ""
-      kind: Namespace
-    - group: admissionregistration.k8s.io
-      kind: ValidatingAdmissionPolicy
-    - group: admissionregistration.k8s.io
-      kind: ValidatingAdmissionPolicyBinding
+  - group: policy.sigstore.dev
+    kind: ClusterImagePolicy
+  - group: policy.sigstore.dev
+    kind: TrustRoot
+  - group: ''
+    kind: Namespace
+  - group: admissionregistration.k8s.io
+    kind: ValidatingAdmissionPolicy
+  - group: admissionregistration.k8s.io
+    kind: ValidatingAdmissionPolicyBinding
   namespaceResourceWhitelist:
-    - group: argoproj.io
-      kind: AppProject
-    - group: argoproj.io
-      kind: Application
-    - group: argoproj.io
-      kind: ApplicationSet
+  - group: argoproj.io
+    kind: AppProject
+  - group: argoproj.io
+    kind: Application
+  - group: argoproj.io
+    kind: ApplicationSet
   orphanedResources:
     warn: true
 ---
@@ -39,12 +52,12 @@ metadata:
 spec:
   description: Course application resources in app-dev and app-recovery only
   sourceRepos:
-    - https://github.com/REPLACE_ME/argocd-gitops.git
+  - https://github.com/REPLACE_ME/argocd-gitops.git
   destinations:
-    - server: https://kubernetes.default.svc
-      namespace: app-dev
-    - server: https://kubernetes.default.svc
-      namespace: app-recovery
+  - server: https://kubernetes.default.svc
+    namespace: app-dev
+  - server: https://kubernetes.default.svc
+    namespace: app-recovery
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -97,3 +110,68 @@ spec:
       kind: AnalysisTemplate
   orphanedResources:
     warn: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+          gpg:
+            mode: head
+            keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]
+  description: Mini Commerce namespaced workload resources; legacy ownership remains
+    in course-dev
+  sourceRepos:
+  - https://github.com/REPLACE_ME/argocd-gitops.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: app-dev
+  - server: https://kubernetes.default.svc
+    namespace: app-recovery
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: Service
+  - group: apps
+    kind: Deployment
+  - group: batch
+    kind: Job
+  - group: autoscaling
+    kind: HorizontalPodAutoscaler
+  - group: policy
+    kind: PodDisruptionBudget
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: external-secrets.io
+    kind: ExternalSecret
+  - group: networking.istio.io
+    kind: VirtualService
+  - group: telemetry.istio.io
+    kind: Telemetry
+  - group: ''
+    kind: ConfigMap
+  - group: argoproj.io
+    kind: Rollout
+  - group: argoproj.io
+    kind: AnalysisTemplate
+  orphanedResources:
+    warn: true
+  roles:
+  - name: developer
+    description: Read and sync Dev applications without delete permission
+    groups:
+    - course:dev-developers
+    policies:
+    - p, proj:platform-dev:developer, applications, get, platform-dev/*, allow
+    - p, proj:platform-dev:developer, applications, sync, platform-dev/*, allow
+    - p, proj:platform-dev:developer, applications, action/argoproj.io/Rollout/promote,
+      platform-dev/*, allow

@@ -16,8 +16,8 @@ optional=${SAMPLE_APP_VERIFIER_OPTIONAL:-0}
   fail 'set either SAMPLE_APP_REPO_ROOT or SAMPLE_APP_VERIFIER_PATH, not both'
 
 if [[ -z "$sample_root" && -z "$verifier_path" ]]; then
-  [[ "$mode" != exact-sha ]] || fail 'exact-SHA mode requires a sample-app checkout or verifier path'
-  [[ "$optional" == 1 ]] || fail 'sample-app verifier is required unless optional mode is explicit'
+  [[ "$mode" != exact-sha ]] || fail 'exact-SHA mode requires a Sample checkout or verifier path'
+  [[ "$optional" == 1 ]] || fail 'Sample verifier is required unless optional mode is explicit'
   exit 0
 fi
 
@@ -28,7 +28,7 @@ if [[ -n "$sample_root" ]]; then
 fi
 
 [[ -f "$verifier_path" && ! -L "$verifier_path" ]] ||
-  fail 'sample-app verifier must be a regular non-symlink file'
+  fail 'Sample verifier must be a regular non-symlink file'
 verifier_dir=$(cd -- "$(dirname -- "$verifier_path")" && pwd -P)
 verifier_path="$verifier_dir/$(basename -- "$verifier_path")"
 
@@ -36,24 +36,24 @@ if [[ "$mode" == exact-sha ]]; then
   [[ ${SAMPLE_APP_EXPECTED_SHA:-} =~ ^[0-9a-f]{40}$ ]] ||
     fail 'exact-SHA mode requires SAMPLE_APP_EXPECTED_SHA as a full commit SHA'
   git_root=$(git -C "$verifier_dir" rev-parse --show-toplevel 2>/dev/null) ||
-    fail 'sample-app verifier is not inside a Git checkout'
+    fail 'Sample verifier is not inside a Git checkout'
   git_root=$(cd -- "$git_root" && pwd -P)
   [[ "$verifier_path" == "$git_root/src/migration-ledger.js" ]] ||
-    fail 'exact-SHA verifier path is not the canonical sample-app source file'
+    fail 'exact-SHA verifier path is not the canonical Sample source file'
   actual_sha=$(git -C "$git_root" rev-parse HEAD)
   [[ "$actual_sha" == "$SAMPLE_APP_EXPECTED_SHA" ]] ||
-    fail 'sample-app checkout revision differs from SAMPLE_APP_EXPECTED_SHA'
+    fail 'Sample checkout revision differs from SAMPLE_APP_EXPECTED_SHA'
   expected_blob=$(git -C "$git_root" rev-parse \
     "$SAMPLE_APP_EXPECTED_SHA:src/migration-ledger.js" 2>/dev/null) ||
-    fail 'expected sample-app commit does not track src/migration-ledger.js'
+    fail 'expected Sample commit does not track src/migration-ledger.js'
   index_blob=$(git -C "$git_root" rev-parse ':src/migration-ledger.js' 2>/dev/null) ||
-    fail 'sample-app index does not track src/migration-ledger.js'
+    fail 'Sample index does not track src/migration-ledger.js'
   actual_blob=$(git hash-object "$verifier_path") ||
-    fail 'unable to hash the selected sample-app verifier'
+    fail 'unable to hash the selected Sample verifier'
   [[ "$index_blob" == "$expected_blob" ]] ||
-    fail 'staged sample-app verifier bytes differ from the expected commit'
+    fail 'staged Sample verifier bytes differ from the expected commit'
   [[ "$actual_blob" == "$expected_blob" ]] ||
-    fail 'sample-app verifier bytes differ from the expected commit'
+    fail 'Sample verifier bytes differ from the expected commit'
 fi
 
 printf '%s\n' "$verifier_path"

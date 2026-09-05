@@ -1,0 +1,2 @@
+outputs:
+  mini_commerce_ecr_repository_url: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce

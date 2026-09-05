@@ -1,22 +1,8 @@
-database:
-  enabled: true
-  replicaCount: 1
-  migration:
-    enabled: true
-recovery:
-  restoreEnabled: false
-  namespace: app-recovery
-  readerRoleArn: ""
-  snapshotClassName: course-ebs-snapshots
-  snapshotDriver: ebs.csi.aws.com
-  snapshotContentName: sample-app-postgresql-recovery-content
-  snapshotName: sample-app-postgresql-recovery-snapshot
-  pvcName: sample-app-postgresql-recovery
-  snapshotHandle: ""
-  cleanupLabel: recovery
-  source:
-    namespace: app-dev
-    pvcName: data-sample-app-postgresql-0
-    snapshotName: sample-app-postgresql-snapshot
-snapshot:
-  captureEnabled: false
+# Populated only by the validated snapshot-ready receipt renderer.
+environment: dev
+namespace: app-recovery
+snapshotHandle: ""
+source:
+  namespace: app-dev
+  pvcName: data-mini-commerce-postgresql-0
+snapshotClassName: course-ebs-snapshots

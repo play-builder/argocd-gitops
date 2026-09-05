@@ -1,0 +1,40 @@
+{{- include "mini-commerce.validateTelemetry" . }}
+{{- if .Values.telemetry.enabled }}
+{{- $endpoint := required "telemetry.otlpEndpoint is required when telemetry is enabled" .Values.telemetry.otlpEndpoint }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mini-commerce.telemetryConfigName" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    {{- include "mini-commerce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: telemetry-configuration
+data:
+  OTEL_SERVICE_NAME: {{ required "telemetry.serviceName is required when telemetry is enabled" .Values.telemetry.serviceName | quote }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ printf "service.name=%s,service.namespace=%s,deployment.environment=%s" .Values.telemetry.serviceName (include "mini-commerce.namespace" .) .Values.environment | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ $endpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.telemetry.otlpProtocol | quote }}
+{{- end }}
+---
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: mini-commerce-rollout-metrics
+  namespace: {{ include "mini-commerce.namespace" . }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "mini-commerce.selectorLabels" . | nindent 6 }}
+  metrics:
+    - providers:
+        - name: prometheus
+      overrides:
+        - match:
+            metric: ALL_METRICS
+            mode: SERVER
+          tagOverrides:
+            destination_rollout_hash:
+              operation: UPSERT
+              value: "node.metadata['LABELS']['rollouts-pod-template-hash']"

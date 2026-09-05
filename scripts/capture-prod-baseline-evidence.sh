@@ -72,6 +72,11 @@ if [[ -n "$fixture" ]]; then
 fi
 
 evidence_grade=CLOUD_RUNTIME
+if [[ -z "$adapter_dir" ]]; then
+  : "${PLATFORM_INCIDENT_EVIDENCE:?reviewed live incident binding is required}"
+  : "${PLATFORM_DR_METADATA:?live encrypted export/isolated restore metadata is required}"
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 if [[ -n "$adapter_dir" ]]; then
   [[ -d "$adapter_dir" && "$runtime_override" == true && -n "$now_override" ]] ||
@@ -107,13 +112,13 @@ done
 git_revision=$(git -C "$repository_root" rev-parse HEAD)
 [[ "$git_revision" =~ ^[0-9a-f]{40}$ ]] || fail 'local GitOps revision is not a full commit SHA'
 
-app_json=$(argocd app get sample-app-prod -o json) || fail 'unable to read sample-app-prod from Argo CD'
+app_json=$(argocd app get mini-commerce-prod -o json) || fail 'unable to read mini-commerce-prod from Argo CD'
 live_revision=$(jq -er '.status.operationState.syncResult.revision // .status.sync.revision' <<<"$app_json") ||
   fail 'Argo CD did not report a GitOps revision'
 jq -e '
-  .metadata.name == "sample-app-prod" and .status.sync.status == "Synced" and
+  .metadata.name == "mini-commerce-prod" and .status.sync.status == "Synced" and
   .status.health.status == "Healthy" and (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$"))
-' <<<"$app_json" >/dev/null || fail 'sample-app-prod must be Synced and Healthy'
+' <<<"$app_json" >/dev/null || fail 'mini-commerce-prod must be Synced and Healthy'
 [[ "$live_revision" =~ ^[0-9a-f]{40}$ && "$live_revision" == "$git_revision" ]] ||
   fail 'live Argo CD revision does not match the checked-out GitOps commit'
 
@@ -134,13 +139,13 @@ kube_server=$(jq -er '.clusters | if length == 1 then .[0].cluster.server else e
 [[ "$kube_server" == "$cluster_endpoint" ]] ||
   fail 'active kube context endpoint does not match EKS_CLUSTER_NAME'
 
-rollout_json=$(kubectl -n app-prod get rollout sample-app -o json) || fail 'unable to read the Prod Rollout'
+rollout_json=$(kubectl -n app-prod get rollout mini-commerce -o json) || fail 'unable to read the Prod Rollout'
 rollout_uid=$(jq -er '.metadata.uid' <<<"$rollout_json") || fail 'Prod Rollout UID is missing'
 stable_hash=$(jq -er '.status.stableRS' <<<"$rollout_json") || fail 'Prod stable ReplicaSet hash is missing'
-image=$(jq -er '[.spec.template.spec.containers[] | select(.name == "sample-app") | .image] | if length == 1 then .[0] else empty end' <<<"$rollout_json") ||
-  fail 'Prod Rollout must contain exactly one sample-app image'
+image=$(jq -er '[.spec.template.spec.containers[] | select(.name == "mini-commerce") | .image] | if length == 1 then .[0] else empty end' <<<"$rollout_json") ||
+  fail 'Prod Rollout must contain exactly one mini-commerce image'
 jq -e '
-  .metadata.name == "sample-app" and .metadata.namespace == "app-prod" and
+  .metadata.name == "mini-commerce" and .metadata.namespace == "app-prod" and
   .metadata.uid != null and
   .status.phase == "Healthy" and .status.stableRS == .status.currentPodHash and
   (.status.replicas | type == "number" and . > 0) and
@@ -160,8 +165,8 @@ stable_rs=$(jq -cer --arg uid "$rollout_uid" --arg hash "$stable_hash" --arg ima
     .metadata.annotations["rollout.argoproj.io/revision"] == "1" and
     any(.metadata.ownerReferences[]?;
       .apiVersion == "argoproj.io/v1alpha1" and .kind == "Rollout" and
-      .name == "sample-app" and .uid == $uid and .controller == true) and
-    ([.spec.template.spec.containers[] | select(.name == "sample-app") | .image] == [$image]) and
+      .name == "mini-commerce" and .uid == $uid and .controller == true) and
+    ([.spec.template.spec.containers[] | select(.name == "mini-commerce") | .image] == [$image]) and
     (.spec.replicas | type == "number" and . > 0) and
     .status.readyReplicas == .spec.replicas and .status.availableReplicas == .spec.replicas
   )] | if length == 1 then .[0] else empty end
@@ -171,14 +176,14 @@ rollout_revision=$(jq -er '.metadata.annotations["rollout.argoproj.io/revision"]
   fail 'stable ReplicaSet revision is invalid'
 [[ "$rollout_revision" -eq 1 ]] || fail 'Prod baseline stable ReplicaSet must be revision 1'
 
-route_json=$(kubectl -n app-prod get httproute sample-app -o json) || fail 'unable to read the Prod HTTPRoute'
+route_json=$(kubectl -n app-prod get virtualservice mini-commerce -o json) || fail 'unable to read the Prod VirtualService'
 jq -e '
-  .metadata.name == "sample-app" and .metadata.namespace == "app-prod" and
-  (.spec.rules | length) == 1 and (.spec.rules[0].backendRefs | length) == 2 and
-  ([.spec.rules[0].backendRefs[] | {name,port,weight}] | sort_by(.name)) ==
-    [{name:"sample-app-canary",port:80,weight:0},{name:"sample-app-stable",port:80,weight:100}] and
-  ([.spec.rules[0].backendRefs[].weight] | add) == 100
-' <<<"$route_json" >/dev/null || fail 'Prod HTTPRoute is not routing 100 percent to the stable service'
+  .metadata.name == "mini-commerce" and .metadata.namespace == "app-prod" and
+  (.spec.http | length) == 1 and (.spec.http[0].route | length) == 2 and
+  ([.spec.http[0].route[] | {name:.destination.host,port:.destination.port.number,weight}] | sort_by(.name)) ==
+    [{name:"mini-commerce-canary",port:3000,weight:0},{name:"mini-commerce-stable",port:3000,weight:100}] and
+  ([.spec.http[0].route[].weight] | add) == 100
+' <<<"$route_json" >/dev/null || fail 'Prod VirtualService is not routing 100 percent to the stable service'
 
 cluster_account=${cluster_arn#arn:aws:eks:$AWS_REGION:}
 cluster_account=${cluster_account%%:*}
@@ -204,6 +209,9 @@ jq -n --arg repository "$image_repository" --arg digest "$image_digest" \
   }
 ' >"$tmp" || fail 'failed to construct Prod baseline evidence'
 validate_record "$tmp" "$evidence_grade" "$clock_now"
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
+fi
 if [[ -e "$output" ]]; then
   [[ -f "$output" && ! -L "$output" ]] || fail 'Prod baseline output is not a regular non-symlink file'
   validate_record "$output" "$evidence_grade" "$clock_now"
@@ -213,6 +221,11 @@ if [[ -e "$output" ]]; then
     fail 'existing canonical Prod baseline belongs to a different immutable release identity'
 fi
 chmod 600 "$tmp"
-mv "$tmp" "$output"
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/publish-incident-capture.rb" "$tmp" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+  rm -f -- "$tmp"
+else
+  mv "$tmp" "$output"
+fi
 trap - EXIT
 echo "[$evidence_grade] wrote $output"

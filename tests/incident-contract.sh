@@ -95,19 +95,19 @@ for path in sorted(catalog_root.glob("INC-*.yaml")):
 stable = {
     "repository": "play-builder/cicd-course-sample-app",
     "sourceSha": "1" * 40,
-    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/sample-app",
+    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce",
     "indexDigest": "sha256:" + "a" * 64,
 }
 faulty = {
     "repository": "play-builder/cicd-course-sample-app",
     "sourceSha": "2" * 40,
-    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/sample-app",
+    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce",
     "indexDigest": "sha256:" + "b" * 64,
 }
 hotfix = {
     "repository": "play-builder/cicd-course-sample-app",
     "sourceSha": "3" * 40,
-    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/sample-app",
+    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce",
     "indexDigest": "sha256:" + "c" * 64,
 }
 if db04_mismatch == "invalid-stable-source-sha":
@@ -127,13 +127,13 @@ elif db04_mismatch == "non-ecr-image-repository":
 elif db04_mismatch == "cross-region-image-repository":
     other_region = "ap-northeast-2" if region == "us-east-1" else "us-east-1"
     for identity in (stable, faulty, hotfix):
-        identity["imageRepository"] = f"{account_id}.dkr.ecr.{other_region}.amazonaws.com/course/sample-app"
+        identity["imageRepository"] = f"{account_id}.dkr.ecr.{other_region}.amazonaws.com/course/mini-commerce"
 elif db04_mismatch == "foreign-account-image-repository":
     foreign_account = "999999999999" if account_id != "999999999999" else "111111111111"
     for identity in (stable, faulty, hotfix):
-        identity["imageRepository"] = f"{foreign_account}.dkr.ecr.{region}.amazonaws.com/course/sample-app"
+        identity["imageRepository"] = f"{foreign_account}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce"
 elif db04_mismatch in {"one-character-image-repository", "noncanonical-image-repository"}:
-    repository_name = {"one-character-image-repository": "a", "noncanonical-image-repository": "mini-commerce"}[db04_mismatch]
+    repository_name = {"one-character-image-repository": "a", "noncanonical-image-repository": "other-service"}[db04_mismatch]
     for identity in (stable, faulty, hotfix):
         identity["imageRepository"] = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository_name}"
 scenarios = ("git-revert", "break-glass-undo-plus-git", "hotfix-fix-forward")
@@ -144,7 +144,7 @@ for number, scenario in enumerate(scenarios, start=1):
         recovered["repository"] = "play-builder/wrong-repository"
     recovered["strategy"] = scenario
     if db04_mismatch == "recovered-image-repository-mismatch" and scenario == "hotfix-fix-forward":
-        recovered["imageRepository"] = f"{account_id}.dkr.ecr.{region}.amazonaws.com/other/sample-app"
+        recovered["imageRepository"] = f"{account_id}.dkr.ecr.{region}.amazonaws.com/other/mini-commerce"
     if db04_mismatch == "strategy-mismatch" and scenario == "git-revert":
         recovered["strategy"] = "hotfix-fix-forward"
     run_id = str(1000 + number)
@@ -446,8 +446,8 @@ case_db04_recovery_identity() {
 
   make_runtime_bundle "$work/valid" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z
   for recovery_source in "$work"/valid/repos/cicd-course-sample-app/evidence/sources/db04-*.json; do
-    jq -e '[.stable,.faulty,.recovered] | all(.imageRepository | test("(^|/)sample-app$"))' \
-      "$recovery_source" >/dev/null || fail "runtime bundle emitted a noncanonical DB04 sample-app ECR identity"
+    jq -e '[.stable,.faulty,.recovered] | all(.imageRepository | test("(^|/)mini-commerce$"))' \
+      "$recovery_source" >/dev/null || fail "runtime bundle emitted a noncanonical DB04 mini-commerce ECR identity"
   done
   run_runtime_producer "$work/valid" >/dev/null || fail "runtime producer rejected valid INC-DB-04 recovery identities"
 

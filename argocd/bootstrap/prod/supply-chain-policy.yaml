@@ -1,0 +1,29 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "supply-chain-policy-prod",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-12",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-bootstrap-prod",
+    "source": {
+      "repoURL": "https://github.com/REPLACE_ME/argocd-gitops.git",
+      "targetRevision": "main",
+      "path": "platform/security/sigstore/overlays/prod"
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "cosign-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}

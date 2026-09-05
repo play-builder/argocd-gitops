@@ -15,7 +15,7 @@ publish_fixture=
 now_override=
 runtime_override=false
 adapter_dir=${COURSE_CHECK_BIN_DIR:-}
-configmap_name=sample-app-rollback-candidates
+configmap_name=mini-commerce-rollback-candidates
 namespace=app-prod
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -144,7 +144,7 @@ validate_record() {
     .schemaVersion == "course.rollback-candidates/v1" and .evidenceGrade == $grade and
     .environment == "prod" and (.region | IN("ap-northeast-2","us-east-1")) and
     (.clusterArn | test("^arn:aws:eks:" + $record.region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
-    .rolloutName == "sample-app" and (.rolloutName | nonblank) and
+    .rolloutName == "mini-commerce" and (.rolloutName | nonblank) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and .sourceEvidenceDigest == $digest and
     (.observedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
     ((.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)) and
@@ -173,8 +173,8 @@ validate_ecr_repository() {
     fail 'rollback candidate image repository account or Region differs from EKS'
   name=${BASH_REMATCH[3]}
   ((${#name} >= 2 && ${#name} <= 256)) || fail 'rollback candidate ECR repository name length is invalid'
-  [[ "$name" == sample-app || "$name" == */sample-app ]] ||
-    fail 'rollback candidate image repository is not the canonical sample-app identity'
+  [[ "$name" == mini-commerce || "$name" == */mini-commerce ]] ||
+    fail 'rollback candidate image repository is not the canonical mini-commerce identity'
 }
 
 publish_configmap() {
@@ -209,11 +209,11 @@ publish_configmap() {
 
 validate_application_binding() {
   local evidence=$1 application revision
-  application=$(argocd app get sample-app-prod -o json) ||
-    fail 'unable to re-query sample-app-prod before ConfigMap publication'
+  application=$(argocd app get mini-commerce-prod -o json) ||
+    fail 'unable to re-query mini-commerce-prod before ConfigMap publication'
   revision=$(jq -er '.gitopsRevision' "$evidence") || fail 'rollback evidence GitOps revision is missing'
   jq -e --arg revision "$revision" '
-    .metadata.name == "sample-app-prod" and .status.sync.status == "OutOfSync" and
+    .metadata.name == "mini-commerce-prod" and .status.sync.status == "OutOfSync" and
     .status.sync.revision == $revision and .status.health.status == "Healthy" and
     (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
     ((.spec.syncPolicy.automated // null) == null) and
@@ -228,10 +228,10 @@ validate_finalize_binding() {
     fail 'GitOps source outside evidence/ must match the reviewed finalize commit'
   revision=$(git -C "$repository_root" rev-parse HEAD) || fail 'unable to read the finalize GitOps revision'
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'finalize GitOps revision is not a full commit SHA'
-  application=$(argocd app get sample-app-prod -o json) ||
-    fail 'unable to re-query sample-app-prod before rollback evidence cleanup'
+  application=$(argocd app get mini-commerce-prod -o json) ||
+    fail 'unable to re-query mini-commerce-prod before rollback evidence cleanup'
   jq -e --arg revision "$revision" '
-    .metadata.name == "sample-app-prod" and
+    .metadata.name == "mini-commerce-prod" and
     .status.sync.status == "Synced" and .status.sync.revision == $revision and
     .status.health.status == "Healthy" and
     ((.status.operationState.phase // "") | IN("", "Succeeded")) and
@@ -240,7 +240,8 @@ validate_finalize_binding() {
     .spec.source.helm.valueFiles == [
       "../../envs/prod/values.yaml",
       "../../envs/prod/stateful-values.yaml",
-      "../../envs/prod/migration-finalize-values.yaml"
+      "../../envs/prod/migration-finalize-values.yaml",
+      "../../envs/prod/pre-cutover-ownership-values.yaml"
     ]
   ' <<<"$application" >/dev/null ||
     fail 'Prod Application is not Synced and Healthy at the reviewed finalize revision'
@@ -270,9 +271,9 @@ write_configmap_payload() {
     --arg clusterArn "$(jq -r '.clusterArn' "$evidence")" --arg rolloutName "$(jq -r '.rolloutName' "$evidence")" \
     --arg gitopsRevision "$(jq -r '.gitopsRevision' "$evidence")" '
     {apiVersion:"v1",kind:"ConfigMap",
-     metadata:{name:"sample-app-rollback-candidates",namespace:"app-prod",
-       labels:{"app.kubernetes.io/name":"sample-app-rollback-candidates",
-               "app.kubernetes.io/part-of":"sample-app",
+     metadata:{name:"mini-commerce-rollback-candidates",namespace:"app-prod",
+       labels:{"app.kubernetes.io/name":"mini-commerce-rollback-candidates",
+               "app.kubernetes.io/part-of":"mini-commerce",
                "course.playbuilder.io/cleanup-scope":"rollback-candidates"},
        annotations:{"course.playbuilder.io/content-sha256":$evidenceSha,
                     "course.playbuilder.io/source-evidence-digest":$sourceDigest}},
@@ -310,7 +311,7 @@ cleanup_configmap() {
   }
   rm -f -- "$payload"
   uid=$(jq -er '.metadata.uid' <<<"$existing") || fail 'rollback candidate ConfigMap UID is missing'
-  job=$(kubectl -n "$namespace" get job sample-app-migration -o json) ||
+  job=$(kubectl -n "$namespace" get job mini-commerce-migration -o json) ||
     fail 'unable to query the Contract 003 migration Job before cleanup'
   jq -e --arg now "$cleanup_now" --argjson evidence "$(cat "$evidence")" '
     def canonical_utc_seconds:
@@ -318,9 +319,9 @@ cleanup_configmap() {
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     (.spec.template.spec.containers[] | select(.name == "migrate")) as $container |
-    .metadata.name == "sample-app-migration" and .metadata.namespace == "app-prod" and
+    .metadata.name == "mini-commerce-migration" and .metadata.namespace == "app-prod" and
     .metadata.labels["app.kubernetes.io/component"] == "migration" and
-    .metadata.labels["app.kubernetes.io/part-of"] == "sample-app" and
+    .metadata.labels["app.kubernetes.io/part-of"] == "mini-commerce" and
     .status.succeeded == 1 and ((.status.failed // 0) == 0) and
     (.status.completionTime | canonical_utc_seconds) and ($now | canonical_utc_seconds) and
     ((.status.completionTime | fromdateiso8601) > ($evidence.observedAt | fromdateiso8601)) and
@@ -402,6 +403,11 @@ if [[ -n "$publish_fixture" ]]; then
 fi
 
 evidence_grade=CLOUD_RUNTIME
+if [[ -z "$adapter_dir" ]]; then
+  : "${PLATFORM_INCIDENT_EVIDENCE:?reviewed live incident binding is required}"
+  : "${PLATFORM_DR_METADATA:?live encrypted export/isolated restore metadata is required}"
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 if [[ -n "$adapter_dir" ]]; then
   [[ "$runtime_override" == true && -n "$now_override" ]] ||
@@ -431,15 +437,15 @@ for command in argocd aws git kubectl; do command -v "$command" >/dev/null || fa
 local_revision=$(git -C "$repository_root" rev-parse HEAD)
 [[ "$local_revision" =~ ^[0-9a-f]{40}$ ]] || fail 'local GitOps revision is not a full commit SHA'
 
-application=$(argocd app get sample-app-prod -o json) || fail 'unable to query sample-app-prod from Argo CD'
+application=$(argocd app get mini-commerce-prod -o json) || fail 'unable to query mini-commerce-prod from Argo CD'
 desired_revision=$(jq -er '.status.sync.revision' <<<"$application") || fail 'Argo CD desired revision is missing'
 jq -e '
-  .metadata.name == "sample-app-prod" and .status.sync.status == "OutOfSync" and
+  .metadata.name == "mini-commerce-prod" and .status.sync.status == "OutOfSync" and
   .status.health.status == "Healthy" and (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
   ((.spec.syncPolicy.automated // null) == null) and
   ((.status.operationState.phase // "") | IN("","Succeeded"))
 ' <<<"$application" >/dev/null ||
-  fail 'sample-app-prod must be Healthy, manually managed, idle, and OutOfSync before full Sync'
+  fail 'mini-commerce-prod must be Healthy, manually managed, idle, and OutOfSync before full Sync'
 [[ "$desired_revision" == "$local_revision" ]] || fail 'Argo CD desired revision does not equal the clean reviewed HEAD'
 
 cluster=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --output json) ||
@@ -458,7 +464,7 @@ kube_server=$(jq -er '.clusters | if length == 1 then .[0].cluster.server else e
   fail 'active context must contain exactly one cluster server'
 [[ "$kube_server" == "$cluster_endpoint" ]] || fail 'active context endpoint differs from the Prod EKS cluster'
 
-rollout=$(kubectl -n "$namespace" get rollout sample-app -o json) || fail 'unable to query the live Prod Rollout'
+rollout=$(kubectl -n "$namespace" get rollout mini-commerce -o json) || fail 'unable to query the live Prod Rollout'
 rollout_name=$(jq -er '.metadata.name' <<<"$rollout") || fail 'live Rollout name is missing'
 rollout_uid=$(jq -er '.metadata.uid' <<<"$rollout") || fail 'live Rollout UID is missing'
 stable_hash=$(jq -er '.status.stableRS' <<<"$rollout") || fail 'live stable hash is missing'
@@ -475,7 +481,7 @@ jq -e --argjson source "$source_json" '
   ((.status.pauseConditions // []) | length) == 0
 ' <<<"$rollout" >/dev/null || fail 'live Rollout identity, stable state, or rollbackWindow differs from reviewed source'
 
-replicasets=$(kubectl -n "$namespace" get replicasets -l app.kubernetes.io/instance=sample-app -o json) ||
+replicasets=$(kubectl -n "$namespace" get replicasets -l app.kubernetes.io/instance=mini-commerce -o json) ||
   fail 'unable to query live Prod ReplicaSets'
 source_projection=$(jq -cS '
   .completedRollback.replicaSetList |
@@ -497,9 +503,9 @@ candidates=$(jq -c '.completedRollback.candidates' <<<"$source_json")
 first_hash=$(jq -r '.[0].podTemplateHash' <<<"$candidates")
 first_image=$(jq -er --arg hash "$first_hash" '
   [.items[] | select(.metadata.labels["rollouts-pod-template-hash"] == $hash) |
-    .spec.template.spec.containers[] | select(.name == "sample-app") | .image] |
+    .spec.template.spec.containers[] | select(.name == "mini-commerce") | .image] |
   if length == 1 then .[0] else empty end
-' <<<"$replicasets") || fail 'candidate ReplicaSet sample-app image is ambiguous'
+' <<<"$replicasets") || fail 'candidate ReplicaSet mini-commerce image is ambiguous'
 [[ "$first_image" =~ ^([^@]+)@(sha256:[0-9a-f]{64})$ ]] || fail 'candidate image is not pinned by digest'
 image_repository=${BASH_REMATCH[1]}
 validate_ecr_repository "$image_repository" "$AWS_REGION" "$cluster_account"
@@ -511,7 +517,7 @@ jq -e --argjson candidates "$candidates" --arg repository "$image_repository" '
       .metadata.labels["rollouts-pod-template-hash"] == $candidate.podTemplateHash and
       .metadata.annotations["rollout.argoproj.io/revision"] == ($candidate.rolloutRevision | tostring) and
       ((.metadata.annotations["rollouts.argoproj.io/experiment-name"] // "") == "") and
-      ([.spec.template.spec.containers[] | select(.name == "sample-app") | .image] ==
+      ([.spec.template.spec.containers[] | select(.name == "mini-commerce") | .image] ==
         [($repository + "@" + $candidate.imageDigest)])) ] | length) == 1)
 ' <<<"$replicasets" >/dev/null || fail 'live candidate image, revision, hash, or Experiment exclusion is invalid'
 [[ "$source_digest" == "sha256:$(shasum -a 256 "$source_record" | awk '{print $1}')" ]] ||
@@ -534,12 +540,18 @@ jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$clust
   --arg revision "$local_revision" --arg digest "$source_digest" --arg observed "$observed_at" \
   --arg expires "$expires_at" --argjson candidates "$candidates" '
   {schemaVersion:"course.rollback-candidates/v1",evidenceGrade:$grade,environment:"prod",
-   region:$region,clusterArn:$arn,rolloutName:"sample-app",gitopsRevision:$revision,
+   region:$region,clusterArn:$arn,rolloutName:"mini-commerce",gitopsRevision:$revision,
    sourceEvidenceDigest:$digest,observedAt:$observed,expiresAt:$expires,candidates:$candidates}
 ' >"$tmp" || fail 'unable to construct rollback candidate evidence'
 chmod 600 "$tmp"
 validate_record "$tmp" "$evidence_grade" "$clock_now"
-if [[ -e "$output" ]]; then
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
+fi
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/publish-incident-capture.rb" "$tmp" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+  rm -f -- "$tmp"
+elif [[ -e "$output" ]]; then
   require_regular_file "$output" 'existing rollback candidate evidence'
   cmp -s "$tmp" "$output" || fail 'existing rollback candidate evidence differs from the immutable capture'
   rm -f -- "$tmp"

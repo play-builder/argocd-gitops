@@ -281,8 +281,8 @@ case_rollback_edges() {
     done <<'CASES'
 rollout-name|.completedRollback.rolloutName=$value | .completedRollback.replicaSetList.items[].metadata.ownerReferences[] |= if .kind=="Rollout" then .name=$value else . end
 rollout-uid|.completedRollback.rolloutUid=$value | .completedRollback.replicaSetList.items[].metadata.ownerReferences[] |= if .kind=="Rollout" then .uid=$value else . end
-stable-hash|.completedRollback.stableHash=$value | .completedRollback.replicaSetList.items[] |= if .metadata.name=="sample-app-stable" then .metadata.labels["rollouts-pod-template-hash"]=$value else . end
-target-and-candidate-hash|.completedRollback.targetHash=$value | .completedRollback.candidates[0].podTemplateHash=$value | .completedRollback.replicaSetList.items[] |= if .metadata.name=="sample-app-target" then .metadata.labels["rollouts-pod-template-hash"]=$value else . end
+stable-hash|.completedRollback.stableHash=$value | .completedRollback.replicaSetList.items[] |= if .metadata.name=="mini-commerce-stable" then .metadata.labels["rollouts-pod-template-hash"]=$value else . end
+target-and-candidate-hash|.completedRollback.targetHash=$value | .completedRollback.candidates[0].podTemplateHash=$value | .completedRollback.replicaSetList.items[] |= if .metadata.name=="mini-commerce-target" then .metadata.labels["rollouts-pod-template-hash"]=$value else . end
 CASES
   done
 
@@ -358,7 +358,7 @@ workflow-runurl-id|.workflow.runUrl = "https://github.com/OWNER/cicd-course-samp
 workflow-runurl-repository|.workflow.runUrl = "https://github.com/OWNER/other-app/actions/runs/1001"
 workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl = "https://github.com/OWNER /cicd-course-sample-app/attestations/1001"
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
-ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"
+ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce"
 ecr-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 slo-evidence-id-whitespace|.slo.evidenceId = "   "
 attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"
@@ -397,13 +397,13 @@ CASES
 
 case_render() {
   local baseline="$render_root/prod-baseline.yaml" candidate="$render_root/prod-candidate.yaml"
-  helm template sample-app "$repository_root/charts/sample-app" \
+  helm template mini-commerce "$repository_root/charts/mini-commerce" \
     --values "$repository_root/envs/prod/values.yaml" \
     --values "$fixture_root/values/prod-baseline.yaml" >"$baseline"
-  helm template sample-app "$repository_root/charts/sample-app" \
+  helm template mini-commerce "$repository_root/charts/mini-commerce" \
     --values "$repository_root/envs/prod/values.yaml" \
     --values "$fixture_root/values/prod-candidate.yaml" >"$candidate"
-  normalize() { yq eval-all -o=json -I=0 '[.]' "$1" | jq -cS 'sort_by(.kind, (.metadata.namespace // ""), .metadata.name) | map(if .kind == "Rollout" then del(.spec.template.spec.containers[].image) elif .kind == "Job" and .metadata.name == "sample-app-migration" then del(.spec.template.spec.containers[].image) else . end)'; }
+  normalize() { yq eval-all -o=json -I=0 '[.]' "$1" | jq -cS 'sort_by(.kind, (.metadata.namespace // ""), .metadata.name) | map(if .kind == "Rollout" then del(.spec.template.spec.containers[].image) elif .kind == "Job" and .metadata.name == "mini-commerce-migration" then del(.spec.template.spec.containers[].image) else . end)'; }
   [[ "$(normalize "$baseline")" == "$(normalize "$candidate")" ]] || fail "normalized prod baseline and candidate manifests differ beyond approved images"
   local b c
   b=$(yq -r 'select(.kind == "Rollout") | .spec.template.spec.containers[0].image' "$baseline")
@@ -411,8 +411,13 @@ case_render() {
   [[ "$b" != "$c" ]] || fail "prod candidate digest must differ from baseline"
   yq eval-all -e 'select(.kind == "AnalysisTemplate") | .spec.metrics[0].name == "request-rate" and .spec.metrics[1].name == "success-rate"' "$candidate" >/dev/null || fail "AnalysisTemplate metrics must use canonical request-rate and success-rate names"
   yq eval-all -o=json 'select(.kind == "Rollout") | .spec.strategy.canary.steps' "$candidate" | jq -e '(to_entries | map(select(.value.pause == {})) | last.key) as $p | (to_entries | map(select(.value.setWeight == 100)) | last.key) as $w | $p == ($w - 1)' >/dev/null || fail "manual pause must immediately precede final 100 percent"
-  yq -e '.spec.template.spec.syncPolicy.automated == null' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" >/dev/null || fail "Prod ApplicationSet must remain manually synced"
-  yq -o=json '.' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" | jq -e '.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true") != null' >/dev/null || fail "Prod ApplicationSet must retain explicit namespace creation"
+  yq -e '.spec.template.spec.syncPolicy.automated == null' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" >/dev/null || fail "Prod ApplicationSet must remain manually synced"
+  yq -o=json '.' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" | jq -e '
+    (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null and
+    .spec.template.spec.syncPolicy.managedNamespaceMetadata == null and
+    .spec.generators[0].list.elements[0].ownershipValuesFile == "envs/prod/pre-cutover-ownership-values.yaml" and
+    .spec.template.spec.source.helm.valueFiles[-1] == "../../{{ .ownershipValuesFile }}"
+  ' >/dev/null || fail "Prod ApplicationSet must reference the existing namespace during pre-cutover promotion"
   echo "PASS: Prod baseline/candidate desired state is equivalent except approved images."
 }
 

@@ -1,0 +1,9 @@
+environment: dev
+namespace: app-recovery
+snapshotHandle: ""
+source:
+  namespace: app-dev
+  pvcName: data-mini-commerce-postgresql-0
+storageClassName: course-gp3
+storageSize: 5Gi
+image: docker.io/library/postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94

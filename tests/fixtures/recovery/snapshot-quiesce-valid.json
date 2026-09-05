@@ -1,6 +1,6 @@
 {
   "schemaVersion":"course.snapshot-quiesce/v1","evidenceGrade":"CLOUD_RUNTIME","environment":"dev","region":"ap-northeast-2","clusterArn":"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev","gitopsRevision":"fedcba9876543210fedcba9876543210fedcba98",
-  "source":{"namespace":"app-dev","statefulSet":"sample-app-postgresql","pvcName":"data-sample-app-postgresql-0","pvcUid":"11111111-1111-1111-1111-111111111111","volumeName":"pvc-11111111-1111-1111-1111-111111111111"},
+  "source":{"namespace":"app-dev","statefulSet":"mini-commerce-postgresql","pvcName":"data-mini-commerce-postgresql-0","pvcUid":"11111111-1111-1111-1111-111111111111","volumeName":"pvc-11111111-1111-1111-1111-111111111111"},
   "writers":{"applicationReplicas":0,"migrationActive":0,"migrationPending":0},
   "database":{"desiredReplicas":0,"readyReplicas":0,"shutdownSignal":"SIGINT","cleanShutdownObserved":true,"cleanShutdownEvidenceId":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","stoppedAt":"2026-09-03T01:00:00Z"},
   "storage":{"mountedPodUids":[],"volumeAttachmentNames":[]},

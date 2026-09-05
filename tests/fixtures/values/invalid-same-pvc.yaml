@@ -4,12 +4,12 @@ recovery:
   restoreEnabled: true
   readerRoleArn: arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role
   namespace: app-recovery
-  pvcName: data-sample-app-postgresql-0
-  snapshotName: sample-app-postgresql-recovery-snapshot
+  pvcName: data-mini-commerce-postgresql-0
+  snapshotName: mini-commerce-postgresql-recovery-snapshot
   snapshotHandle: snap-0123456789abcdef0
   snapshotDriver: ebs.csi.aws.com
-  snapshotContentName: sample-app-postgresql-recovery-content
+  snapshotContentName: mini-commerce-postgresql-recovery-content
   source:
     namespace: app-dev
-    pvcName: data-sample-app-postgresql-0
-    snapshotName: sample-app-postgresql-snapshot
+    pvcName: data-mini-commerce-postgresql-0
+    snapshotName: mini-commerce-postgresql-snapshot

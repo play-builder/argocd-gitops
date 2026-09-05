@@ -9,7 +9,7 @@ workflow:
   runAttempt: 1
   runUrl: https://github.com/OWNER/cicd-course-sample-app/actions/runs/1001
 image:
-  repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app
+  repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce
   indexDigest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
   platforms: [linux/amd64, linux/arm64]
 attestation:

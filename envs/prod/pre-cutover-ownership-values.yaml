@@ -1,0 +1,6 @@
+namespace:
+  create: false
+
+externalSecrets:
+  createReaderServiceAccount: false
+  createSecretStore: false

@@ -2,11 +2,21 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  - application-namespace.yaml
+  - workload-governance.yaml
+  - application-secret-stores.yaml
+  - mesh-project.yaml
+  - ../../../platform/istio/base
+  - istio-platform.yaml
+  - mesh-policies.yaml
+  - supply-chain-policy.yaml
+  - platform-credentials.yaml
   - project.yaml
   - external-secrets-project.yaml
   - external-secrets.yaml
   - admission-policy.yaml
-  - sample-app.yaml
+  - legacy-sample-app.yaml
+  - mini-commerce.yaml
 
 patches:
   - path: rbac.yaml

@@ -1,0 +1,180 @@
+{{- if and .Values.database.enabled .Values.database.migration.enabled }}
+{{- $migrationPhase := required "database.migration.phase is required when migration is enabled" .Values.database.migration.phase }}
+{{- $migrationTarget := required "database.migration.target is required when migration is enabled" .Values.database.migration.target }}
+{{- $rollbackConfigMapName := "" }}
+{{- if .Values.database.migration.rollbackCandidates.enabled }}
+{{- $rollbackConfigMapName = required "database.migration.rollbackCandidates.configMapName is required when rollback candidate handoff is enabled" .Values.database.migration.rollbackCandidates.configMapName }}
+{{- end }}
+{{- if eq $migrationPhase "initial" }}
+{{- if or (ne $migrationTarget "001_initial_commerce") .Values.database.migration.rollbackCandidates.enabled (ne $rollbackConfigMapName "") }}
+{{- fail "initial migration requires target 001_initial_commerce without rollback candidate evidence" }}
+{{- end }}
+{{- else if eq $migrationPhase "expand" }}
+{{- if or (ne $migrationTarget "002_expand_product_display_name") .Values.database.migration.rollbackCandidates.enabled (ne $rollbackConfigMapName "") }}
+{{- fail "expand migration requires target 002_expand_product_display_name without rollback candidate evidence" }}
+{{- end }}
+{{- else if eq $migrationPhase "contract" }}
+{{- if or (ne $migrationTarget "003_contract_product_name") (not .Values.database.migration.rollbackCandidates.enabled) }}
+{{- fail "contract migration requires target 003_contract_product_name with rollback candidate evidence" }}
+{{- end }}
+{{- else if eq $migrationPhase "finalize" }}
+{{- if or (ne $migrationTarget "003_contract_product_name") .Values.database.migration.rollbackCandidates.enabled (ne $rollbackConfigMapName "") }}
+{{- fail "finalize migration requires target 003_contract_product_name without rollback candidate evidence" }}
+{{- end }}
+{{- else }}
+{{- fail "database.migration.phase must be initial, expand, contract, or finalize" }}
+{{- end }}
+{{- if not .Values.maintenance.writersStopped }}
+{{- $secretName := .Values.externalSecrets.migration.targetSecretName }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mini-commerce.fullname" . }}-migration
+  namespace: {{ include "mini-commerce.namespace" . }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: mini-commerce-migration
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: mini-commerce
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: {{ .Values.database.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.database.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+      labels:
+        app.kubernetes.io/name: mini-commerce-migration
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: mini-commerce
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: {{ include "mini-commerce.migrationImage" . }}
+          imagePullPolicy: {{ .Values.database.migrationImage.pullPolicy }}
+          command: ["node", "scripts/migrate.mjs"]
+          args: ["--target", {{ $migrationTarget | quote }}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            {{- if eq .Values.environment "prod" }}
+            - name: rds-ca
+              mountPath: /etc/rds-ca
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.database.migration.rollbackCandidates.enabled }}
+            - name: rollback-candidates
+              mountPath: /var/run/course-evidence
+              readOnly: true
+            {{- end }}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          env:
+            - name: APP_ENV
+              value: {{ ternary "production" "development" (eq .Values.environment "prod") | quote }}
+            - name: DATABASE_ENABLED
+              value: "true"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: DB_PASSWORD
+            - name: DB_SSL
+              value: {{ ternary "true" "false" (eq .Values.environment "prod") | quote }}
+            {{- if eq .Values.environment "prod" }}
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/rds-ca/global-bundle.pem
+            {{- end }}
+            {{- if .Values.database.migration.rollbackCandidates.enabled }}
+            - name: ROLLBACK_CANDIDATES_FILE
+              value: /var/run/course-evidence/rollback-candidates.json
+            - name: ROLLBACK_EXPECTED_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: environment
+            - name: ROLLBACK_EXPECTED_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: region
+            - name: ROLLBACK_EXPECTED_CLUSTER_ARN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: clusterArn
+            - name: ROLLBACK_EXPECTED_ROLLOUT_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: rolloutName
+            - name: ROLLBACK_EXPECTED_GITOPS_REVISION
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: gitopsRevision
+            - name: ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rollbackConfigMapName }}
+                  key: sourceEvidenceDigest
+            {{- end }}
+      volumes:
+        {{- if eq .Values.environment "prod" }}
+        - name: rds-ca
+          configMap:
+            name: mini-commerce-rds-ca
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.database.migration.rollbackCandidates.enabled }}
+        - name: rollback-candidates
+          configMap:
+            name: {{ $rollbackConfigMapName }}
+            defaultMode: 0444
+            items:
+              - key: rollback-candidates.json
+                path: rollback-candidates.json
+        {{- end }}
+{{- end }}
+{{- end }}

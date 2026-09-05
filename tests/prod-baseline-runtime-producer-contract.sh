@@ -42,19 +42,19 @@ for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-to
   invalid_fixture="$tmp_root/fixture-$label.json"
   case "$label" in
     ecr-double-slash)
-      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-invalid-segment)
-      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-trailing-space)
-      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app "' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce "' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-name-too-short)
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-name-too-long)
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/" + ("a" * 257)' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-region-mismatch)
-      jq '.image.repository="123456789012.dkr.ecr.us-east-1.amazonaws.com/course/sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.us-east-1.amazonaws.com/course/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-account-mismatch)
-      jq '.image.repository="999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
   esac
   if bash "$script" --fixture "$invalid_fixture" >/dev/null 2>&1; then
     fail "baseline fixture validator accepted $label"
@@ -81,19 +81,19 @@ for command in argocd aws git kubectl; do
 done
 printf '%s\n' 1111111111111111111111111111111111111111 >"$runtime/git-revision.txt"
 : >"$runtime/git-status.txt"
-jq -n '{metadata:{name:"sample-app-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' >"$runtime/application.json"
+jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' >"$runtime/application.json"
 jq -n '{cluster:{name:"course-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$runtime/kubeconfig.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
-  {metadata:{name:"sample-app",namespace:"app-prod",uid:"22222222-2222-2222-2222-222222222222"},
-   spec:{template:{spec:{containers:[{name:"sample-app",image:$image}]}}},
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
+  {metadata:{name:"mini-commerce",namespace:"app-prod",uid:"22222222-2222-2222-2222-222222222222"},
+   spec:{template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},
    status:{phase:"Healthy",stableRS:"stable-v1",currentPodHash:"stable-v1",replicas:3,readyReplicas:3,availableReplicas:3,pauseConditions:[]}}
 ' >"$runtime/rollout.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
-  {items:[{metadata:{name:"sample-app-stable-v1",labels:{"rollouts-pod-template-hash":"stable-v1"},annotations:{"rollout.argoproj.io/revision":"1"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"sample-app",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
-   spec:{replicas:3,template:{spec:{containers:[{name:"sample-app",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
+  {items:[{metadata:{name:"mini-commerce-stable-v1",labels:{"rollouts-pod-template-hash":"stable-v1"},annotations:{"rollout.argoproj.io/revision":"1"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
+   spec:{replicas:3,template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
 ' >"$runtime/replicasets.json"
-jq -n '{metadata:{name:"sample-app",namespace:"app-prod"},spec:{rules:[{backendRefs:[{name:"sample-app-stable",port:80,weight:100},{name:"sample-app-canary",port:80,weight:0}]}]}}' >"$runtime/httproute.json"
+jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{http:[{name:"primary",route:[{destination:{host:"mini-commerce-stable",port:{number:3000}},weight:100},{destination:{host:"mini-commerce-canary",port:{number:3000}},weight:0}]}]}}' >"$runtime/virtualservice.json"
 
 run_static() {
   local source=$1 output=$2
@@ -140,14 +140,14 @@ for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision no
     wrong-owner) jq '.items[0].metadata.ownerReferences[0].uid="foreign"' "$candidate/replicasets.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/replicasets.json" ;;
     wrong-owner-name) jq '.items[0].metadata.ownerReferences[0].name="other-rollout"' "$candidate/replicasets.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/replicasets.json" ;;
     wrong-revision) jq '.items[0].metadata.annotations["rollout.argoproj.io/revision"]="2"' "$candidate/replicasets.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/replicasets.json" ;;
-    nonfinal-route) jq '.spec.rules[0].backendRefs[0].weight=50 | .spec.rules[0].backendRefs[1].weight=50' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
-    extra-route-backend) jq '.spec.rules[0].backendRefs += [{name:"shadow",port:80,weight:0}]' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
-    extra-route-rule) jq '.spec.rules += [.spec.rules[0]]' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
-    image-account) set_runtime_repository "$candidate" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app' ;;
-    image-region) set_runtime_repository "$candidate" '123456789012.dkr.ecr.us-east-1.amazonaws.com/course/sample-app' ;;
-    image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//sample-app' ;;
-    image-invalid-segment) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-sample-app' ;;
-    image-trailing-space) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app ' ;;
+    nonfinal-route) jq '.spec.http[0].route[0].weight=50 | .spec.http[0].route[1].weight=50' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
+    extra-route-backend) jq '.spec.http[0].route += [{destination:{host:"shadow",port:{number:3000}},weight:0}]' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
+    extra-route-rule) jq '.spec.http += [.spec.http[0]]' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
+    image-account) set_runtime_repository "$candidate" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce' ;;
+    image-region) set_runtime_repository "$candidate" '123456789012.dkr.ecr.us-east-1.amazonaws.com/course/mini-commerce' ;;
+    image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce' ;;
+    image-invalid-segment) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-mini-commerce' ;;
+    image-trailing-space) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce ' ;;
     image-name-too-short) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     image-name-too-long) set_runtime_repository "$candidate" "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/$(printf 'a%.0s' {1..257})" ;;
     context-drift) jq '.clusters[0].cluster.server="https://foreign.eks.example"' "$candidate/kubeconfig.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/kubeconfig.json" ;;

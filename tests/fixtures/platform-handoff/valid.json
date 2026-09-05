@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "platform.requirements/v2",
+  "argocd": {
+    "namespace": "argocd",
+    "chartVersion": "10.4.3",
+    "controllerVersion": "v3.5.2",
+    "haEnabled": true,
+    "bootstrapMode": "public",
+    "secretStore": {
+      "name": "argocd-secrets",
+      "kind": "SecretStore",
+      "namespace": "argocd",
+      "region": "ap-northeast-2",
+      "serviceAccountName": "argocd-secrets-reader",
+      "roleArn": "arn:aws:iam::123456789012:role/fixture-argocd-reader"
+    },
+    "rbacPolicyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "oidc": {
+      "sourceArn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:fixture/oidc-abcdef",
+      "sourceName": "fixture/oidc",
+      "targetName": "argocd-oidc",
+      "properties": {
+        "clientSecret": "clientSecret"
+      },
+      "clientSecretRef": "$argocd-oidc:clientSecret"
+    },
+    "notifications": {
+      "sourceArn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:fixture/notifications-abcdef",
+      "sourceName": "fixture/notifications",
+      "targetName": "argocd-notifications-secret",
+      "properties": {
+        "pagerduty-integration-key": "pagerdutyIntegrationKey",
+        "slack-token": "slackToken"
+      },
+      "routes": {
+        "paging": {
+          "service": "pagerdutyv2",
+          "recipient": "platform-prod"
+        },
+        "deployment": {
+          "service": "slack",
+          "recipient": "platform-deployments",
+          "secretKey": "slack-token"
+        }
+      }
+    },
+    "repositoryCredentials": {
+      "sourceArn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:fixture/repository-abcdef",
+      "sourceName": "fixture/repository",
+      "targetName": "argocd-repository-credentials",
+      "properties": {
+        "url": "url",
+        "username": "username",
+        "password": "password"
+      }
+    }
+  },
+  "sigstoreController": {
+    "namespace": "cosign-system",
+    "chartVersion": "0.10.5",
+    "appVersion": "0.13.1"
+  },
+  "outputs": {
+    "mini_commerce_ecr_repository_url": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"
+  }
+}

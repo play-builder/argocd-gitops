@@ -1,0 +1,22 @@
+environment: dev
+snapshot: {captureEnabled: false}
+maintenance: {writersStopped: false}
+namespace:
+  name: app-dev
+externalSecrets:
+  enabled: true
+  database:
+    targetSecretName: mini-commerce-dev-db-admin
+database:
+  enabled: true
+  terminationGracePeriodSeconds: 120
+  port: 5432
+  storageClassName: course-gp3
+  storageSize: 5Gi
+  image:
+    repository: docker.io/library/postgres
+    digest: sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: 500m, memory: 512Mi}

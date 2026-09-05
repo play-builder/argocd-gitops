@@ -1,0 +1,146 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "AppProject",
+  "metadata": {
+    "name": "platform-mesh-prod",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-37"
+    }
+  },
+  "spec": {
+    "description": "Istio and edge resources only; no access to Argo namespace or EKS-owned controllers",
+    "sourceRepos": [
+      "https://github.com/REPLACE_ME/argocd-gitops.git",
+      "https://blob.istio.io/istio-release/charts"
+    ],
+    "sourceIntegrity": {
+      "git": {
+        "policies": [
+          {
+            "repos": [
+              {
+                "url": "https://github.com/REPLACE_ME/argocd-gitops.git"
+              }
+            ],
+            "gpg": {
+              "mode": "head",
+              "keys": [
+                "REPLACE_WITH_APPROVED_GPG_KEY_ID"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "destinations": [
+      {
+        "server": "https://kubernetes.default.svc",
+        "namespace": "istio-system"
+      },
+      {
+        "server": "https://kubernetes.default.svc",
+        "namespace": "app-prod"
+      }
+    ],
+    "clusterResourceWhitelist": [
+      {
+        "group": "apiextensions.k8s.io",
+        "kind": "CustomResourceDefinition"
+      },
+      {
+        "group": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole"
+      },
+      {
+        "group": "rbac.authorization.k8s.io",
+        "kind": "ClusterRoleBinding"
+      },
+      {
+        "group": "admissionregistration.k8s.io",
+        "kind": "MutatingWebhookConfiguration"
+      },
+      {
+        "group": "admissionregistration.k8s.io",
+        "kind": "ValidatingWebhookConfiguration"
+      },
+      {
+        "group": "gateway.networking.k8s.io",
+        "kind": "GatewayClass"
+      }
+    ],
+    "namespaceResourceWhitelist": [
+      {
+        "group": "",
+        "kind": "ServiceAccount"
+      },
+      {
+        "group": "",
+        "kind": "ConfigMap"
+      },
+      {
+        "group": "",
+        "kind": "Service"
+      },
+      {
+        "group": "apps",
+        "kind": "Deployment"
+      },
+      {
+        "group": "autoscaling",
+        "kind": "HorizontalPodAutoscaler"
+      },
+      {
+        "group": "policy",
+        "kind": "PodDisruptionBudget"
+      },
+      {
+        "group": "rbac.authorization.k8s.io",
+        "kind": "Role"
+      },
+      {
+        "group": "rbac.authorization.k8s.io",
+        "kind": "RoleBinding"
+      },
+      {
+        "group": "security.istio.io",
+        "kind": "PeerAuthentication"
+      },
+      {
+        "group": "security.istio.io",
+        "kind": "AuthorizationPolicy"
+      },
+      {
+        "group": "telemetry.istio.io",
+        "kind": "Telemetry"
+      },
+      {
+        "group": "networking.istio.io",
+        "kind": "Gateway"
+      },
+      {
+        "group": "networking.k8s.io",
+        "kind": "NetworkPolicy"
+      },
+      {
+        "group": "gateway.networking.k8s.io",
+        "kind": "Gateway"
+      },
+      {
+        "group": "gateway.networking.k8s.io",
+        "kind": "HTTPRoute"
+      },
+      {
+        "group": "gateway.k8s.aws",
+        "kind": "LoadBalancerConfiguration"
+      },
+      {
+        "group": "gateway.k8s.aws",
+        "kind": "TargetGroupConfiguration"
+      }
+    ],
+    "orphanedResources": {
+      "warn": true
+    }
+  }
+}

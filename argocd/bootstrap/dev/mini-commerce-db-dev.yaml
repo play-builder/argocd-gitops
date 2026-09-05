@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mini-commerce-db-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: mini-commerce-operations-dev
+  source:
+    repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
+    targetRevision: main
+    path: charts/mini-commerce-db-dev
+    helm:
+      releaseName: mini-commerce
+      valueFiles: [../../envs/dev/database-default-values.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: app-dev
+  syncPolicy:
+    syncOptions: [ServerSideApply=true]

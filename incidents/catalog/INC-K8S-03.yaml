@@ -7,7 +7,7 @@ scope:
   forbiddenNamespaces: [app-prod, app-recovery, argocd, kube-system]
 maximumDuration: 5m
 inject:
-  manifest: charts/sample-app/templates/networkpolicy.yaml
+  manifest: charts/mini-commerce/templates/networkpolicy.yaml
   action: reproduce-k8s-03
 stop:
   action: stop-incident-writers

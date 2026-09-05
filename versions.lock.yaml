@@ -2,18 +2,70 @@ schemaVersion: 1
 verifiedAt: "2026-09-03"
 
 tooling:
+  cue:
+    version: 0.12.1
+    darwinArm64Url: https://github.com/cue-lang/cue/releases/download/v0.12.1/cue_v0.12.1_darwin_arm64.tar.gz
+    darwinArm64Sha256: 3eb7180adc231503b519cfa0934c0f856a2ad850d84ad3f6988bf86f6b2ace9f
+    linuxAmd64Url: https://github.com/cue-lang/cue/releases/download/v0.12.1/cue_v0.12.1_linux_amd64.tar.gz
+    linuxAmd64Sha256: 40ef0a84594494c953945fb297842d3168c92170694928c9565cc0b581235ac5
+  istioctl:
+    version: 1.31.0
+    linuxAmd64Url: https://github.com/istio/istio/releases/download/1.31.0/istioctl-1.31.0-linux-amd64.tar.gz
+    linuxAmd64Sha256: ef3f4368122c9008d344b7c824e563dae6fec9078eb2b90e87836063887d15a8
   yq: "4.53.6"
   kubectl: "1.36.0"
   setupKubectlAction: "5.1.0"
   setupKubectlActionSha: "829323503d1be3d00ca8346e5391ca0b07a9ab0d"
 
 delivery:
+  operationSchemaSources:
+    chaosMesh:
+      owner: EKS-infra
+      chart: chaos-mesh
+      version: 2.8.0
+      url: https://charts.chaos-mesh.org/chaos-mesh-2.8.0.tgz
+      sha256: d8d650368b632ea6409971a4778a77475ac47573861a378326a2ca45561d2aae
+    snapshotCrds:
+      - file: volumesnapshotcontents-v8.2.0.yaml
+        url: https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+        sha256: 895a3c1e73b60f06a0deb566dd123d01bdf1b2efc5d5ff5231ff8bbcf42dafc7
+      - file: volumesnapshots-v8.2.0.yaml
+        url: https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+        sha256: b032116e987fb1d7d93cec7d942833adeb9d95c9bdc7e00c10b280c2fe4a6c33
+  platformImages:
+    istioCni:
+      version: 1.31.0
+      upstreamReference: docker.io/istio/install-cni@sha256:8cef43ba08ae1af846d0e474591f625cd2dd6b2c0df0efcb17faef0d978ef246
+      indexDigest: sha256:8cef43ba08ae1af846d0e474591f625cd2dd6b2c0df0efcb17faef0d978ef246
+      architectureDigests:
+        linux/amd64: sha256:f7833b70458104aee7374b958537e78964e0bbe3dc313f65393e07381bf0ee09
+        linux/arm64: sha256:1909bbafce640c70b618ffb6c65f8fa800d61ca93bbf87a62661cd4a2d65f1ef
+    istioProxy:
+      - version: 1.30.4
+        upstreamReference: registry.istio.io/release/proxyv2@sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9
+        indexDigest: sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9
+        architectureDigests:
+          linux/amd64: sha256:372b2de1c4e48797d54a8a129e4710a6c41496a387a95d717c8b16f009092bf8
+          linux/arm64: sha256:27ca30f7e67a658e333d1f24b8fd9f90e922c42c05ac25f66f5e59f852a06f4b
+      - version: 1.31.0
+        upstreamReference: docker.io/istio/proxyv2@sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17
+        indexDigest: sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17
+        architectureDigests:
+          linux/amd64: sha256:aef6565b50449e5c30b69c47574fbed14d85c1d1394c5c1150b6fd51ae5e91a3
+          linux/arm64: sha256:43ed79d2a3c3c897e67e6b8309431377bdd9478aea56f29c5cf30d47d43577a5
+  helmSources: [{"chart":"cni","version":"1.31.0","url":"https://blob.istio.io/istio-release/charts/cni-1.31.0.tgz","sha256":"1530c595ee1861aab69b4df300cb301b9b6fd52cf0b7d09f1ada5edfa50b9865"},{"chart":"base","version":"1.30.4","url":"https://blob.istio.io/istio-release/charts/base-1.30.4.tgz","sha256":"d3532767f9f2042ad1a1f7ca060c2b734762c8d1bcd57fa0244482359146a5f1"},{"chart":"istiod","version":"1.30.4","url":"https://blob.istio.io/istio-release/charts/istiod-1.30.4.tgz","sha256":"66ad8344e2ef16745aa425dc6609570b42536ecdf1ab5ca04a90abf1bc577344"},{"chart":"gateway","version":"1.30.4","url":"https://blob.istio.io/istio-release/charts/gateway-1.30.4.tgz","sha256":"b662db852bfec2994725eb478c2e89fe6e73729aeb7ab90352d8042928fa20ce"},{"chart":"base","version":"1.31.0","url":"https://blob.istio.io/istio-release/charts/base-1.31.0.tgz","sha256":"c4e5e2f0feee1016a3e6cb342e0d457ca2098d74c7d36b0dae60d8ab5b934909"},{"chart":"istiod","version":"1.31.0","url":"https://blob.istio.io/istio-release/charts/istiod-1.31.0.tgz","sha256":"df73f8fba27f2ae51c90f9483c5298e164b5241fcd349a04375df32d7f9fe2e7"},{"chart":"gateway","version":"1.31.0","url":"https://blob.istio.io/istio-release/charts/gateway-1.31.0.tgz","sha256":"71425398be705f15cc2f29e0811bfc0e7c6c4e3fd5cad8a893a21eb412973b5b"},{"chart":"external-secrets","version":"2.10.0","url":"https://charts.external-secrets.io/external-secrets-2.10.0.tgz","sha256":"b96e948fff3674638b5d3f9e43886f3796e04739c4b4127929aed2ddac7d1418"},{"chart":"argo-cd","version":"10.4.3","url":"https://github.com/argoproj/argo-helm/releases/download/argo-cd-10.4.3/argo-cd-10.4.3.tgz","sha256":"a2cf167748f21a5a456d7070fcd6ab786c4f924b36a3aa497878e0c9b960bbab"},{"chart":"argo-rollouts","version":"2.42.0","url":"https://github.com/argoproj/argo-helm/releases/download/argo-rollouts-2.42.0/argo-rollouts-2.42.0.tgz","sha256":"d3a4ff76978290eca71f95125281c7c90b1f058a809574d39502a26143865bda"},{"chart":"aws-load-balancer-controller","version":"3.5.0","url":"https://aws.github.io/eks-charts/aws-load-balancer-controller-3.5.0.tgz","sha256":"45051f634b33e10baccb3354d0681b7de787c60445e599fa276e0c9aedd4ccd5"},{"chart":"policy-controller","version":"0.10.5","url":"oci://ghcr.io/sigstore/helm-charts/policy-controller","ociDigest":"sha256:bd825655f80a062a23e71725cb33118566ff6a90daf97a1ce17a52a4bc6e010d","sha256":"d1c243d566ef11c7e206cc9f6a1187f9e4291325d011d8fc432f50632296336c"},{"chart":"trust-policies","version":"v0.7.0","url":"oci://ghcr.io/github/artifact-attestations-helm-charts/trust-policies","ociDigest":"sha256:b5c9a786ab94f2b624cbfe68f5cb1364a2744c4147f33dbcdce3e96600fd5a67","sha256":"d17922314fb4b01f436262ffb9ddad72ef43bf8998dd260823639f81f91c13c1"}]
+  gatewayApiStandard:
+    owner: EKS-infra
+    version: 1.6.0
+    url: https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml
+    sha256: a557172e8348f758479e9ee4000bbbb4b4aa48302a6b73461823ea5349bad56d
+  runtime:
+    name: mini-commerce
+    repositoryId: 1352247019
   helmCli: "4.2.4"
   argoCdController: "3.5.2"
   argoRolloutsController: "1.9.1"
   gatewayApi: "1.6.0"
-  gatewayApiTrafficRouterPlugin: "0.16.0"
-  gatewayApiTrafficRouterPluginDigest: "sha256:af5aaba7e34c2b8eb0d52128ac91cb913f065b710c7dea88db59d626a96c53c2"
   externalSecretsChart: "2.10.0"
   awsLoadBalancerController: "3.5.0"
 

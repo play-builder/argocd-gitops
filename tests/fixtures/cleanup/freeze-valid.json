@@ -4,8 +4,8 @@
   "status": "FROZEN",
   "gitopsRevision": "1111111111111111111111111111111111111111",
   "clusters": [
-    {"environment":"dev","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/course-dev","application":{"name":"sample-app-dev","sync":"Synced","health":"Healthy","automated":false}},
-    {"environment":"prod","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/course-prod","application":{"name":"sample-app-prod","sync":"Synced","health":"Healthy","automated":false}}
+    {"environment":"dev","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/course-dev","application":{"name":"mini-commerce-dev","sync":"Synced","health":"Healthy","automated":false}},
+    {"environment":"prod","clusterArn":"arn:aws:eks:ap-northeast-2:111111111111:cluster/course-prod","application":{"name":"mini-commerce-prod","sync":"Synced","health":"Healthy","automated":false}}
   ],
   "writers": {"loadGenerators":0,"chaosResources":0,"recoveryJobs":0,"migrationJobs":0},
   "observedAt": "2026-09-03T00:00:00Z"

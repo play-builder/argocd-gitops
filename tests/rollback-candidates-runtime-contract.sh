@@ -48,24 +48,24 @@ printf '%s\n' yes >"$runtime/configmap-create-permission.txt"
 printf '%s\n' yes >"$runtime/configmap-delete-permission.txt"
 : >"$runtime/existing-configmap.json"
 : >"$runtime/kubectl.log"
-jq -n '{metadata:{name:"sample-app-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"},syncPolicy:{}},status:{sync:{status:"OutOfSync",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$runtime/application.json"
+jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"},syncPolicy:{}},status:{sync:{status:"OutOfSync",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$runtime/application.json"
 jq -n '{cluster:{name:"course-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$runtime/kubeconfig.json"
 jq -n '
-  {metadata:{name:"sample-app",namespace:"app-prod",uid:"11111111-1111-1111-1111-111111111111"},
+  {metadata:{name:"mini-commerce",namespace:"app-prod",uid:"11111111-1111-1111-1111-111111111111"},
    spec:{rollbackWindow:{revisions:2}},
    status:{phase:"Healthy",stableRS:"stable-hash",currentPodHash:"stable-hash",
      replicas:3,readyReplicas:3,availableReplicas:3,pauseConditions:[]}}
 ' >"$runtime/rollout.json"
 yq -o=json '.' "$runtime/source.yaml" | jq '
   . as $source |
-  "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app" as $repository |
+  "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce" as $repository |
   $source.releaseLineage.v2PrimeContractCompatible.indexDigest as $v2prime |
   {apiVersion:"apps/v1",kind:"ReplicaSetList",items:[
     $source.completedRollback.replicaSetList.items[] |
     . as $item |
     ($item.metadata.labels["rollouts-pod-template-hash"] // "experiment-hash") as $hash |
-    . + {spec:{replicas:1,template:{spec:{containers:[{name:"sample-app",image:($repository + "@" +
+    . + {spec:{replicas:1,template:{spec:{containers:[{name:"mini-commerce",image:($repository + "@" +
       (if ($hash == "target-hash" or $hash == "intermediate-hash") then $v2prime
        else "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" end))}]}}},
       status:{readyReplicas:1,availableReplicas:1}}
@@ -102,7 +102,7 @@ jq -e --arg digest "$source_digest" '
   .schemaVersion == "course.rollback-candidates/v1" and .evidenceGrade == "STATIC" and
   .environment == "prod" and .region == "ap-northeast-2" and
   .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod" and
-  .rolloutName == "sample-app" and
+  .rolloutName == "mini-commerce" and
   .gitopsRevision == "fedcba9876543210fedcba9876543210fedcba98" and
   .sourceEvidenceDigest == $digest and
   .observedAt == "2026-09-03T00:59:59Z" and .expiresAt == "2026-09-03T01:59:59Z" and
@@ -165,10 +165,10 @@ for label in dirty-git git-mismatch already-synced automated-sync running-operat
     rollout-unhealthy) jq '.status.phase="Progressing"' "$invalid/rollout.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/rollout.json" ;;
     foreign-owner) jq '.items[0].metadata.ownerReferences[0].uid="foreign-uid"' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
     non-controller) jq '.items[0].metadata.ownerReferences[0].controller=false' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
-    missing-candidate-rs) jq '.items |= map(select(.metadata.name != "sample-app-intermediate"))' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
-    extra-candidate-rs) jq '.items += [.items[1] | .metadata.name="sample-app-extra" | .metadata.labels["rollouts-pod-template-hash"]="extra-hash" | .metadata.annotations["rollout.argoproj.io/revision"]="2"]' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
-    experiment-candidate) jq '.items[] |= if .metadata.name=="sample-app-intermediate" then .metadata.annotations["rollouts.argoproj.io/experiment-name"]="analysis" else . end' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
-    wrong-candidate-image) jq '.items[] |= if .metadata.name=="sample-app-target" then .spec.template.spec.containers[0].image |= sub("4{64}$";"3" * 64) else . end' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
+    missing-candidate-rs) jq '.items |= map(select(.metadata.name != "mini-commerce-intermediate"))' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
+    extra-candidate-rs) jq '.items += [.items[1] | .metadata.name="mini-commerce-extra" | .metadata.labels["rollouts-pod-template-hash"]="extra-hash" | .metadata.annotations["rollout.argoproj.io/revision"]="2"]' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
+    experiment-candidate) jq '.items[] |= if .metadata.name=="mini-commerce-intermediate" then .metadata.annotations["rollouts.argoproj.io/experiment-name"]="analysis" else . end' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
+    wrong-candidate-image) jq '.items[] |= if .metadata.name=="mini-commerce-target" then .spec.template.spec.containers[0].image |= sub("4{64}$";"3" * 64) else . end' "$invalid/replicasets.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/replicasets.json" ;;
     source-missing-candidate) yq -i 'del(.completedRollback.candidates[1])' "$invalid/source.yaml" ;;
     source-extra-candidate) yq -i '.completedRollback.candidates += [.completedRollback.candidates[0] | .rolloutRevision=2 | .podTemplateHash="extra-hash"]' "$invalid/source.yaml" ;;
     source-duplicate-candidate) yq -i '.completedRollback.candidates[1]=.completedRollback.candidates[0]' "$invalid/source.yaml" ;;
@@ -235,10 +235,10 @@ created="$publish_runtime/created-configmap.json"
 evidence_sha="sha256:$(shasum -a 256 "$cloud_fixture" | awk '{print $1}')"
 jq -e --rawfile evidence "$cloud_fixture" --arg evidenceSha "$evidence_sha" --arg sourceDigest "$source_digest" '
   .apiVersion == "v1" and .kind == "ConfigMap" and
-  .metadata.name == "sample-app-rollback-candidates" and .metadata.namespace == "app-prod" and
+  .metadata.name == "mini-commerce-rollback-candidates" and .metadata.namespace == "app-prod" and
   .metadata.labels == {
-    "app.kubernetes.io/name":"sample-app-rollback-candidates",
-    "app.kubernetes.io/part-of":"sample-app",
+    "app.kubernetes.io/name":"mini-commerce-rollback-candidates",
+    "app.kubernetes.io/part-of":"mini-commerce",
     "course.playbuilder.io/cleanup-scope":"rollback-candidates"
   } and
   .metadata.annotations == {
@@ -249,7 +249,7 @@ jq -e --rawfile evidence "$cloud_fixture" --arg evidenceSha "$evidence_sha" --ar
   .data["rollback-candidates.json"] == $evidence and
   .data.environment == "prod" and .data.region == "ap-northeast-2" and
   .data.clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod" and
-  .data.rolloutName == "sample-app" and
+  .data.rolloutName == "mini-commerce" and
   .data.gitopsRevision == "fedcba9876543210fedcba9876543210fedcba98" and
   .data.sourceEvidenceDigest == $sourceDigest and
   (has("binaryData") | not)
@@ -302,14 +302,15 @@ cp -R "$runtime" "$cleanup_runtime"
 jq '.metadata.uid="88888888-8888-8888-8888-888888888888"' "$created" >"$cleanup_runtime/existing-configmap.json"
 printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$cleanup_runtime/git-revision.txt"
 jq -n '{
-  metadata:{name:"sample-app-prod"},
+  metadata:{name:"mini-commerce-prod"},
   spec:{
     source:{
       repoURL:"https://github.com/OWNER/argocd-gitops.git",
       helm:{valueFiles:[
         "../../envs/prod/values.yaml",
         "../../envs/prod/stateful-values.yaml",
-        "../../envs/prod/migration-finalize-values.yaml"
+        "../../envs/prod/migration-finalize-values.yaml",
+      "../../envs/prod/pre-cutover-ownership-values.yaml"
       ]}
     },
     syncPolicy:{}
@@ -320,16 +321,16 @@ jq -n '{
     operationState:{phase:"Succeeded"}
   }
 }' >"$cleanup_runtime/application.json"
-helm template sample-app "$repository_root/charts/sample-app" \
+helm template mini-commerce "$repository_root/charts/mini-commerce" \
   --values "$repository_root/envs/prod/values.yaml" \
   --values "$repository_root/envs/prod/stateful-values.yaml" \
   --values "$test_root/fixtures/values/stateful-policy-on.yaml" \
   --values "$repository_root/envs/prod/migration-finalize-values.yaml" \
-  --set-string image.repository=example.invalid/sample-app \
+  --set-string image.repository=example.invalid/mini-commerce \
   --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-  --set-string database.migrationImage.repository=example.invalid/sample-app \
+  --set-string database.migrationImage.repository=example.invalid/mini-commerce \
   --set-string database.migrationImage.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa |
-  yq eval-all -o=json 'select(.kind == "Job" and .metadata.name == "sample-app-migration")' - |
+  yq eval-all -o=json 'select(.kind == "Job" and .metadata.name == "mini-commerce-migration")' - |
   jq '.spec.template.spec.volumes[] |= if .name=="rollback-candidates" then .configMap.defaultMode=292 else . end |
       .status={succeeded:1,failed:0,completionTime:"2026-09-03T01:05:00Z"}' \
     >"$cleanup_runtime/migration-job.json"

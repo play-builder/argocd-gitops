@@ -27,7 +27,7 @@ bash scripts/verify-platform-owner-phase-b.sh \
 
 두 실행이 모두 `[CLOUD_RUNTIME] PASS`일 때만 별도 Phase B commit에서 다음 변경을 수행합니다.
 
-1. `charts/sample-app/templates/namespace.yaml`을 제거합니다.
+1. `charts/mini-commerce/templates/namespace.yaml`을 제거합니다.
 2. 두 Kustomization에서 `external-secrets.yaml` resource를 제거합니다.
 3. `argocd/bootstrap/{dev,prod}/external-secrets.yaml`을 제거합니다.
 4. Helm render에 Namespace가 없고 bootstrap에 External Secrets Application이 없는지 검증합니다.

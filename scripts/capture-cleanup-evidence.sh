@@ -130,7 +130,7 @@ if mode == "freeze":
         cluster_identities.append(match.groups())
         application = cluster["application"]
         exact(application, {"name","sync","health","automated"}, "freeze application")
-        if application != {"name":f"sample-app-{cluster['environment']}","sync":"Synced","health":"Healthy","automated":False}:
+        if application != {"name":f"mini-commerce-{cluster['environment']}","sync":"Synced","health":"Healthy","automated":False}:
             fail("freeze requires Synced, Healthy, manual applications")
     if cluster_identities[0] != cluster_identities[1] or doc["clusters"][0]["clusterArn"] == doc["clusters"][1]["clusterArn"]:
         fail("freeze clusters must be distinct in one account and Region")
@@ -298,26 +298,26 @@ if [[ "$mode" == freeze ]]; then
       return 1
     }
 
-    app_json=$(kubectl --context "$context" -n argocd get application "sample-app-$environment" -o json) || {
-      echo "FAIL: unable to read sample-app-$environment from the $environment cluster" >&2
+    app_json=$(kubectl --context "$context" -n argocd get application "mini-commerce-$environment" -o json) || {
+      echo "FAIL: unable to read mini-commerce-$environment from the $environment cluster" >&2
       return 1
     }
     app_revision=$(jq -er '.status.operationState.syncResult.revision // .status.sync.revision' <<<"$app_json") || {
-      echo "FAIL: sample-app-$environment has no synchronized revision" >&2
+      echo "FAIL: mini-commerce-$environment has no synchronized revision" >&2
       return 1
     }
-    jq -e --arg name "sample-app-$environment" '
+    jq -e --arg name "mini-commerce-$environment" '
       .metadata.name == $name and .status.sync.status == "Synced" and .status.health.status == "Healthy" and
       ((.spec.syncPolicy.automated // null) == null)
     ' <<<"$app_json" >/dev/null || {
-      echo "FAIL: sample-app-$environment must be Synced, Healthy, and manually synchronized" >&2
+      echo "FAIL: mini-commerce-$environment must be Synced, Healthy, and manually synchronized" >&2
       return 1
     }
     [[ "$app_revision" == "$git_revision" ]] || {
-      echo "FAIL: sample-app-$environment revision does not match the checked-out GitOps commit" >&2
+      echo "FAIL: mini-commerce-$environment revision does not match the checked-out GitOps commit" >&2
       return 1
     }
-    jq -n --arg environment "$environment" --arg arn "$cluster_arn" --arg name "sample-app-$environment" '
+    jq -n --arg environment "$environment" --arg arn "$cluster_arn" --arg name "mini-commerce-$environment" '
       {environment:$environment,clusterArn:$arn,application:{name:$name,sync:"Synced",health:"Healthy",automated:false}}
     ' >"$freeze_tmp_dir/$environment-cluster.json"
 
@@ -511,7 +511,7 @@ else
       (keys | sort) == ["application","clusterArn","environment"] and
       (.clusterArn | test("^arn:aws:eks:" + $region + ":" + $account + ":cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
       (.application | (keys | sort) == ["automated","health","name","sync"]) and
-      .application.name == ("sample-app-" + .environment) and
+      .application.name == ("mini-commerce-" + .environment) and
       .application.sync == "Synced" and .application.health == "Healthy" and
       .application.automated == false) and
     (.writers | (keys | sort) == ["chaosResources","loadGenerators","migrationJobs","recoveryJobs"]) and
@@ -556,13 +556,13 @@ else
 
   verify_application_absent() {
     local environment=$1 context=$2 application
-    application=$(kubectl --context "$context" -n argocd get application "sample-app-$environment" \
+    application=$(kubectl --context "$context" -n argocd get application "mini-commerce-$environment" \
       -o name --ignore-not-found) || {
-      echo "FAIL: unable to query sample-app-$environment after removal" >&2
+      echo "FAIL: unable to query mini-commerce-$environment after removal" >&2
       return 1
     }
     [[ -z "$application" ]] || {
-      echo "FAIL: sample-app-$environment Argo CD Application still exists" >&2
+      echo "FAIL: mini-commerce-$environment Argo CD Application still exists" >&2
       return 1
     }
   }
@@ -602,7 +602,7 @@ else
       >"$tmp_dir/$key-namespaces.json"
     if [[ "$key" == prod ]]; then
       rollback_configmap=$(kubectl --context "$context" -n "$namespace" get configmap \
-        sample-app-rollback-candidates -o name --ignore-not-found) || {
+        mini-commerce-rollback-candidates -o name --ignore-not-found) || {
         echo "FAIL: unable to query the rollback candidate ConfigMap during removal" >&2
         return 1
       }

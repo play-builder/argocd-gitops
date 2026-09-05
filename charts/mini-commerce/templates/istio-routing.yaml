@@ -1,0 +1,29 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  hosts: [{{ .Values.routing.hostname | quote }}]
+  gateways: [istio-system/mini-commerce-internal]
+  http:
+    - name: primary
+      match:
+        - uri:
+            prefix: /
+      timeout: 10s
+      route:
+        - destination:
+            host: {{ include "mini-commerce.fullname" . }}-stable
+            port:
+              number: {{ .Values.service.port }}
+          weight: 100
+        {{- if eq .Values.workload.kind "Rollout" }}
+        - destination:
+            host: {{ include "mini-commerce.fullname" . }}-canary
+            port:
+              number: {{ .Values.service.port }}
+          weight: 0
+        {{- end }}

@@ -45,8 +45,8 @@ recovery:
   snapshotClassName: course-ebs-snapshots
   source:
     namespace: app-dev
-    pvcName: data-sample-app-postgresql-0
-    snapshotName: sample-app-postgresql-snapshot
+    pvcName: data-mini-commerce-postgresql-0
+    snapshotName: mini-commerce-postgresql-snapshot
 YAML
 printf '%s\n' 1111111111111111111111111111111111111111 >"$runtime/a1/git-revision.txt"
 printf '%s\n' 2222222222222222222222222222222222222222 >"$runtime/a2/git-revision.txt"
@@ -57,27 +57,30 @@ printf '%s\n' envs/dev/snapshot-maintenance-values.yaml >"$runtime/a2/git-diff-n
 for phase in a1 a2; do
   revision=$(cat "$runtime/$phase/git-revision.txt")
   jq -n --arg revision "$revision" '
-    {metadata:{name:"sample-app-dev"},
+    {metadata:{name:"mini-commerce-dev"},
      spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git",helm:{valueFiles:[
-       "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-maintenance-values.yaml"]}},
+       "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-maintenance-values.yaml","../../envs/dev/pre-cutover-ownership-values.yaml"]}},
        syncPolicy:{automated:{prune:true,selfHeal:true}}},
      status:{sync:{status:"Synced",revision:$revision},health:{status:"Healthy"},operationState:{phase:"Succeeded"}}}
   ' >"$runtime/$phase/application.json"
   jq -n '{apiVersion:"batch/v1",kind:"JobList",items:[{status:{succeeded:1}}]}' >"$runtime/$phase/jobs.json"
   jq -n '{apiVersion:"snapshot.storage.k8s.io/v1",kind:"VolumeSnapshotList",items:[]}' >"$runtime/$phase/volumesnapshots.json"
 done
-jq -n '{metadata:{name:"sample-app-dev"},
+jq -n '{metadata:{name:"mini-commerce-dev"},
   spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git",helm:{valueFiles:[
-    "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-capture-values.yaml"]}},
+    "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-capture-values.yaml","../../envs/dev/pre-cutover-ownership-values.yaml"]}},
     syncPolicy:{automated:{prune:true,selfHeal:true}}},
   status:{sync:{status:"Synced",revision:"3333333333333333333333333333333333333333"},health:{status:"Healthy"},operationState:{phase:"Succeeded"}}}
 ' >"$runtime/ready/application.json"
+for phase in a1 a2 ready; do
+  jq '.metadata.name="mini-commerce-db-dev" | .spec.source.path="charts/mini-commerce-db-dev" | .spec.source.helm.valueFiles=[.spec.source.helm.valueFiles[2]] | del(.spec.syncPolicy.automated)' "$runtime/$phase/application.json" >"$runtime/$phase/database-application.json"
+done
 jq -n '{cluster:{name:"course-dev",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev",status:"ACTIVE",endpoint:"https://dev.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://dev.eks.example"}}]}' >"$runtime/kubeconfig.json"
-jq -n '{metadata:{name:"sample-app",namespace:"app-dev"},spec:{replicas:0},status:{replicas:0,readyReplicas:0,availableReplicas:0}}' >"$runtime/deployment.json"
-jq -n '{metadata:{name:"sample-app-postgresql",namespace:"app-dev",uid:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",generation:7},spec:{replicas:1},status:{observedGeneration:7,currentReplicas:1,readyReplicas:1,updatedReplicas:1}}' >"$runtime/a1/statefulset.json"
-jq -n '{metadata:{name:"sample-app-postgresql",namespace:"app-dev",uid:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",generation:8},spec:{replicas:0},status:{observedGeneration:8,currentReplicas:0,readyReplicas:0,updatedReplicas:0}}' >"$runtime/a2/statefulset.json"
-jq -n '{apiVersion:"v1",kind:"PodList",items:[{metadata:{name:"sample-app-postgresql-0",namespace:"app-dev",uid:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",ownerReferences:[{apiVersion:"apps/v1",kind:"StatefulSet",name:"sample-app-postgresql",uid:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",controller:true}]},spec:{volumes:[{name:"data",persistentVolumeClaim:{claimName:"data-sample-app-postgresql-0"}}],containers:[{name:"postgresql",image:"docker.io/library/postgres@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]},status:{phase:"Running",conditions:[{type:"Ready",status:"True"}],containerStatuses:[{name:"postgresql",ready:true}]}}]}' >"$runtime/a1/pods.json"
+jq -n '{metadata:{name:"mini-commerce",namespace:"app-dev"},spec:{replicas:0},status:{replicas:0,readyReplicas:0,availableReplicas:0}}' >"$runtime/deployment.json"
+jq -n '{metadata:{name:"mini-commerce-postgresql",namespace:"app-dev",uid:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",generation:7},spec:{replicas:1},status:{observedGeneration:7,currentReplicas:1,readyReplicas:1,updatedReplicas:1}}' >"$runtime/a1/statefulset.json"
+jq -n '{metadata:{name:"mini-commerce-postgresql",namespace:"app-dev",uid:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",generation:8},spec:{replicas:0},status:{observedGeneration:8,currentReplicas:0,readyReplicas:0,updatedReplicas:0}}' >"$runtime/a2/statefulset.json"
+jq -n '{apiVersion:"v1",kind:"PodList",items:[{metadata:{name:"mini-commerce-postgresql-0",namespace:"app-dev",uid:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",ownerReferences:[{apiVersion:"apps/v1",kind:"StatefulSet",name:"mini-commerce-postgresql",uid:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",controller:true}]},spec:{volumes:[{name:"data",persistentVolumeClaim:{claimName:"data-mini-commerce-postgresql-0"}}],containers:[{name:"postgresql",image:"docker.io/library/postgres@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]},status:{phase:"Running",conditions:[{type:"Ready",status:"True"}],containerStatuses:[{name:"postgresql",ready:true}]}}]}' >"$runtime/a1/pods.json"
 cp "$runtime/a1/pods.json" "$runtime/a1/all-pods.json"
 jq '.items[0]' "$runtime/a1/pods.json" >"$runtime/a1/start-pod.json"
 jq -n '{apiVersion:"v1",kind:"PodList",items:[]}' >"$runtime/a2/pods.json"
@@ -88,13 +91,13 @@ cp "$runtime/a2/statefulset.json" "$runtime/ready/statefulset.json"
 cp "$runtime/a2/jobs.json" "$runtime/ready/jobs.json"
 cp "$runtime/a1/start-pod.json" "$runtime/a2/start-pod.json"
 cp "$runtime/a1/start-pod.json" "$runtime/ready/start-pod.json"
-jq -n '{metadata:{name:"data-sample-app-postgresql-0",namespace:"app-dev",uid:"11111111-1111-1111-1111-111111111111"},spec:{volumeName:"pvc-11111111-1111-1111-1111-111111111111"},status:{phase:"Bound"}}' >"$runtime/pvc.json"
-jq -n '{metadata:{name:"pvc-11111111-1111-1111-1111-111111111111"},spec:{claimRef:{namespace:"app-dev",name:"data-sample-app-postgresql-0",uid:"11111111-1111-1111-1111-111111111111"},csi:{driver:"ebs.csi.aws.com",volumeHandle:"vol-0123456789abcdef0"}},status:{phase:"Bound"}}' >"$runtime/pv.json"
+jq -n '{metadata:{name:"data-mini-commerce-postgresql-0",namespace:"app-dev",uid:"11111111-1111-1111-1111-111111111111"},spec:{volumeName:"pvc-11111111-1111-1111-1111-111111111111"},status:{phase:"Bound"}}' >"$runtime/pvc.json"
+jq -n '{metadata:{name:"pvc-11111111-1111-1111-1111-111111111111"},spec:{claimRef:{namespace:"app-dev",name:"data-mini-commerce-postgresql-0",uid:"11111111-1111-1111-1111-111111111111"},csi:{driver:"ebs.csi.aws.com",volumeHandle:"vol-0123456789abcdef0"}},status:{phase:"Bound"}}' >"$runtime/pv.json"
 jq -n '{apiVersion:"storage.k8s.io/v1",kind:"VolumeAttachmentList",items:[{metadata:{name:"csi-attach-a"},spec:{source:{persistentVolumeName:"pvc-11111111-1111-1111-1111-111111111111"}},status:{attached:true}}]}' >"$runtime/a1/volumeattachments.json"
 jq -n '{apiVersion:"storage.k8s.io/v1",kind:"VolumeAttachmentList",items:[]}' >"$runtime/a2/volumeattachments.json"
 cp "$runtime/a2/volumeattachments.json" "$runtime/ready/volumeattachments.json"
-jq -n '{metadata:{name:"sample-app-postgresql-snapshot",namespace:"app-dev",uid:"22222222-2222-2222-2222-222222222222"},spec:{volumeSnapshotClassName:"course-ebs-snapshots",source:{persistentVolumeClaimName:"data-sample-app-postgresql-0"}},status:{readyToUse:true,boundVolumeSnapshotContentName:"snapcontent-22222222-2222-2222-2222-222222222222"}}' >"$runtime/ready/snapshot.json"
-jq -n '{metadata:{name:"snapcontent-22222222-2222-2222-2222-222222222222",uid:"33333333-3333-3333-3333-333333333333"},spec:{driver:"ebs.csi.aws.com",volumeSnapshotClassName:"course-ebs-snapshots",volumeSnapshotRef:{name:"sample-app-postgresql-snapshot",namespace:"app-dev",uid:"22222222-2222-2222-2222-222222222222"},source:{volumeHandle:"vol-0123456789abcdef0"}},status:{readyToUse:true,snapshotHandle:"snap-0123456789abcdef0"}}' >"$runtime/ready/snapshot-content.json"
+jq -n '{metadata:{name:"mini-commerce-postgresql-snapshot",namespace:"app-dev",uid:"22222222-2222-2222-2222-222222222222"},spec:{volumeSnapshotClassName:"course-ebs-snapshots",source:{persistentVolumeClaimName:"data-mini-commerce-postgresql-0"}},status:{readyToUse:true,boundVolumeSnapshotContentName:"snapcontent-22222222-2222-2222-2222-222222222222"}}' >"$runtime/ready/snapshot.json"
+jq -n '{metadata:{name:"snapcontent-22222222-2222-2222-2222-222222222222",uid:"33333333-3333-3333-3333-333333333333"},spec:{driver:"ebs.csi.aws.com",volumeSnapshotClassName:"course-ebs-snapshots",volumeSnapshotRef:{name:"mini-commerce-postgresql-snapshot",namespace:"app-dev",uid:"22222222-2222-2222-2222-222222222222"},source:{volumeHandle:"vol-0123456789abcdef0"}},status:{readyToUse:true,snapshotHandle:"snap-0123456789abcdef0"}}' >"$runtime/ready/snapshot-content.json"
 jq -c -n '{schemaVersion:"course.snapshot-checksum/v1",foreignKeyViolations:0,duplicateIdempotencyKeys:0,negativeInventoryRows:0,canonicalRows:[{table:"products",rows:[{id:"p1"}]},{table:"inventory",rows:[{product_id:"p1",available_quantity:10}]},{table:"orders",rows:[]},{table:"order_items",rows:[]}]}' >"$runtime/a1/checksum.json"
 cat >"$runtime/a2/shutdown.log" <<'LOG'
 2026-09-03T01:00:10.000000000Z LOG:  received fast shutdown request
@@ -135,10 +138,10 @@ jq -e --arg phaseDigest "$phase_digest" --arg checksum "$checksum_value" '
   .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev" and
   .gitopsRevision == "1111111111111111111111111111111111111111" and
   .phaseValuesFile == "envs/dev/snapshot-maintenance-values.yaml" and .phaseValuesDigest == $phaseDigest and
-  .source.namespace == "app-dev" and .source.statefulSet == "sample-app-postgresql" and
-  .source.pvcName == "data-sample-app-postgresql-0" and .source.pvcUid == "11111111-1111-1111-1111-111111111111" and
+  .source.namespace == "app-dev" and .source.statefulSet == "mini-commerce-postgresql" and
+  .source.pvcName == "data-mini-commerce-postgresql-0" and .source.pvcUid == "11111111-1111-1111-1111-111111111111" and
   .source.volumeName == "pvc-11111111-1111-1111-1111-111111111111" and
-  .source.podName == "sample-app-postgresql-0" and .source.podUid == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" and
+  .source.podName == "mini-commerce-postgresql-0" and .source.podUid == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" and
   .writers == {applicationReplicas:0,migrationActive:0,migrationPending:0} and
   .checksum == {algorithm:"sha256",value:$checksum,capturedAt:"2026-09-03T01:00:00Z"}
 ' "$a1" >/dev/null || { jq . "$a1" >&2; fail 'A1 output is not exactly bound to live checksum and storage identity'; }
@@ -157,7 +160,7 @@ jq -e --arg checksum "$checksum_value" --arg shutdown "$shutdown_digest" '
   .checksum == {algorithm:"sha256",value:$checksum,capturedAt:"2026-09-03T01:00:00Z"} and
   .observedAt == "2026-09-03T01:00:30Z" and .expiresAt == "2026-09-03T02:00:30Z"
 ' "$final" >/dev/null || fail 'A2 output is not the exact canonical detached snapshot contract'
-[[ $(grep -c 'get statefulset sample-app-postgresql' "$runtime/calls.log") -ge 3 ]] || fail 'capture did not immediately re-query final StatefulSet state'
+[[ $(grep -c 'get statefulset mini-commerce-postgresql' "$runtime/calls.log") -ge 3 ]] || fail 'capture did not immediately re-query final StatefulSet state'
 [[ "$before" == "$(fingerprint)" ]] || fail 'fake runtime adapter changed canonical runtime evidence'
 
 ready="$tmp_root/snapshot-ready.json"
@@ -169,8 +172,8 @@ jq -e '
   .environment == "dev" and .region == "ap-northeast-2" and
   .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev" and
   .gitopsRevision == "3333333333333333333333333333333333333333" and
-  .source == {namespace:"app-dev",pvcName:"data-sample-app-postgresql-0",pvcUid:"11111111-1111-1111-1111-111111111111",volumeName:"pvc-11111111-1111-1111-1111-111111111111",volumeHandle:"vol-0123456789abcdef0"} and
-  .snapshot == {namespace:"app-dev",name:"sample-app-postgresql-snapshot",uid:"22222222-2222-2222-2222-222222222222",contentName:"snapcontent-22222222-2222-2222-2222-222222222222",contentUid:"33333333-3333-3333-3333-333333333333",className:"course-ebs-snapshots",driver:"ebs.csi.aws.com",sourceVolumeHandle:"vol-0123456789abcdef0",handle:"snap-0123456789abcdef0",readyToUse:true} and
+  .source == {namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0",pvcUid:"11111111-1111-1111-1111-111111111111",volumeName:"pvc-11111111-1111-1111-1111-111111111111",volumeHandle:"vol-0123456789abcdef0"} and
+  .snapshot == {namespace:"app-dev",name:"mini-commerce-postgresql-snapshot",uid:"22222222-2222-2222-2222-222222222222",contentName:"snapcontent-22222222-2222-2222-2222-222222222222",contentUid:"33333333-3333-3333-3333-333333333333",className:"course-ebs-snapshots",driver:"ebs.csi.aws.com",sourceVolumeHandle:"vol-0123456789abcdef0",handle:"snap-0123456789abcdef0",readyToUse:true} and
   .recovery == {readerRoleArn:"arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role",normalReaderRoleArn:"arn:aws:iam::123456789012:role/dev-course-external-secrets-reader-role"} and
   .observedAt == "2026-09-03T01:10:00Z" and .expiresAt == "2026-09-03T02:10:00Z"
 ' "$ready" >/dev/null || fail 'ready snapshot evidence is not bound to actual content, handle, class, driver, and Role identities'
@@ -208,6 +211,7 @@ negative_prepare() {
   eval "$expression"
   if run_prepare "$candidate" "$tmp_root/$label-a1.json" >/dev/null 2>&1; then fail "A1 accepted $label"; fi
 }
+negative_prepare database-revision 'jq ".status.sync.revision=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"" "$candidate/a1/database-application.json" >"$candidate/m" && mv "$candidate/m" "$candidate/a1/database-application.json"'
 negative_prepare dirty 'printf "%s\n" " M envs/dev/snapshot-maintenance-values.yaml" >"$candidate/a1/git-status.txt"'
 negative_prepare writer 'jq ".spec.replicas=1 | .status.readyReplicas=1" "$candidate/deployment.json" >"$candidate/m" && mv "$candidate/m" "$candidate/deployment.json"'
 negative_prepare database-zero 'jq ".spec.replicas=0 | .status.readyReplicas=0 | .status.currentReplicas=0 | .status.updatedReplicas=0" "$candidate/a1/statefulset.json" >"$candidate/m" && mv "$candidate/m" "$candidate/a1/statefulset.json"'
