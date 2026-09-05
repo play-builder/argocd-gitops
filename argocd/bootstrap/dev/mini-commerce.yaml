@@ -23,6 +23,10 @@ spec:
   template:
     metadata:
       name: mini-commerce-{{ .environment }}
+      annotations:
+        notifications.argoproj.io/subscribe.on-deployed.slack: platform-deployments
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: platform-deployments
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: platform-deployments
       finalizers:
       - resources-finalizer.argocd.argoproj.io
     spec:

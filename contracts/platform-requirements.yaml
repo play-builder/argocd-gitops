@@ -21,6 +21,11 @@ argocd:
   secretStoreRef: {kind: SecretStore, name: argocd-secrets}
   handoffRenderer: scripts/render-platform-credentials.rb
   sourceOutput: argocd
+  notifications:
+    controllerTemplatesOwner: EKS-infra
+    routes:
+      paging: {service: pagerdutyv2, recipient: platform-prod}
+      deployment: {service: slack, recipient: platform-deployments, secretKey: slack-token}
 sigstoreController:
   sourceOutput: sigstore_controller
   namespace: cosign-system

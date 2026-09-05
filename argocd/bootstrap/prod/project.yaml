@@ -95,6 +95,9 @@ metadata:
   name: platform-prod
   namespace: argocd
   annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.pagerdutyv2: platform-prod
+    notifications.argoproj.io/subscribe.on-health-degraded.pagerdutyv2: platform-prod
+    notifications.argoproj.io/subscribe.on-sync-status-unknown.pagerdutyv2: platform-prod
     argocd.argoproj.io/sync-wave: "-2"
 spec:
   description: Mini Commerce namespaced workload resources; legacy ownership remains
