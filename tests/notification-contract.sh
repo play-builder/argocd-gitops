@@ -2,4 +2,3 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 ruby tests/notification-contract.rb
-

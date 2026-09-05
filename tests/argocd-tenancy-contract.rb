@@ -44,4 +44,3 @@ end
 c=YAML.load_file('contracts/platform-requirements.yaml')['argocd']
 check(c.values_at('oidcGroupsClaim','defaultRole','anonymousAccess','breakGlassRole')==['groups','role:authenticated',false,'platform-break-glass'],'global RBAC consumer invalid')
 puts 'PASS: rendered tenancy, role tuples and named drift scopes'
-

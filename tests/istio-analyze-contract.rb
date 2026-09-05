@@ -25,4 +25,3 @@ cache=ENV.fetch('CHART_CACHE_DIR')
   puts run('istioctl','analyze','--use-kube=false','--all-namespaces',f.path)
  end
 end
-

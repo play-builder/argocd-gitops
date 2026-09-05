@@ -13,4 +13,3 @@ abort 'FAIL: invalid EKS SLO consumer schema' unless valid(c)
 end
 abort 'FAIL: GitOps must not deploy EKS-owned AMP rules' unless Dir.glob('platform/**/*').none?{|p|File.file?(p)&&File.basename(p).match?(/amp.*rules/)}
 puts 'PASS: EKS-owned AMP SLO consumer, bounded labels and traffic floor'
-

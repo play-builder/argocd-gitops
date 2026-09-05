@@ -20,4 +20,3 @@ end
  check(!valid(p,x,env),'duplicate project/application subscriptions accepted') if env=='prod'
 end
 puts 'PASS: subscription routing and completion non-paging boundaries'
-
