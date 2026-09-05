@@ -1,29 +1,31 @@
+---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: mini-commerce-prod
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-wave: '0'
 spec:
   goTemplate: true
-  goTemplateOptions: ["missingkey=error"]
+  goTemplateOptions:
+  - missingkey=error
   generators:
-    - list:
-        elements:
-          - environment: prod
-            namespace: app-prod
-            podSecurityVersion: v1.36
-            valuesFile: envs/prod/values.yaml
-            statefulValuesFile: envs/prod/stateful-values.yaml
-            ownershipValuesFile: envs/prod/pre-cutover-ownership-values.yaml
+  - list:
+      elements:
+      - environment: prod
+        namespace: app-prod
+        podSecurityVersion: v1.36
+        valuesFile: envs/prod/values.yaml
+        statefulValuesFile: envs/prod/stateful-values.yaml
+        ownershipValuesFile: envs/prod/pre-cutover-ownership-values.yaml
   template:
     metadata:
-      name: "mini-commerce-{{ .environment }}"
+      name: mini-commerce-{{ .environment }}
       finalizers:
-        - resources-finalizer.argocd.argoproj.io
+      - resources-finalizer.argocd.argoproj.io
     spec:
-      project: course-prod
+      project: platform-prod
       source:
         repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
         targetRevision: main
@@ -31,30 +33,40 @@ spec:
         helm:
           releaseName: mini-commerce
           valueFiles:
-            - "../../{{ .valuesFile }}"
-            - "../../{{ .statefulValuesFile }}"
-            - "../../{{ .ownershipValuesFile }}"
+          - "../../{{ .valuesFile }}"
+          - "../../{{ .statefulValuesFile }}"
+          - "../../{{ .ownershipValuesFile }}"
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ .namespace }}"
       syncPolicy:
         syncOptions:
-          - ServerSideApply=true
-          - RespectIgnoreDifferences=true
+        - ServerSideApply=true
+        - RespectIgnoreDifferences=true
       ignoreDifferences:
-        - group: apps
-          kind: Deployment
-          jsonPointers:
-            - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
-        - group: argoproj.io
-          kind: Rollout
-          jsonPointers:
-            - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
-        - group: ""
-          kind: Service
-          jqPathExpressions:
-            - '.spec.selector["rollouts-pod-template-hash"]'
-        - group: gateway.networking.k8s.io
-          kind: HTTPRoute
-          jqPathExpressions:
-            - 'select(.metadata.labels["rollouts.argoproj.io/gatewayapi-canary"] == "in-progress") | .spec.rules'
+      - group: apps
+        kind: Deployment
+        jsonPointers:
+        - "/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"
+        name: mini-commerce
+      - group: argoproj.io
+        kind: Rollout
+        jsonPointers:
+        - "/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"
+        name: mini-commerce
+      - group: ''
+        kind: Service
+        jqPathExpressions:
+        - .spec.selector["rollouts-pod-template-hash"]
+        name: mini-commerce-stable
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+        jqPathExpressions:
+        - select(.metadata.labels["rollouts.argoproj.io/gatewayapi-canary"] == "in-progress")
+          | .spec.rules
+        name: mini-commerce
+      - group: ''
+        kind: Service
+        jqPathExpressions:
+        - .spec.selector["rollouts-pod-template-hash"]
+        name: mini-commerce-canary

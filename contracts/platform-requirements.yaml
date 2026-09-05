@@ -8,6 +8,12 @@ owners:
   argocdExternalSecrets: argocd-gitops
 argocd:
   namespace: argocd
+  oidcGroupsClaim: groups
+  defaultRole: role:authenticated
+  anonymousAccess: false
+  breakGlassRole: platform-break-glass
+  prodSync: manual
+  devSync: automated-prune-self-heal
   chartVersion: 10.4.3
   controllerVersion: v3.5.2
   prodRequiresHA: true

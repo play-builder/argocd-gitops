@@ -1,34 +1,35 @@
+---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: course-bootstrap-dev
+  name: platform-bootstrap-dev
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-3"
 spec:
   description: Bootstrap and Phase A platform handoff resources in the dev cluster
   sourceRepos:
-    - https://github.com/REPLACE_ME/argocd-gitops.git
-    - https://charts.external-secrets.io
+  - https://github.com/REPLACE_ME/argocd-gitops.git
+  - https://charts.external-secrets.io
   destinations:
-    - server: https://kubernetes.default.svc
-      namespace: argocd
-    - server: https://kubernetes.default.svc
-      namespace: external-secrets
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  - server: https://kubernetes.default.svc
+    namespace: external-secrets
   clusterResourceWhitelist:
-    - group: ""
-      kind: Namespace
-    - group: admissionregistration.k8s.io
-      kind: ValidatingAdmissionPolicy
-    - group: admissionregistration.k8s.io
-      kind: ValidatingAdmissionPolicyBinding
+  - group: ''
+    kind: Namespace
+  - group: admissionregistration.k8s.io
+    kind: ValidatingAdmissionPolicy
+  - group: admissionregistration.k8s.io
+    kind: ValidatingAdmissionPolicyBinding
   namespaceResourceWhitelist:
-    - group: argoproj.io
-      kind: AppProject
-    - group: argoproj.io
-      kind: Application
-    - group: argoproj.io
-      kind: ApplicationSet
+  - group: argoproj.io
+    kind: AppProject
+  - group: argoproj.io
+    kind: Application
+  - group: argoproj.io
+    kind: ApplicationSet
   orphanedResources:
     warn: true
 ---
@@ -42,51 +43,111 @@ metadata:
 spec:
   description: Course application resources in app-dev and app-recovery only
   sourceRepos:
-    - https://github.com/REPLACE_ME/argocd-gitops.git
+  - https://github.com/REPLACE_ME/argocd-gitops.git
   destinations:
-    - server: https://kubernetes.default.svc
-      namespace: app-dev
-    - server: https://kubernetes.default.svc
-      namespace: app-recovery
+  - server: https://kubernetes.default.svc
+    namespace: app-dev
+  - server: https://kubernetes.default.svc
+    namespace: app-recovery
   clusterResourceWhitelist:
-    - group: ""
-      kind: Namespace
-    - group: gateway.networking.k8s.io
-      kind: GatewayClass
-    - group: gateway.k8s.aws
-      kind: LoadBalancerConfiguration
-    - group: snapshot.storage.k8s.io
-      kind: VolumeSnapshotContent
+  - group: ''
+    kind: Namespace
+  - group: gateway.networking.k8s.io
+    kind: GatewayClass
+  - group: gateway.k8s.aws
+    kind: LoadBalancerConfiguration
+  - group: snapshot.storage.k8s.io
+    kind: VolumeSnapshotContent
   namespaceResourceWhitelist:
-    - group: ""
-      kind: ServiceAccount
-    - group: ""
-      kind: Service
-    - group: apps
-      kind: Deployment
-    - group: apps
-      kind: StatefulSet
-    - group: batch
-      kind: Job
-    - group: autoscaling
-      kind: HorizontalPodAutoscaler
-    - group: policy
-      kind: PodDisruptionBudget
-    - group: networking.k8s.io
-      kind: NetworkPolicy
-    - group: external-secrets.io
-      kind: SecretStore
-    - group: external-secrets.io
-      kind: ExternalSecret
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-    - group: gateway.k8s.aws
-      kind: TargetGroupConfiguration
-    - group: argoproj.io
-      kind: Rollout
-    - group: argoproj.io
-      kind: AnalysisTemplate
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: Service
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: batch
+    kind: Job
+  - group: autoscaling
+    kind: HorizontalPodAutoscaler
+  - group: policy
+    kind: PodDisruptionBudget
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: external-secrets.io
+    kind: SecretStore
+  - group: external-secrets.io
+    kind: ExternalSecret
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+  - group: gateway.k8s.aws
+    kind: TargetGroupConfiguration
+  - group: argoproj.io
+    kind: Rollout
+  - group: argoproj.io
+    kind: AnalysisTemplate
   orphanedResources:
     warn: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  description: Mini Commerce namespaced workload resources; legacy ownership remains
+    in course-dev
+  sourceRepos:
+  - https://github.com/REPLACE_ME/argocd-gitops.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: app-dev
+  - server: https://kubernetes.default.svc
+    namespace: app-recovery
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: Service
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: batch
+    kind: Job
+  - group: autoscaling
+    kind: HorizontalPodAutoscaler
+  - group: policy
+    kind: PodDisruptionBudget
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: external-secrets.io
+    kind: ExternalSecret
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+  - group: gateway.k8s.aws
+    kind: TargetGroupConfiguration
+  - group: argoproj.io
+    kind: Rollout
+  - group: argoproj.io
+    kind: AnalysisTemplate
+  orphanedResources:
+    warn: true
+  roles:
+  - name: developer
+    description: Read and sync Dev applications without delete permission
+    groups:
+    - course:dev-developers
+    policies:
+    - p, proj:platform-dev:developer, applications, get, platform-dev/*, allow
+    - p, proj:platform-dev:developer, applications, sync, platform-dev/*, allow
+    - p, proj:platform-dev:developer, applications, action/argoproj.io/Rollout/promote,
+      platform-dev/*, allow

@@ -143,7 +143,7 @@ case_least_privilege() {
   render_bootstrap prod "$bootstrap_prod"
 
   for manifest in "$bootstrap_dev" "$bootstrap_prod"; do
-    assert_document_count "$manifest" AppProject 2
+    assert_document_count "$manifest" AppProject 3
     yq eval-all -o=json '[select(.kind == "AppProject")]' "$manifest" | jq -e '
       all(.[].spec.sourceRepos[]; . != "*") and
       all(.[].spec.destinations[]; .namespace != "*") and
@@ -205,7 +205,7 @@ case_least_privilege() {
   done
 
   yq eval -o=json '.' "$repository_root/contracts/platform-requirements.yaml" | jq -e '
-    .schemaVersion == "course.platform-requirements/v1" and
+    .schemaVersion == "platform.requirements/v2" and
     .ownerRepository == "EKS-infra" and
     .argoConfigMap == "argocd-cm" and
     [.argoHealthCustomizations[].id] == [
