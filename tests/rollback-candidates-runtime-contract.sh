@@ -18,7 +18,16 @@ fingerprint() {
   else echo absent
   fi
 }
-file_mode() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+file_mode() {
+  local mode
+  if mode=$(stat -c '%a' -- "$1" 2>/dev/null); then
+    printf '%s\n' "$mode"
+  elif mode=$(stat -f '%Lp' -- "$1" 2>/dev/null); then
+    printf '%s\n' "$mode"
+  else
+    return 1
+  fi
+}
 
 before=$(fingerprint)
 [[ -x "$script" ]] || fail 'rollback candidate runtime producer is missing or not executable'
