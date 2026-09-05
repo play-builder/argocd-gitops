@@ -5,6 +5,7 @@ require 'digest'
 require 'open3'
 require 'tmpdir'
 require 'fileutils'
+require_relative 'lib/platform_mirror'
 def run(*cmd)
  out,status=Open3.capture2e(*cmd)
  raise "#{cmd.first} failed: #{out}" unless status.success?
@@ -22,6 +23,8 @@ def strict(schema)
 end
 begin
  lock=YAML.load_file(ENV.fetch('VERSION_LOCK','versions.lock.yaml'))
+ # Consume image locks as well as chart locks; a lock/policy disagreement is fail-closed.
+ PlatformMirror.policy(PlatformMirror::TOKEN, 'prod')
  cache=ENV.fetch('CHART_CACHE_DIR',File.join(Dir.tmpdir,'mini-commerce-locked-charts'))
  FileUtils.mkdir_p(cache)
  charts={}

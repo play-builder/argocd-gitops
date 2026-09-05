@@ -8,6 +8,8 @@ bash tests/burn-rate-contract.sh
 bash tests/source-integrity-contract.sh
 bash tests/istio-platform-contract.sh
 bash tests/edge-waf-contract.sh
+ruby tests/platform-mirror-handoff-contract.rb
+ruby tests/platform-mirror-contract.rb
 bash tests/kubeconform-contract.sh
 bash tests/render-lock-contract.sh
 ruby tests/istio-analyze-contract.rb

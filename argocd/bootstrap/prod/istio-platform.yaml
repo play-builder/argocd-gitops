@@ -55,6 +55,10 @@
         "releaseName": "istiod-stable",
         "valuesObject": {
           "revision": "1-30-4",
+          "global": {
+            "proxy": {"image": "REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR@sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9"},
+            "proxy_init": {"image": "REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR@sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9"}
+          },
           "revisionTags": [
             "prod-stable"
           ],
@@ -165,6 +169,10 @@
         "releaseName": "istiod-candidate",
         "valuesObject": {
           "revision": "1-31-0",
+          "global": {
+            "proxy": {"image": "REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR@sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17"},
+            "proxy_init": {"image": "REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR@sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17"}
+          },
           "revisionTags": [
             "prod-canary"
           ],

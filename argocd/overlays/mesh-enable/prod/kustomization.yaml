@@ -1,6 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources: [../../../bootstrap/prod]
+# First run verify-platform-mirror-activation.rb HANDOFF.json prod --verify-live.
+# It never activates namespaces: operator admission/traffic approval is still required.
 # Activate only with Task9 native routing and runtime reinjection approval.
 patches:
   - target: {kind: ApplicationSet, name: sample-app-prod}

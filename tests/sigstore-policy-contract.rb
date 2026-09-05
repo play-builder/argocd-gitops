@@ -11,7 +11,7 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
  out,s=Open3.capture2e('kubectl','kustomize',"platform/security/sigstore/overlays/#{env}")
  check(s.success?,'Sigstore overlay missing')
  docs=YAML.load_stream(out)
- policies=docs.select{|d|d['kind']=='ClusterImagePolicy'}
+ policies=docs.select{|d|d['kind']=='ClusterImagePolicy' && d['metadata']['name'].start_with?('mini-commerce-')}
  check(policies.length==2,'SLSA and SPDX policies must both match')
  check(docs.count{|d|d['kind']=='TrustRoot'}==1,'GitHub TrustRoot missing')
  policies.each do |d|
@@ -38,6 +38,8 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
   end
  end
  check(matches.call(JSON.parse(File.read('tests/fixtures/source-integrity/pre-cutover-valid.json'))),'rendered policies reject valid evidence')
+ unsigned=JSON.parse(File.read('tests/fixtures/source-integrity/pre-cutover-valid.json'));unsigned['predicates']=[]
+ check(!matches.call(unsigned),'business image without attestations must remain rejected')
  %w[wrong-workflow wrong-issuer wrong-digest missing-spdx public-image].each do |name|
   check(!matches.call(JSON.parse(File.read("tests/fixtures/source-integrity/#{name}.json"))),"rendered policy accepted #{name}")
  end

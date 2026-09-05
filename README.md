@@ -374,6 +374,34 @@ Source verification uses Argo CD 3.5 Git GPG `head` mode. Replace the explicit k
 
 The Sigstore manifests contain a deliberate EKS ECR-output placeholder. Replace it with the exact immutable image repository before enabling admission. `argocd/overlays/sigstore-enable/{dev,prod}` opt in the existing namespace owner only after webhook, TrustRoot and both SLSA/SPDX policies are Ready. Default bootstrap does not activate enforcement prematurely. Two workflows remain until fresh rename-cutover evidence; numeric repository ID is a promotion evidence check, not a native admission claim. The vendored GitHub TrustRoot is rendered from locked trust-policies v0.7.0; TUF refresh and signed OCI admission remain live gates.
 
+### Private ECR Istio proxy mirror gate
+
+Istio proxy and init containers also pass through application namespace admission. Both revisions explicitly set `global.proxy.image` **and** `global.proxy_init.image` to the platform ECR placeholder plus their approved multi-architecture index digest. The gateway chart's `auto` image is resolved by the same revision injector. Do not allow upstream registries, a wildcard image exemption, or a weaker no-match policy to bypass this requirement.
+
+EKS owns the dedicated `${project}/platform/istio-proxyv2` repository and publisher role, exporting `platform_istio_proxy_repository_url` and `platform_image_publisher_role_arn` in handoff `outputs`. The protected `production` GitHub environment and main-only publisher workflow approve a byte-preserving mirror of the PR-reviewed source index and both child manifests in `versions.lock.yaml`. The publisher must verify unchanged destination index/child digests. No copy, registry write, or signature operation is performed by GitOps.
+
+`platform-istio-mirror` is a separate CIP with exactly two ECR index digests. Its signed bundle must have the configured GitHub issuer and exact `EKS-infra/.github/workflows/publish-platform-images.yml@refs/heads/main` identity, plus a `platform.image-mirror/v1` predicate binding upstream reference, upstream/mirrored index digest, version, publisher repository ID and workflow. It is evidence of **the mirror operation only**, not an Istio upstream build, SLSA level, or verified upstream signature. The existing business SLSA/SPDX policies are unchanged. The numeric ID inside this custom predicate is a claim made by the trusted publisher; it is not a native certificate-extension constraint.
+
+The canonical predicate type and owner are in `contracts/platform-requirements.yaml:platformImageMirror`. A fork must review and replace its publisher repository, numeric ID, workflow and predicate URI there; `scripts/render-platform-images.rb` binds that reviewed owner to the resulting CIP. An untrusted handoff cannot choose the signer.
+
+```bash
+ruby scripts/render-platform-images.rb HANDOFF.json prod
+```
+
+Review the two rendered istiod Applications and dedicated CIP, replacing only their corresponding desired-state objects. This renderer does not alter files or namespace labels. It rejects missing/non-ECR/wrong-path outputs, a sample-app publisher role, cross-account role, or image-lock drift. Also resolve the existing business ECR placeholder separately.
+
+After actual mirror publication and controller/policy readiness, an operator with read-only Kubernetes access and authenticated ECR access runs:
+
+```bash
+ruby scripts/verify-platform-mirror-activation.rb HANDOFF.json prod --verify-live
+```
+
+This gate performs real `gh attestation verify --bundle-from-oci` for both destination images and checks the verified statements, current Ready generations, two controller replicas, exact live CIPs, fail-closed webhook and unchanged no-match deny. It never copies/signs images, labels namespaces or syncs Argo. A success still requires manual approval plus real positive/negative injected-Pod admission probes and Task 9 traffic/reinjection gates **before** either opt-in overlay is used. Offline/static fixtures cannot authorize activation.
+
+Focused local verification is `ruby tests/platform-mirror-handoff-contract.rb` and `ruby tests/platform-mirror-contract.rb`, with locked charts in `CHART_CACHE_DIR`, Istio CLI 1.31.0 and CUE 0.12.1 on PATH. CUE matches Policy Controller 0.13.1's evaluator dependency. Tests execute both actual chart injectors for Pod proxy/init and rendered gateway Deployments, and evaluate the rendered CUE with negative statements. Explicit `--revision` keeps offline injection from resolving the default revision through a cluster lookup. These tests are not cryptographic admission evidence.
+
+Official [Istio signing guidance](https://istio.io/latest/docs/ops/best-practices/image-signing-validation/) documents its public-key verification option. Exact index `.sig` discovery returned 404 during this read-only audit; no upstream signature verification is claimed. Genuine upstream signature verification can be an additional control, not a fabricated prerequisite. [Sigstore's policy contract](https://docs.sigstore.dev/policy-controller/overview/#configuring-policy-that-validates-attestations) defines the signed custom predicate checks used here.
+
 AMP rules are EKS-owned and implemented in its later Task 11. `contracts/amp-slo-consumer.yaml` validates the agreed labels/metrics/windows only; it does not prove actual deployed rules, paging or burn-rate behavior. Argo deployment completion routes to Slack, while Prod failed/degraded/unknown events page PagerDuty.
 
 EKS owns Argo globals, the namespace-scoped `argocd-secrets` SecretStore, its IRSA/ServiceAccount, ESO and Sigstore controllers. GitOps owns only the three Argo ExternalSecrets. The current public repository bootstraps without repository credentials; private bootstrap requires pre-existing credentials. No secret values belong in this repository.

@@ -32,6 +32,21 @@ sigstoreController:
   chartVersion: 0.10.5
   appVersion: 0.13.1
 ownerRepository: EKS-infra
+platformImageMirror:
+  owner: EKS-infra
+  repositoryOutput: platform_istio_proxy_repository_url
+  publisherRoleOutput: platform_image_publisher_role_arn
+  repositorySuffix: /platform/istio-proxyv2
+  predicateType: https://github.com/play-builder/EKS-infra/attestations/platform.image-mirror/v1
+  publisher:
+    repositoryId: "405337777"
+    repository: play-builder/EKS-infra
+    workflow: https://github.com/play-builder/EKS-infra/.github/workflows/publish-platform-images.yml@refs/heads/main
+    environment: production
+  scope: approved-upstream-digest-to-byte-preserving-ECR-mirror-only
+  upstreamSignature: optional-extra-not-claimed
+  renderer: scripts/render-platform-images.rb
+  activationGate: scripts/verify-platform-mirror-activation.rb
 applicationAttestation:
   repositoryId: 1352247019
   issuer: https://token.actions.githubusercontent.com
