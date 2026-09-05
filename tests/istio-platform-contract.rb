@@ -8,7 +8,7 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
   owner=docs.find{|d|d['kind']=='AppProject' && d['metadata']['name']==a['spec']['project']}
   check(owner && owner.dig('metadata','annotations','argocd.argoproj.io/sync-wave').to_i < a.dig('metadata','annotations','argocd.argoproj.io/sync-wave').to_i,'project must precede its earliest child Application')
  end
- check(apps.length==5,'need one base, two istiod and two gateways')
+ check(apps.length==6,'need one base, one singleton CNI, two istiod and two gateways')
  base=apps.select{|d|d.dig('spec','source','chart')=='base'}
  check(base.length==1 && base[0].dig('spec','source','targetRevision')=='1.31.0' && base[0].dig('spec','source','helm','valuesObject','defaultRevision')=='1-30-4','shared base revision wrong')
  control=apps.select{|d|d.dig('spec','source','chart')=='istiod'}

@@ -70,6 +70,7 @@
             }
           },
           "pilot": {
+            "cni": {"enabled": true},
             "autoscaleMin": 2
           }
         }
@@ -184,6 +185,7 @@
             }
           },
           "pilot": {
+            "cni": {"enabled": true},
             "autoscaleMin": 2
           }
         }
@@ -253,6 +255,129 @@
     "destination": {
       "server": "https://kubernetes.default.svc",
       "namespace": "istio-system"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "ServerSideApply=true"
+      ]
+    }
+  }
+}
+
+---
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "AppProject",
+  "metadata": {
+    "name": "platform-cni-prod",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-37"
+    }
+  },
+  "spec": {
+    "description": "Singleton Istio CNI infrastructure only; no application namespace permission",
+    "sourceRepos": [
+      "https://blob.istio.io/istio-release/charts"
+    ],
+    "destinations": [
+      {
+        "server": "https://kubernetes.default.svc",
+        "namespace": "istio-cni"
+      }
+    ],
+    "clusterResourceWhitelist": [
+      {
+        "group": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole"
+      },
+      {
+        "group": "rbac.authorization.k8s.io",
+        "kind": "ClusterRoleBinding"
+      }
+    ],
+    "namespaceResourceWhitelist": [
+      {
+        "group": "",
+        "kind": "ServiceAccount"
+      },
+      {
+        "group": "",
+        "kind": "ConfigMap"
+      },
+      {
+        "group": "apps",
+        "kind": "DaemonSet"
+      }
+    ],
+    "orphanedResources": {
+      "warn": true
+    }
+  }
+}
+---
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "istio-cni-prod",
+    "namespace": "argocd",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-34",
+      "argocd.argoproj.io/sync-options": "Prune=confirm"
+    }
+  },
+  "spec": {
+    "project": "platform-cni-prod",
+    "source": {
+      "repoURL": "https://blob.istio.io/istio-release/charts",
+      "chart": "cni",
+      "targetRevision": "1.31.0",
+      "helm": {
+        "releaseName": "istio-cni",
+        "valuesObject": {
+          "image": "docker.io/istio/install-cni@sha256:8cef43ba08ae1af846d0e474591f625cd2dd6b2c0df0efcb17faef0d978ef246",
+          "revision": "",
+          "chained": true,
+          "cniBinDir": "/opt/cni/bin",
+          "cniConfDir": "/etc/cni/net.d",
+          "excludeNamespaces": [
+            "kube-system",
+            "istio-system",
+            "istio-cni"
+          ],
+          "ambient": {
+            "enabled": false
+          },
+          "repair": {
+            "enabled": true,
+            "repairPods": true,
+            "deletePods": false,
+            "labelPods": false
+          },
+          "useAppArmorAnnotation": false,
+          "resources": {
+            "requests": {
+              "cpu": "100m",
+              "memory": "100Mi"
+            },
+            "limits": {
+              "cpu": "500m",
+              "memory": "256Mi"
+            }
+          },
+          "updateStrategy": {
+            "type": "RollingUpdate",
+            "rollingUpdate": {
+              "maxUnavailable": 1
+            }
+          }
+        }
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "istio-cni"
     },
     "syncPolicy": {
       "syncOptions": [

@@ -63,10 +63,10 @@ check(run('istioctl', 'version', '--remote=false').lines.first.include?(lock['to
                              '--injectConfigFile', "#{dir}/inject.yaml", '--meshConfigFile', "#{dir}/mesh.yaml",
                              '--valuesFile', "#{dir}/values.json", '-f', "#{dir}/pod.yaml"))
       containers = result['spec'].fetch('containers') + result['spec'].fetch('initContainers', [])
-      check(containers.reject { |c| c['name'] == 'app' }.map { |c| c['name'] }.sort == %w[istio-init istio-proxy],
+      check(containers.reject { |c| c['name'] == 'app' }.map { |c| c['name'] }.sort == %w[istio-proxy istio-validation],
             'an unreviewed injected container appeared')
       proxy = containers.find { |c| c['name'] == 'istio-proxy' }
-      init = containers.find { |c| c['name'] == 'istio-init' }
+      init = containers.find { |c| c['name'] == 'istio-validation' }
       check(proxy && init, 'actual injector must cover proxy and init')
       [proxy, init].each do |container|
         check(container['image'] == "#{repository}@#{expected.fetch(version)}",
