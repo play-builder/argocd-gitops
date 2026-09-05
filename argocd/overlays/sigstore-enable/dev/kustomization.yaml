@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../../bootstrap/dev]
+# Explicit opt-in only after controller, TrustRoot and both CIPs are Ready.
+# The legacy Application remains the namespace owner during pre-cutover.
+patches:
+  - target: {kind: ApplicationSet, name: sample-app-dev}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/policy.sigstore.dev~1include
+        value: "true"

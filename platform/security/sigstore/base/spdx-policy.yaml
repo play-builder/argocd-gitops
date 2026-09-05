@@ -1,0 +1,47 @@
+{
+  "apiVersion": "policy.sigstore.dev/v1beta1",
+  "kind": "ClusterImagePolicy",
+  "metadata": {
+    "name": "mini-commerce-spdx",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-11"
+    }
+  },
+  "spec": {
+    "images": [
+      {
+        "glob": "REPLACE_FROM_EKS_MINI_COMMERCE_ECR@sha256:*"
+      }
+    ],
+    "authorities": [
+      {
+        "name": "github",
+        "signatureFormat": "bundle",
+        "keyless": {
+          "trustRootRef": "github",
+          "insecureIgnoreSCT": true,
+          "url": "https://fulcio.githubapp.com",
+          "identities": [
+            {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": "https://github.com/play-builder/cicd-course-sample-app/.github/workflows/ci.yml@refs/heads/main"
+            },
+            {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": "https://github.com/play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main"
+            }
+          ]
+        },
+        "rfc3161timestamp": {
+          "trustRootRef": "github"
+        },
+        "attestations": [
+          {
+            "name": "require-spdx",
+            "predicateType": "https://spdx.dev/Document/v2.3"
+          }
+        ]
+      }
+    ]
+  }
+}

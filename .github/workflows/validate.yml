@@ -94,5 +94,11 @@ jobs:
       - name: Run static course contracts
         run: bash tests/test-all.sh
 
+      - name: Verify locked Helm archives and rendered API schemas
+        run: |
+          GOBIN="$RUNNER_TEMP/schema-bin" go install github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0
+          export PATH="$RUNNER_TEMP/schema-bin:$PATH"
+          bash tests/kubeconform-contract.sh
+
       - name: Package chart
         run: scripts/package-chart.sh "$RUNNER_TEMP/chart-package"

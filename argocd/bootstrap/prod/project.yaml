@@ -10,14 +10,26 @@ spec:
   description: Bootstrap and Phase A platform handoff resources in the production
     cluster
   sourceRepos:
+  # Git signing key distribution is EKS-owned; HEAD precedes strict/seal migration.
   - https://github.com/REPLACE_ME/argocd-gitops.git
   - https://charts.external-secrets.io
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+          gpg: {mode: head, keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]}
   destinations:
   - server: https://kubernetes.default.svc
     namespace: argocd
   - server: https://kubernetes.default.svc
     namespace: external-secrets
+  - server: https://kubernetes.default.svc
+    namespace: cosign-system
   clusterResourceWhitelist:
+  - group: policy.sigstore.dev
+    kind: ClusterImagePolicy
+  - group: policy.sigstore.dev
+    kind: TrustRoot
   - group: ''
     kind: Namespace
   - group: admissionregistration.k8s.io
@@ -100,6 +112,13 @@ metadata:
     notifications.argoproj.io/subscribe.on-sync-status-unknown.pagerdutyv2: platform-prod
     argocd.argoproj.io/sync-wave: "-2"
 spec:
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+          gpg:
+            mode: head
+            keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]
   description: Mini Commerce namespaced workload resources; legacy ownership remains
     in course-prod
   sourceRepos:

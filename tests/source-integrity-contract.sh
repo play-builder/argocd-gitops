@@ -35,3 +35,4 @@ for invalid_fixture in wrong-issuer wrong-workflow wrong-repository-id wrong-sou
   fi
 done
 echo "PASS: source integrity binds exact ECR and cutover workflow state"
+bash "$test_root/sigstore-policy-contract.sh"
