@@ -1,0 +1,17 @@
+{{- if .Values.snapshot.captureEnabled }}
+{{- if or (ne (int .Values.database.replicaCount) 0) (not .Values.maintenance.writersStopped) }}
+{{- fail "snapshot capture requires quiesced writers and database replicaCount zero" }}
+{{- end }}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: mini-commerce-postgresql-snapshot
+  namespace: app-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  volumeSnapshotClassName: course-ebs-snapshots
+  source:
+    persistentVolumeClaimName: data-mini-commerce-postgresql-0
+{{- end }}

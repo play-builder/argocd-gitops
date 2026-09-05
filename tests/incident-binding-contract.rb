@@ -63,3 +63,38 @@ Dir.mktmpdir('incident-consumer-') do |dir|
  raise 'missing incident companion accepted' if status.success?
 end
 puts 'STATIC_VERIFIED: production source companion requires exact bytes and complete incident/DR binding'
+
+# Filesystem unit tests only: synthetic parser inputs never become live evidence.
+require_relative '../scripts/lib/publish-incident-capture'
+Dir.mktmpdir('incident-publish-') do |dir|
+ dir=File.realpath(dir)
+ candidate="#{dir}/candidate.json"; output="#{dir}/baseline.json"
+ raw_dr=JSON.pretty_generate(dr)+"\n"
+ incident=Marshal.load(Marshal.dump(record))
+ incident['drMetadataSha256']="sha256:#{Digest::SHA256.hexdigest(raw_dr)}"
+ File.write("#{dir}/dr.json",raw_dr);File.write("#{dir}/incident.json",JSON.generate(incident))
+ File.write(candidate,JSON.generate({'evidenceGrade'=>'CLOUD_RUNTIME','clusterArn'=>arn,'gitopsRevision'=>sha,'image'=>{'indexDigest'=>digest},'rollout'=>{'revision'=>2,'trafficWeight'=>100},'observedAt'=>'2026-09-05T00:20:00Z'}))
+ publish=->(**args){IncidentCapture.publish(candidate,output,"#{dir}/incident.json","#{dir}/dr.json",**args)}
+ publish.call
+ original=[File.binread(output),File.binread("#{output}.platform.json")]
+ publish.call
+ raise 'identical retry changed pair' unless original==[File.binread(output),File.binread("#{output}.platform.json")]
+ File.write(candidate,File.read(candidate).sub('00:20:00Z','00:21:00Z'))
+ begin;publish.call;raise 'changed retry accepted';rescue IncidentCapture::Rejected;end
+ raise 'retry damaged previous valid pair' unless original==[File.binread(output),File.binread("#{output}.platform.json")]
+ _,status=Open3.capture2e('ruby','scripts/verify-incident-companion.rb',output)
+ raise 'previous pair no longer verifies' unless status.success?
+ File.unlink(output);File.unlink("#{output}.platform.json")
+ count=0
+ failing_link=->(a,b){count+=1;raise IOError,'simulated second publication failure' if count==2;File.link(a,b)}
+ begin;publish.call(linker:failing_link);raise 'failure not injected';rescue IOError;end
+ raise 'partial failed publication left canonical files' if File.exist?(output)||File.exist?("#{output}.platform.json")
+ publish.call
+ raise 'publication did not recover after failure' unless [output,"#{output}.platform.json"].all?{|f|(File.stat(f).mode&0777)==0600}
+end
+%w[capture-prod-baseline-evidence.sh capture-prod-slo-evidence.sh capture-rollback-candidates-evidence.sh].each do |file|
+ source=File.read("scripts/#{file}")
+ raise "#{file} does not publish the source/companion together" unless source.include?('publish-incident-capture.rb')
+ raise "#{file} still publishes companion after replacing source" if source.include?('write-incident-companion.rb')
+end
+puts 'STATIC_VERIFIED: paired write-once publication, identical retry, changed retry and second-write failure preserve valid evidence'

@@ -50,8 +50,12 @@ rollout:
     enabled: false
 
 telemetry:
-  enabled: true
-  otlpEndpoint: "http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces"
+  enabled: false
+  platformXrayEnabled: false
+  otlpEndpoint: ""
+  otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""
 
 networkPolicy:
   enabled: false

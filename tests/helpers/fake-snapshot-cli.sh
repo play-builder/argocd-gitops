@@ -28,8 +28,11 @@ case "$tool" in
     esac
     ;;
   argocd)
-    [[ "$*" == "app get mini-commerce-dev -o json" ]] || { echo "FAIL: unexpected fake argocd invocation: $*" >&2; exit 64; }
-    cat "$phase_root/application.json"
+    case "$*" in
+      "app get mini-commerce-dev -o json") cat "$phase_root/application.json" ;;
+      "app get mini-commerce-db-dev -o json") cat "$phase_root/database-application.json" ;;
+      *) echo "FAIL: unexpected fake argocd invocation: $*" >&2; exit 64 ;;
+    esac
     ;;
   aws)
     [[ "$*" == "eks describe-cluster --name course-dev --region ap-northeast-2 --output json" ]] || { echo "FAIL: unexpected fake aws invocation: $*" >&2; exit 64; }
@@ -48,6 +51,8 @@ case "$tool" in
       "get pv pvc-11111111-1111-1111-1111-111111111111 -o json") cat "$(phase_file pv.json)" ;;
       "get volumeattachment -o json") cat "$(phase_file volumeattachments.json)" ;;
       "-n app-dev get volumesnapshot -o json --ignore-not-found") cat "$(phase_file volumesnapshots.json)" ;;
+      "-n app-dev get volumesnapshot mini-commerce-postgresql-snapshot -o json") cat "$(phase_file snapshot.json)" ;;
+      "get volumesnapshotcontent snapcontent-22222222-2222-2222-2222-222222222222 -o json") cat "$(phase_file snapshot-content.json)" ;;
       "-n app-dev exec mini-commerce-postgresql-0 -c postgresql --"*) cat "$phase_root/checksum.json" ;;
       "-n app-dev logs -f mini-commerce-postgresql-0 -c postgresql --timestamps") cat "$phase_root/shutdown.log" ;;
       *) echo "FAIL: unexpected fake kubectl invocation: $*" >&2; exit 64 ;;

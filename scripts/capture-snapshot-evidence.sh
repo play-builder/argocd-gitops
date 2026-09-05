@@ -4,10 +4,13 @@ set -Eeuo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 repository_root=$(cd -- "$script_dir/.." && pwd -P)
 canonical_phase="$repository_root/envs/dev/snapshot-maintenance-values.yaml"
+canonical_ready_phase="$repository_root/envs/dev/snapshot-capture-values.yaml"
 canonical_a1="$repository_root/evidence/recovery/snapshot-quiesce-a1.json"
 canonical_output="$repository_root/evidence/recovery/snapshot-quiesce.json"
+canonical_ready_output="$repository_root/evidence/recovery/snapshot-ready.json"
 phase_values=$canonical_phase
 a1=$canonical_a1
+a2=$canonical_output
 a1_output=$canonical_a1
 output=$canonical_output
 now_override=
@@ -16,7 +19,7 @@ overridden=false
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 usage() {
-  echo "Usage: $0 prepare | capture | preflight | --fixture <snapshot-quiesce.json>" >&2
+  echo "Usage: $0 prepare | capture | ready | preflight | --fixture <snapshot-quiesce.json>" >&2
   exit 2
 }
 require_regular_file() { [[ -f "$1" && ! -L "$1" ]] || fail "$2 must be a regular non-symlink file"; }
@@ -150,12 +153,12 @@ query_cluster() {
 }
 
 query_application() {
-  local revision=$1 final=${2:-false} application
+  local revision=$1 final=${2:-false} phase_file=${3:-envs/dev/snapshot-maintenance-values.yaml} application
   application=$(argocd app get mini-commerce-dev -o json) || fail 'unable to query mini-commerce-dev from Argo CD'
-  jq -e --arg revision "$revision" --argjson final "$final" '
+  jq -e --arg revision "$revision" --argjson final "$final" --arg phase "../../$phase_file" '
     .metadata.name == "mini-commerce-dev" and .status.sync.revision == $revision and
     (.spec.source.repoURL | test("^https://github\\.com/[^/[:space:]]+/argocd-gitops(\\.git)?$")) and
-    .spec.source.helm.valueFiles == ["../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-maintenance-values.yaml"] and
+    .spec.source.helm.valueFiles == ["../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml",$phase,"../../envs/dev/pre-cutover-ownership-values.yaml"] and
     .spec.syncPolicy.automated.prune == true and .spec.syncPolicy.automated.selfHeal == true and
     (if $final then
       .status.sync.status == "Synced" and .status.health.status == "Healthy" and ((.status.operationState.phase // "") | IN("","Succeeded"))
@@ -164,6 +167,103 @@ query_application() {
       ((.status.operationState.phase // "") | IN("","Succeeded","Running"))
      end)
   ' <<<"$application" >/dev/null || fail 'Argo desired revision, phase values, automation, or health is not the reviewed snapshot phase'
+  local database_application
+  database_application=$(argocd app get mini-commerce-db-dev -o json) || fail 'unable to query the separate database Application'
+  jq -e --arg revision "$revision" --arg phase "../../$phase_file" --arg repo "$(jq -r '.spec.source.repoURL' <<<"$application")" '
+    .metadata.name == "mini-commerce-db-dev" and
+    .spec.source.repoURL == $repo and .spec.source.path == "charts/mini-commerce-db-dev" and
+    .spec.source.helm.valueFiles == [$phase] and .spec.syncPolicy.automated == null and
+    .status.sync.revision == $revision and .status.sync.status == "Synced" and
+    .status.health.status == "Healthy" and ((.status.operationState.phase // "") | IN("","Succeeded"))
+  ' <<<"$database_application" >/dev/null || fail 'database owner must be manually synced to the same approved snapshot phase and Git revision'
+}
+
+validate_ready_phase() {
+  local file=$1
+  require_regular_file "$file" 'snapshot capture phase values'
+  yq -o=json -I=0 '.' "$file" | jq -e '
+    .database == {enabled:true,replicaCount:0,migration:{enabled:false}} and
+    .maintenance == {writersStopped:true} and .snapshot == {captureEnabled:true} and
+    .recovery.restoreEnabled == false and .recovery.namespace == "app-recovery" and
+    .recovery.snapshotClassName == "course-ebs-snapshots" and
+    .recovery.source == {namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0",snapshotName:"mini-commerce-postgresql-snapshot"}
+  ' >/dev/null || fail 'snapshot capture values are not the exact A3 phase'
+}
+
+capture_ready_snapshot() {
+  local source_evidence=$1 destination=$2 snapshot content observed expires record role_account normal_account
+  validate_record "$source_evidence" "$evidence_grade" "$clock_now"
+  validate_ready_phase "$phase_values"
+  query_application "$local_revision" true envs/dev/snapshot-capture-values.yaml
+  query_cluster
+  query_writers
+  query_pvc_pv
+  query_a2_detach
+  [[ "$cluster_arn" == "$(jq -r '.clusterArn' "$source_evidence")" ]] || fail 'ready snapshot EKS identity differs from A2 evidence'
+  [[ "$pvc_uid" == "$(jq -r '.source.pvcUid' "$source_evidence")" &&
+     "$volume_name" == "$(jq -r '.source.volumeName' "$source_evidence")" ]] ||
+    fail 'ready snapshot source PVC/PV identity differs from A2 evidence'
+
+  [[ ${RECOVERY_DB_SECRET_READER_ROLE_ARN:-} =~ ^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$ ]] ||
+    fail 'RECOVERY_DB_SECRET_READER_ROLE_ARN is invalid'
+  [[ ${EXTERNAL_SECRETS_READER_ROLE_ARN:-} =~ ^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$ ]] ||
+    fail 'EXTERNAL_SECRETS_READER_ROLE_ARN is invalid'
+  [[ "$RECOVERY_DB_SECRET_READER_ROLE_ARN" != "$EXTERNAL_SECRETS_READER_ROLE_ARN" ]] ||
+    fail 'recovery and normal External Secrets Roles must be different'
+  role_account=${RECOVERY_DB_SECRET_READER_ROLE_ARN#arn:aws:iam::}
+  role_account=${role_account%%:*}
+  normal_account=${EXTERNAL_SECRETS_READER_ROLE_ARN#arn:aws:iam::}
+  normal_account=${normal_account%%:*}
+  [[ "$role_account" == "$normal_account" ]] ||
+    fail 'recovery and normal External Secrets Roles must belong to the same account'
+
+  snapshot=$(kubectl -n app-dev get volumesnapshot mini-commerce-postgresql-snapshot -o json) ||
+    fail 'unable to query the source VolumeSnapshot'
+  content_name=$(jq -er '.status.boundVolumeSnapshotContentName' <<<"$snapshot") ||
+    fail 'ready VolumeSnapshot lacks a bound content name'
+  jq -e --arg pvc "$pvc_uid" '
+    .metadata.name == "mini-commerce-postgresql-snapshot" and .metadata.namespace == "app-dev" and
+    (.metadata.uid | test("^[0-9a-f-]{36}$")) and
+    .spec.volumeSnapshotClassName == "course-ebs-snapshots" and
+    .spec.source.persistentVolumeClaimName == "data-mini-commerce-postgresql-0" and
+    .status.readyToUse == true and (.status.boundVolumeSnapshotContentName | length) > 0
+  ' <<<"$snapshot" >/dev/null || fail 'VolumeSnapshot is not ready or bound to the reviewed source'
+  content=$(kubectl get volumesnapshotcontent "$content_name" -o json) ||
+    fail 'unable to query the bound VolumeSnapshotContent'
+  jq -e --arg name "$content_name" --arg snapshotUid "$(jq -r '.metadata.uid' <<<"$snapshot")" \
+    --arg volumeHandle "$pv_volume_handle" '
+    .metadata.name == $name and (.metadata.uid | test("^[0-9a-f-]{36}$")) and
+    .spec.driver == "ebs.csi.aws.com" and .spec.volumeSnapshotClassName == "course-ebs-snapshots" and
+    .spec.volumeSnapshotRef == {name:"mini-commerce-postgresql-snapshot",namespace:"app-dev",uid:$snapshotUid} and
+    .spec.source.volumeHandle == $volumeHandle and
+    .status.readyToUse == true and (.status.snapshotHandle | test("^snap-[0-9a-f]{17}$"))
+  ' <<<"$content" >/dev/null || fail 'bound VolumeSnapshotContent has an invalid class, driver, UID, source volume, or EBS snapshot handle'
+
+  observed=$clock_now
+  expires=$(jq -nr --arg now "$clock_now" '(($now | fromdateiso8601) + 3600) | strftime("%Y-%m-%dT%H:%M:%SZ")')
+  record=$(mktemp "${TMPDIR:-/tmp}/snapshot-ready.XXXXXX")
+  trap 'rm -f -- "$record"' RETURN
+  jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$cluster_arn" \
+    --arg revision "$local_revision" --arg pvcUid "$pvc_uid" --arg volume "$volume_name" \
+    --arg volumeHandle "$pv_volume_handle" \
+    --arg snapshotUid "$(jq -r '.metadata.uid' <<<"$snapshot")" --arg contentName "$content_name" \
+    --arg contentUid "$(jq -r '.metadata.uid' <<<"$content")" \
+    --arg sourceVolumeHandle "$(jq -r '.spec.source.volumeHandle' <<<"$content")" \
+    --arg handle "$(jq -r '.status.snapshotHandle' <<<"$content")" \
+    --arg role "$RECOVERY_DB_SECRET_READER_ROLE_ARN" --arg normalRole "$EXTERNAL_SECRETS_READER_ROLE_ARN" \
+    --arg observed "$observed" --arg expires "$expires" '
+    {schemaVersion:"course.snapshot-ready/v1",evidenceGrade:$grade,environment:"dev",region:$region,
+     clusterArn:$arn,gitopsRevision:$revision,
+     source:{namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0",pvcUid:$pvcUid,volumeName:$volume,volumeHandle:$volumeHandle},
+     snapshot:{namespace:"app-dev",name:"mini-commerce-postgresql-snapshot",uid:$snapshotUid,
+       contentName:$contentName,contentUid:$contentUid,className:"course-ebs-snapshots",
+       driver:"ebs.csi.aws.com",sourceVolumeHandle:$sourceVolumeHandle,handle:$handle,readyToUse:true},
+     recovery:{readerRoleArn:$role,normalReaderRoleArn:$normalRole},observedAt:$observed,expiresAt:$expires}
+  ' >"$record"
+  write_atomic "$record" "$destination" 'snapshot-ready evidence'
+  rm -f -- "$record"
+  trap - RETURN
+  echo "[$evidence_grade] wrote ready snapshot evidence $destination"
 }
 
 query_writers() {
@@ -190,10 +290,12 @@ query_pvc_pv() {
     (.metadata.uid | nonblank) and (.spec.volumeName | nonblank) and .status.phase == "Bound"
   ' <<<"$pvc" >/dev/null || fail 'source PVC is not the exact Bound snapshot source'
   pv=$(kubectl get pv "$volume_name" -o json) || fail 'unable to query source PV'
-  jq -e --arg name "$volume_name" --arg uid "$pvc_uid" '
+  pv_volume_handle=$(jq -er '.spec.csi.volumeHandle' <<<"$pv") || fail 'source PV CSI volumeHandle is missing'
+  jq -e --arg name "$volume_name" --arg uid "$pvc_uid" --arg volumeHandle "$pv_volume_handle" '
     .metadata.name == $name and .status.phase == "Bound" and
     .spec.claimRef == {namespace:"app-dev",name:"data-mini-commerce-postgresql-0",uid:$uid} and
-    .spec.csi.driver == "ebs.csi.aws.com" and (.spec.csi.volumeHandle | test("^vol-[0-9a-f]{8,64}$"))
+    .spec.csi.driver == "ebs.csi.aws.com" and .spec.csi.volumeHandle == $volumeHandle and
+    ($volumeHandle | test("^vol-[0-9a-f]{8,64}$"))
   ' <<<"$pv" >/dev/null || fail 'source PV claim, CSI driver, or EBS volume identity differs'
 }
 
@@ -271,11 +373,16 @@ if [[ "$mode" == --fixture ]]; then
   echo '[STATIC] snapshot quiesce fixture validated; no runtime evidence written.'
   exit 0
 fi
-[[ "$mode" == prepare || "$mode" == capture || "$mode" == preflight ]] || usage
+[[ "$mode" == prepare || "$mode" == capture || "$mode" == ready || "$mode" == preflight ]] || usage
+if [[ "$mode" == ready ]]; then
+  phase_values=$canonical_ready_phase
+  output=$canonical_ready_output
+fi
 shift
 while (($#)); do
   case "$1" in
     --a1) a1=${2:?missing A1 record}; overridden=true; shift 2 ;;
+    --a2) a2=${2:?missing A2 record}; overridden=true; shift 2 ;;
     --a1-output) a1_output=${2:?missing A1 output}; overridden=true; shift 2 ;;
     --output) output=${2:?missing output}; overridden=true; shift 2 ;;
     --phase-values) phase_values=${2:?missing phase values}; overridden=true; shift 2 ;;
@@ -291,14 +398,26 @@ if [[ -n "$adapter_dir" ]]; then
   PATH="$adapter_dir:$PATH"
   evidence_grade=STATIC
   clock_now=$now_override
-  if [[ "$mode" == prepare ]]; then adapter_paths=("$phase_values" "$a1_output"); else adapter_paths=("$phase_values" "$a1" "$output"); fi
+  if [[ "$mode" == prepare ]]; then
+    adapter_paths=("$phase_values" "$a1_output")
+  elif [[ "$mode" == ready ]]; then
+    adapter_paths=("$phase_values" "$a2" "$output")
+  else
+    adapter_paths=("$phase_values" "$a1" "$output")
+  fi
   for candidate in "${adapter_paths[@]}"; do
     [[ "$candidate" != "$repository_root/evidence/"* && "$candidate" != "$repository_root/tests/fixtures/"* ]] ||
       fail 'static runtime adapter path must be noncanonical and outside fixtures'
   done
 else
   [[ "$overridden" == false ]] || fail 'live snapshot producer phase, evidence paths, and clock are fixed'
-  [[ "$(physical_file "$phase_values")" == "$canonical_phase" ]] || fail 'live snapshot phase values escaped the canonical path'
+  if [[ "$mode" == ready ]]; then
+    [[ "$(physical_file "$phase_values")" == "$canonical_ready_phase" && "$(physical_file "$a2")" == "$canonical_output" &&
+       "$(physical_file "$output")" == "$canonical_ready_output" ]] ||
+      fail 'live ready snapshot inputs or output escaped canonical paths'
+  else
+    [[ "$(physical_file "$phase_values")" == "$canonical_phase" ]] || fail 'live snapshot phase values escaped the canonical path'
+  fi
 fi
 canonical_clock "$clock_now" || fail 'capture clock must be canonical UTC seconds'
 for command in argocd aws git kubectl; do command -v "$command" >/dev/null || fail "$command is required for live snapshot capture"; done
@@ -317,6 +436,10 @@ fi
 [[ -z $(git -C "$repository_root" status --short --untracked-files=no) ]] || fail 'tracked GitOps source must match the checked-out commit'
 local_revision=$(git -C "$repository_root" rev-parse HEAD)
 [[ "$local_revision" =~ ^[0-9a-f]{40}$ ]] || fail 'local GitOps revision is not a full commit SHA'
+if [[ "$mode" == ready ]]; then
+  capture_ready_snapshot "$a2" "$output"
+  exit 0
+fi
 if [[ "$mode" == prepare ]]; then expected_replicas=1; final_application=true; else expected_replicas=0; final_application=false; fi
 validate_phase "$phase_values" "$expected_replicas"
 query_application "$local_revision" "$final_application"

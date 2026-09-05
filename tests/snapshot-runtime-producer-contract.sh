@@ -24,7 +24,7 @@ grep -Fq 'set -Eeuo pipefail' "$script" || fail 'snapshot producer is not fail-f
 
 fake_bin="$tmp_root/bin"
 runtime="$tmp_root/runtime"
-mkdir -p "$fake_bin" "$runtime/a1" "$runtime/a2"
+mkdir -p "$fake_bin" "$runtime/a1" "$runtime/a2" "$runtime/ready"
 for command in argocd aws git kubectl; do
   ln -s "$test_root/helpers/fake-snapshot-cli.sh" "$fake_bin/$command"
 done
@@ -32,9 +32,26 @@ done
 cp "$repository_root/envs/dev/snapshot-maintenance-values.yaml" "$runtime/a1/phase-values.yaml"
 cp "$runtime/a1/phase-values.yaml" "$runtime/a2/phase-values.yaml"
 yq -i '.database.replicaCount=0' "$runtime/a2/phase-values.yaml"
+cat >"$runtime/ready/phase-values.yaml" <<'YAML'
+database:
+  enabled: true
+  replicaCount: 0
+  migration: {enabled: false}
+maintenance: {writersStopped: true}
+snapshot: {captureEnabled: true}
+recovery:
+  restoreEnabled: false
+  namespace: app-recovery
+  snapshotClassName: course-ebs-snapshots
+  source:
+    namespace: app-dev
+    pvcName: data-mini-commerce-postgresql-0
+    snapshotName: mini-commerce-postgresql-snapshot
+YAML
 printf '%s\n' 1111111111111111111111111111111111111111 >"$runtime/a1/git-revision.txt"
 printf '%s\n' 2222222222222222222222222222222222222222 >"$runtime/a2/git-revision.txt"
-: >"$runtime/a1/git-status.txt"; : >"$runtime/a2/git-status.txt"
+printf '%s\n' 3333333333333333333333333333333333333333 >"$runtime/ready/git-revision.txt"
+: >"$runtime/a1/git-status.txt"; : >"$runtime/a2/git-status.txt"; : >"$runtime/ready/git-status.txt"
 printf '%s\n' envs/dev/snapshot-maintenance-values.yaml >"$runtime/a2/git-diff-names.txt"
 
 for phase in a1 a2; do
@@ -42,12 +59,21 @@ for phase in a1 a2; do
   jq -n --arg revision "$revision" '
     {metadata:{name:"mini-commerce-dev"},
      spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git",helm:{valueFiles:[
-       "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-maintenance-values.yaml"]}},
+       "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-maintenance-values.yaml","../../envs/dev/pre-cutover-ownership-values.yaml"]}},
        syncPolicy:{automated:{prune:true,selfHeal:true}}},
      status:{sync:{status:"Synced",revision:$revision},health:{status:"Healthy"},operationState:{phase:"Succeeded"}}}
   ' >"$runtime/$phase/application.json"
   jq -n '{apiVersion:"batch/v1",kind:"JobList",items:[{status:{succeeded:1}}]}' >"$runtime/$phase/jobs.json"
   jq -n '{apiVersion:"snapshot.storage.k8s.io/v1",kind:"VolumeSnapshotList",items:[]}' >"$runtime/$phase/volumesnapshots.json"
+done
+jq -n '{metadata:{name:"mini-commerce-dev"},
+  spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git",helm:{valueFiles:[
+    "../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-capture-values.yaml","../../envs/dev/pre-cutover-ownership-values.yaml"]}},
+    syncPolicy:{automated:{prune:true,selfHeal:true}}},
+  status:{sync:{status:"Synced",revision:"3333333333333333333333333333333333333333"},health:{status:"Healthy"},operationState:{phase:"Succeeded"}}}
+' >"$runtime/ready/application.json"
+for phase in a1 a2 ready; do
+  jq '.metadata.name="mini-commerce-db-dev" | .spec.source.path="charts/mini-commerce-db-dev" | .spec.source.helm.valueFiles=[.spec.source.helm.valueFiles[2]] | del(.spec.syncPolicy.automated)' "$runtime/$phase/application.json" >"$runtime/$phase/database-application.json"
 done
 jq -n '{cluster:{name:"course-dev",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev",status:"ACTIVE",endpoint:"https://dev.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://dev.eks.example"}}]}' >"$runtime/kubeconfig.json"
@@ -59,11 +85,19 @@ cp "$runtime/a1/pods.json" "$runtime/a1/all-pods.json"
 jq '.items[0]' "$runtime/a1/pods.json" >"$runtime/a1/start-pod.json"
 jq -n '{apiVersion:"v1",kind:"PodList",items:[]}' >"$runtime/a2/pods.json"
 cp "$runtime/a2/pods.json" "$runtime/a2/all-pods.json"
+cp "$runtime/a2/pods.json" "$runtime/ready/pods.json"
+cp "$runtime/a2/all-pods.json" "$runtime/ready/all-pods.json"
+cp "$runtime/a2/statefulset.json" "$runtime/ready/statefulset.json"
+cp "$runtime/a2/jobs.json" "$runtime/ready/jobs.json"
 cp "$runtime/a1/start-pod.json" "$runtime/a2/start-pod.json"
+cp "$runtime/a1/start-pod.json" "$runtime/ready/start-pod.json"
 jq -n '{metadata:{name:"data-mini-commerce-postgresql-0",namespace:"app-dev",uid:"11111111-1111-1111-1111-111111111111"},spec:{volumeName:"pvc-11111111-1111-1111-1111-111111111111"},status:{phase:"Bound"}}' >"$runtime/pvc.json"
 jq -n '{metadata:{name:"pvc-11111111-1111-1111-1111-111111111111"},spec:{claimRef:{namespace:"app-dev",name:"data-mini-commerce-postgresql-0",uid:"11111111-1111-1111-1111-111111111111"},csi:{driver:"ebs.csi.aws.com",volumeHandle:"vol-0123456789abcdef0"}},status:{phase:"Bound"}}' >"$runtime/pv.json"
 jq -n '{apiVersion:"storage.k8s.io/v1",kind:"VolumeAttachmentList",items:[{metadata:{name:"csi-attach-a"},spec:{source:{persistentVolumeName:"pvc-11111111-1111-1111-1111-111111111111"}},status:{attached:true}}]}' >"$runtime/a1/volumeattachments.json"
 jq -n '{apiVersion:"storage.k8s.io/v1",kind:"VolumeAttachmentList",items:[]}' >"$runtime/a2/volumeattachments.json"
+cp "$runtime/a2/volumeattachments.json" "$runtime/ready/volumeattachments.json"
+jq -n '{metadata:{name:"mini-commerce-postgresql-snapshot",namespace:"app-dev",uid:"22222222-2222-2222-2222-222222222222"},spec:{volumeSnapshotClassName:"course-ebs-snapshots",source:{persistentVolumeClaimName:"data-mini-commerce-postgresql-0"}},status:{readyToUse:true,boundVolumeSnapshotContentName:"snapcontent-22222222-2222-2222-2222-222222222222"}}' >"$runtime/ready/snapshot.json"
+jq -n '{metadata:{name:"snapcontent-22222222-2222-2222-2222-222222222222",uid:"33333333-3333-3333-3333-333333333333"},spec:{driver:"ebs.csi.aws.com",volumeSnapshotClassName:"course-ebs-snapshots",volumeSnapshotRef:{name:"mini-commerce-postgresql-snapshot",namespace:"app-dev",uid:"22222222-2222-2222-2222-222222222222"},source:{volumeHandle:"vol-0123456789abcdef0"}},status:{readyToUse:true,snapshotHandle:"snap-0123456789abcdef0"}}' >"$runtime/ready/snapshot-content.json"
 jq -c -n '{schemaVersion:"course.snapshot-checksum/v1",foreignKeyViolations:0,duplicateIdempotencyKeys:0,negativeInventoryRows:0,canonicalRows:[{table:"products",rows:[{id:"p1"}]},{table:"inventory",rows:[{product_id:"p1",available_quantity:10}]},{table:"orders",rows:[]},{table:"order_items",rows:[]}]}' >"$runtime/a1/checksum.json"
 cat >"$runtime/a2/shutdown.log" <<'LOG'
 2026-09-03T01:00:10.000000000Z LOG:  received fast shutdown request
@@ -81,6 +115,15 @@ run_capture() {
   COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_SNAPSHOT_DIR="$source_dir" FAKE_SNAPSHOT_PHASE=a2 \
     AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-dev \
     bash "$script" capture --a1 "$a1" --output "$output" --phase-values "$source_dir/a2/phase-values.yaml" --now "$now"
+}
+run_ready() {
+  local source_dir=$1 a2=$2 output=$3 now=${4:-2026-09-03T01:10:00Z}
+  COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_SNAPSHOT_DIR="$source_dir" FAKE_SNAPSHOT_PHASE=ready \
+    AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-dev \
+    RECOVERY_DB_SECRET_READER_ROLE_ARN=arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role \
+    EXTERNAL_SECRETS_READER_ROLE_ARN=arn:aws:iam::123456789012:role/dev-course-external-secrets-reader-role \
+    bash "$script" ready --a2 "$a2" --output "$output" \
+      --phase-values "$source_dir/ready/phase-values.yaml" --now "$now"
 }
 
 a1="$tmp_root/a1.json"
@@ -120,6 +163,31 @@ jq -e --arg checksum "$checksum_value" --arg shutdown "$shutdown_digest" '
 [[ $(grep -c 'get statefulset mini-commerce-postgresql' "$runtime/calls.log") -ge 3 ]] || fail 'capture did not immediately re-query final StatefulSet state'
 [[ "$before" == "$(fingerprint)" ]] || fail 'fake runtime adapter changed canonical runtime evidence'
 
+ready="$tmp_root/snapshot-ready.json"
+ready_log=$(run_ready "$runtime" "$final" "$ready") || fail 'valid ready snapshot runtime adapter was rejected'
+grep -Fq '[STATIC]' <<<"$ready_log" || fail 'fake ready snapshot execution was not labelled STATIC'
+[[ "$(file_mode "$ready")" == 600 ]] || fail 'ready snapshot evidence mode must be 0600'
+jq -e '
+  .schemaVersion == "course.snapshot-ready/v1" and .evidenceGrade == "STATIC" and
+  .environment == "dev" and .region == "ap-northeast-2" and
+  .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev" and
+  .gitopsRevision == "3333333333333333333333333333333333333333" and
+  .source == {namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0",pvcUid:"11111111-1111-1111-1111-111111111111",volumeName:"pvc-11111111-1111-1111-1111-111111111111",volumeHandle:"vol-0123456789abcdef0"} and
+  .snapshot == {namespace:"app-dev",name:"mini-commerce-postgresql-snapshot",uid:"22222222-2222-2222-2222-222222222222",contentName:"snapcontent-22222222-2222-2222-2222-222222222222",contentUid:"33333333-3333-3333-3333-333333333333",className:"course-ebs-snapshots",driver:"ebs.csi.aws.com",sourceVolumeHandle:"vol-0123456789abcdef0",handle:"snap-0123456789abcdef0",readyToUse:true} and
+  .recovery == {readerRoleArn:"arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role",normalReaderRoleArn:"arn:aws:iam::123456789012:role/dev-course-external-secrets-reader-role"} and
+  .observedAt == "2026-09-03T01:10:00Z" and .expiresAt == "2026-09-03T02:10:00Z"
+' "$ready" >/dev/null || fail 'ready snapshot evidence is not bound to actual content, handle, class, driver, and Role identities'
+
+volume_mismatch="$tmp_root/runtime-ready-volume-mismatch"
+cp -R "$runtime" "$volume_mismatch"
+jq '.spec.source.volumeHandle="vol-11111111111111111"' \
+  "$volume_mismatch/ready/snapshot-content.json" >"$volume_mismatch/mutated"
+mv "$volume_mismatch/mutated" "$volume_mismatch/ready/snapshot-content.json"
+if run_ready "$volume_mismatch" "$final" "$tmp_root/ready-volume-mismatch.json" \
+  >/dev/null 2>&1; then
+  fail 'ready snapshot producer accepted content bound to a different source volume handle'
+fi
+
 cloud="$tmp_root/snapshot-quiesce-cloud.json"
 jq '.evidenceGrade="CLOUD_RUNTIME"' "$final" >"$cloud"
 bash "$script" --fixture "$cloud" >/dev/null || fail 'canonical CLOUD_RUNTIME snapshot fixture was rejected'
@@ -143,6 +211,7 @@ negative_prepare() {
   eval "$expression"
   if run_prepare "$candidate" "$tmp_root/$label-a1.json" >/dev/null 2>&1; then fail "A1 accepted $label"; fi
 }
+negative_prepare database-revision 'jq ".status.sync.revision=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"" "$candidate/a1/database-application.json" >"$candidate/m" && mv "$candidate/m" "$candidate/a1/database-application.json"'
 negative_prepare dirty 'printf "%s\n" " M envs/dev/snapshot-maintenance-values.yaml" >"$candidate/a1/git-status.txt"'
 negative_prepare writer 'jq ".spec.replicas=1 | .status.readyReplicas=1" "$candidate/deployment.json" >"$candidate/m" && mv "$candidate/m" "$candidate/deployment.json"'
 negative_prepare database-zero 'jq ".spec.replicas=0 | .status.readyReplicas=0 | .status.currentReplicas=0 | .status.updatedReplicas=0" "$candidate/a1/statefulset.json" >"$candidate/m" && mv "$candidate/m" "$candidate/a1/statefulset.json"'

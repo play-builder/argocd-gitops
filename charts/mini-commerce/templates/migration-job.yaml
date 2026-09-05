@@ -1,9 +1,31 @@
-{{- if and .Values.database.enabled .Values.database.migration.enabled (not .Values.maintenance.writersStopped) }}
-{{- $secretName := .Values.externalSecrets.migration.targetSecretName }}
+{{- if and .Values.database.enabled .Values.database.migration.enabled }}
+{{- $migrationPhase := required "database.migration.phase is required when migration is enabled" .Values.database.migration.phase }}
+{{- $migrationTarget := required "database.migration.target is required when migration is enabled" .Values.database.migration.target }}
 {{- $rollbackConfigMapName := "" }}
 {{- if .Values.database.migration.rollbackCandidates.enabled }}
 {{- $rollbackConfigMapName = required "database.migration.rollbackCandidates.configMapName is required when rollback candidate handoff is enabled" .Values.database.migration.rollbackCandidates.configMapName }}
 {{- end }}
+{{- if eq $migrationPhase "initial" }}
+{{- if or (ne $migrationTarget "001_initial_commerce") .Values.database.migration.rollbackCandidates.enabled (ne $rollbackConfigMapName "") }}
+{{- fail "initial migration requires target 001_initial_commerce without rollback candidate evidence" }}
+{{- end }}
+{{- else if eq $migrationPhase "expand" }}
+{{- if or (ne $migrationTarget "002_expand_product_display_name") .Values.database.migration.rollbackCandidates.enabled (ne $rollbackConfigMapName "") }}
+{{- fail "expand migration requires target 002_expand_product_display_name without rollback candidate evidence" }}
+{{- end }}
+{{- else if eq $migrationPhase "contract" }}
+{{- if or (ne $migrationTarget "003_contract_product_name") (not .Values.database.migration.rollbackCandidates.enabled) }}
+{{- fail "contract migration requires target 003_contract_product_name with rollback candidate evidence" }}
+{{- end }}
+{{- else if eq $migrationPhase "finalize" }}
+{{- if or (ne $migrationTarget "003_contract_product_name") .Values.database.migration.rollbackCandidates.enabled (ne $rollbackConfigMapName "") }}
+{{- fail "finalize migration requires target 003_contract_product_name without rollback candidate evidence" }}
+{{- end }}
+{{- else }}
+{{- fail "database.migration.phase must be initial, expand, contract, or finalize" }}
+{{- end }}
+{{- if not .Values.maintenance.writersStopped }}
+{{- $secretName := .Values.externalSecrets.migration.targetSecretName }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -35,8 +57,9 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -44,6 +67,7 @@ spec:
           image: {{ include "mini-commerce.migrationImage" . }}
           imagePullPolicy: {{ .Values.database.migrationImage.pullPolicy }}
           command: ["node", "scripts/migrate.mjs"]
+          args: ["--target", {{ $migrationTarget | quote }}]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -152,4 +176,5 @@ spec:
               - key: rollback-candidates.json
                 path: rollback-candidates.json
         {{- end }}
+{{- end }}
 {{- end }}

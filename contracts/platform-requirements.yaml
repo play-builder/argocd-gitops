@@ -64,7 +64,7 @@ argoHealthCustomizations:
   - id: external-secret-ready-health/v1
     apiGroup: external-secrets.io
     kind: ExternalSecret
-    healthyWhen: Ready=True at observedGeneration
+    healthyWhen: Ready=True, reason=SecretSynced, message=secret synced, syncedResourceVersion generation matches metadata.generation, refreshTime present, no deletionTimestamp (ESO 2.10.0)
     requiredBeforeSyncWave: -2
     implementationOwner: EKS-infra
   - id: volume-snapshot-ready-health/v1
@@ -73,3 +73,26 @@ argoHealthCustomizations:
     healthyWhen: readyToUse=true with a bound content name
     requiredBeforeSyncWave: -2
     implementationOwner: EKS-infra
+recoveryOutputs:
+  volumeSnapshotClassName: volume_snapshot_class_name
+  snapshotDriver: snapshot_driver
+  recoveryReaderRoleArn: recovery_db_secret_reader_role_arn
+telemetryOutputs:
+  xrayEnabled: adot_xray_enabled
+  endpoint: otlp_http_traces_endpoint
+  protocol: otlp_traces_protocol
+  port: otlp_http_port
+  path: otlp_http_traces_path
+# App management scrape metadata on mini_commerce_* series; not Istio dimensions.
+prometheusLabels:
+  - namespace
+  - pod
+  - app
+  - rollouts_pod_template_hash
+# Native mesh request/latency series use a separate bounded destination contract.
+istioDestinationMetricLabels:
+  - destination_canonical_service
+  - destination_workload_namespace
+  - destination_rollout_hash
+  - reporter
+  - environment

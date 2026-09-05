@@ -341,9 +341,11 @@ if [[ -e "$output" ]]; then
     fail "existing canonical Prod SLO evidence belongs to a different immutable release identity"
 fi
 chmod 600 "$tmp"
-mv "$tmp" "$output"
-trap - EXIT
 if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
-  ruby "$script_dir/write-incident-companion.rb" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+  ruby "$script_dir/publish-incident-capture.rb" "$tmp" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+  rm -f -- "$tmp"
+else
+  mv "$tmp" "$output"
 fi
+trap - EXIT
 echo "[$evidence_grade] wrote $output"

@@ -42,6 +42,94 @@ assert_manifest() {
   yq eval -e "$expression" "$manifest" >/dev/null || fail "$message"
 }
 
+external_secrets_project_valid() {
+  local manifest=$1
+  local environment=$2
+  local project="course-external-secrets-$environment"
+
+  PROJECT="$project" yq eval-all -o=json '
+    select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
+  ' "$manifest" | jq -e '
+    .spec.sourceRepos == ["https://charts.external-secrets.io"] and
+    .spec.destinations == [{"server":"https://kubernetes.default.svc","namespace":"external-secrets"}] and
+    ([.spec.clusterResourceWhitelist[] | [.group, .kind]] | sort) == ([
+      ["", "Namespace"],
+      ["admissionregistration.k8s.io", "ValidatingWebhookConfiguration"],
+      ["apiextensions.k8s.io", "CustomResourceDefinition"],
+      ["rbac.authorization.k8s.io", "ClusterRole"],
+      ["rbac.authorization.k8s.io", "ClusterRoleBinding"]
+    ] | sort) and
+    ([.spec.namespaceResourceWhitelist[] | [.group, .kind]] | sort) == ([
+      ["", "Secret"],
+      ["", "Service"],
+      ["", "ServiceAccount"],
+      ["apps", "Deployment"],
+      ["rbac.authorization.k8s.io", "Role"],
+      ["rbac.authorization.k8s.io", "RoleBinding"]
+    ] | sort)
+  ' >/dev/null
+}
+
+case_external_secrets_project() {
+  local environment manifest application project
+
+  for environment in dev prod; do
+    manifest="$render_root/bootstrap-$environment-external-secrets.yaml"
+    application="external-secrets-$environment"
+    project="course-external-secrets-$environment"
+    render_bootstrap "$environment" "$manifest"
+
+    PROJECT="$project" yq eval-all -o=json '[select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))]' "$manifest" | jq -e 'length == 1' >/dev/null || fail "dedicated ESO project identity missing"
+    external_secrets_project_valid "$manifest" "$environment" || \
+      fail "$environment External Secrets AppProject does not match Chart 2.10.0 scope"
+    APPLICATION="$application" yq eval-all -o=json '
+      select(.kind == "Application" and .metadata.name == strenv(APPLICATION))
+    ' "$manifest" | jq -e --arg project "$project" '
+      .spec.project == $project and
+      .spec.source.repoURL == "https://charts.external-secrets.io" and
+      .spec.source.chart == "external-secrets" and
+      .spec.source.targetRevision == "2.10.0" and
+      .spec.destination == {"server":"https://kubernetes.default.svc","namespace":"external-secrets"} and
+      .spec.syncPolicy.syncOptions == ["CreateNamespace=true", "ServerSideApply=true"]
+    ' >/dev/null || fail "$application is not bound to its dedicated AppProject"
+
+    PROJECT="platform-bootstrap-$environment" yq eval-all -o=json '
+      select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
+    ' "$manifest" | jq -e '
+      (.spec.sourceRepos | index("https://charts.external-secrets.io")) == null and
+      ([.spec.destinations[].namespace] | index("external-secrets")) == null
+    ' >/dev/null || fail "$environment bootstrap AppProject still owns External Secrets"
+  done
+
+  if external_secrets_project_valid \
+    "$test_root/fixtures/external-secrets-project/missing-service-project.yaml" dev; then
+    fail "External Secrets project accepted a missing Service permission"
+  fi
+  if external_secrets_project_valid \
+    "$test_root/fixtures/external-secrets-project/wrong-scope-cluster-role-project.yaml" dev; then
+    fail "External Secrets project accepted a namespaced ClusterRole"
+  fi
+
+  if [[ -n "${EXTERNAL_SECRETS_RENDERED_MANIFEST:-}" ]]; then
+    [[ -s "$EXTERNAL_SECRETS_RENDERED_MANIFEST" ]] || \
+      fail "EXTERNAL_SECRETS_RENDERED_MANIFEST is empty"
+    local expected_resources actual_resources
+    expected_resources=$(jq -Rn '
+      [inputs | split("\t") | {group: .[1], kind: .[2]}] |
+      unique_by([.group, .kind]) | sort_by([.group, .kind])
+    ' <"$test_root/fixtures/external-secrets-project/chart-2.10.0-resource-tuples.tsv")
+    actual_resources=$(yq eval-all -o=json '.' "$EXTERNAL_SECRETS_RENDERED_MANIFEST" | jq -s '
+      [ .[] | select(type == "object" and .apiVersion != null and .kind != null) |
+        {group: (if (.apiVersion | contains("/")) then (.apiVersion | split("/")[0]) else "" end), kind} ] |
+      unique_by([.group, .kind]) | sort_by([.group, .kind])
+    ')
+    [[ "$actual_resources" == "$expected_resources" ]] || \
+      fail "rendered External Secrets Chart resources differ from the checked scope registry"
+  fi
+
+  echo "PASS: External Secrets Chart 2.10.0 has a dedicated least-privilege AppProject."
+}
+
 case_namespace_pss() {
   local bootstrap_dev="$render_root/bootstrap-dev.yaml"
   local bootstrap_prod="$render_root/bootstrap-prod.yaml"
@@ -51,29 +139,7 @@ case_namespace_pss() {
   render_bootstrap prod "$bootstrap_prod"
   render_environment dev "$helm_dev" "$repository_root/envs/dev/pre-cutover-ownership-values.yaml"
 
-  assert_manifest "$bootstrap_dev" '
-    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev") |
-    .spec.generators[0].list.elements[0].podSecurityVersion as $version |
-    $version == "v1.36" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/audit"] == "restricted" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn-version"] == "{{ .podSecurityVersion }}" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/audit-version"] == "{{ .podSecurityVersion }}" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce"] == null and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce-version"] == null
-  ' "dev ApplicationSet lacks version-pinned PSS warn/audit labels"
-
-  assert_manifest "$bootstrap_prod" '
-    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-prod") |
-    .spec.generators[0].list.elements[0].podSecurityVersion as $version |
-    $version == "v1.36" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/audit"] == "restricted" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn-version"] == "{{ .podSecurityVersion }}" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/audit-version"] == "{{ .podSecurityVersion }}" and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce"] == null and
-    .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce-version"] == null
-  ' "prod ApplicationSet lacks version-pinned PSS warn/audit labels"
+  ruby "$test_root/namespace-bootstrap-contract.rb"
 
   yq eval-all -o=json '
     select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-dev")
@@ -82,7 +148,7 @@ case_namespace_pss() {
     .spec.template.spec.syncPolicy.automated.selfHeal == true and
     (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null and
     (.spec.template.spec.syncPolicy.syncOptions | index("Replace=true")) == null
-  ' >/dev/null || fail "Dev current Application must auto-sync without claiming the legacy-owned Namespace"
+  ' >/dev/null || fail "Dev current Application must auto-sync without claiming the root-owned Namespace"
 
   yq eval-all -o=json '
     select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-prod")
@@ -101,8 +167,8 @@ case_namespace_pss() {
       .spec.syncPolicy.preserveResourcesOnDeletion == true and
       (.spec.template.metadata.finalizers // []) == [] and
       .spec.template.spec.syncPolicy.automated == null and
-      (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) != null
-    ' >/dev/null || fail "Legacy Application must exclusively own and preserve the Namespace during cutover"
+      (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null
+    ' >/dev/null || fail "Legacy Application must preserve resources while relinquishing Namespace ownership"
   done
 
   assert_manifest "$bootstrap_dev" '
@@ -115,7 +181,7 @@ case_namespace_pss() {
     .metadata.labels["pod-security.kubernetes.io/enforce"] == null
   ' "app-recovery must start at version-pinned PSS warn/audit"
 
-  echo "PASS: Namespace Phase A and PSS audit boundary are valid."
+  echo "PASS: final enterprise Namespace ownership and prerequisite boundary are valid."
 }
 
 case_phase_a_controller() {
@@ -226,16 +292,15 @@ case_pss_enforce() {
 
   for environment in dev prod; do
     manifest="$render_root/bootstrap-$environment-enforce.yaml"
-    appset="sample-app-$environment"
+    appset="app-$environment"
     kubectl kustomize "$repository_root/argocd/overlays/pss-enforce/$environment" >"$manifest"
 
     APPSET="$appset" yq eval-all -o=json -I=0 '
-      [select(.kind == "ApplicationSet" and .metadata.name == strenv(APPSET))]
+      [select(.kind == "Namespace" and .metadata.name == strenv(APPSET))]
     ' "$manifest" | jq -e '
       length == 1 and
-      .[0].spec.generators[0].list.elements[0].podSecurityVersion == "v1.36" and
-      .[0].spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce"] == "restricted" and
-      .[0].spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/enforce-version"] == "{{ .podSecurityVersion }}"
+      .[0].metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted" and
+      .[0].metadata.labels["pod-security.kubernetes.io/enforce-version"] == "v1.36"
     ' >/dev/null || fail "$environment PSS enforcement must target the namespace owner with the generator-pinned version"
 
     yq eval-all -o=json '
@@ -295,7 +360,7 @@ case_platform_health_interface() {
         "id": "external-secret-ready-health/v1",
         "apiGroup": "external-secrets.io",
         "kind": "ExternalSecret",
-        "healthyWhen": "Ready=True at observedGeneration",
+        "healthyWhen": "Ready=True, reason=SecretSynced, message=secret synced, syncedResourceVersion generation matches metadata.generation, refreshTime present, no deletionTimestamp (ESO 2.10.0)",
         "requiredBeforeSyncWave": -2,
         "implementationOwner": "EKS-infra"
       }]
@@ -343,13 +408,14 @@ requested_case=all
 if [[ "${1:-}" == "--case" ]]; then
   requested_case=${2:-}
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: $0 [--case <namespace-pss|phase-a-controller|least-privilege|pss-enforce|reloader-diff|platform-health-interface|all>]" >&2
+  echo "Usage: $0 [--case <namespace-pss|phase-a-controller|external-secrets-project|least-privilege|pss-enforce|reloader-diff|platform-health-interface|all>]" >&2
   exit 2
 fi
 
 case "$requested_case" in
   namespace-pss) case_namespace_pss ;;
   phase-a-controller) case_phase_a_controller ;;
+  external-secrets-project) case_external_secrets_project ;;
   least-privilege) case_least_privilege ;;
   pss-enforce) case_pss_enforce ;;
   reloader-diff) case_reloader_diff ;;
@@ -358,6 +424,7 @@ case "$requested_case" in
   all)
     case_namespace_pss
     case_phase_a_controller
+    case_external_secrets_project
     case_least_privilege
     case_pss_enforce
     case_reloader_diff

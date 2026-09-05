@@ -71,3 +71,11 @@ CNI readiness and restricted injection, private image admission, SSO/HA, actual 
 canary abort/promote, firing/resolved notification delivery, initialized RDS TLS/DML/DDL, encrypted export,
 isolated Argo restore and RDS PITR remain LIVE_NOT_VERIFIED until observed on real infrastructure.
 Static snapshot inspection does not establish SQL recovery, RPO/RTO or release readiness.
+
+## Main RC integration contracts
+
+Prod promotion checks only changes to application/migration image identities; operational-only edits do not require DEV_READY.
+Migration phases are initial → expand → contract (reviewed rollback evidence) → finalize (evidence removed).
+Current V2-prime app activation defaults to expand/002, never initial-only/001; initial is an explicit legacy-compatible migration option.
+Snapshot recovery consumes a fresh source-PVC/PV/content-bound snapshot receipt, never a sample handle.
+Cross-repository migration checks use an explicit SAMPLE_APP_REPO_ROOT and optional exact-SHA verifier binding.

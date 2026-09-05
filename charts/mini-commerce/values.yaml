@@ -114,6 +114,8 @@ database:
     pullPolicy: IfNotPresent
   migration:
     enabled: true
+    phase: expand
+    target: 002_expand_product_display_name
     backoffLimit: 3
     activeDeadlineSeconds: 600
     rollbackCandidates:
@@ -167,9 +169,12 @@ rollout:
 
 telemetry:
   enabled: false
+  platformXrayEnabled: false
   serviceName: mini-commerce
   otlpEndpoint: ""
   otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""
 
 networkPolicy:
   enabled: false

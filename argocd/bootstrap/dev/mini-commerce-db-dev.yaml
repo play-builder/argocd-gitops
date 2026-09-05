@@ -13,6 +13,7 @@ spec:
     path: charts/mini-commerce-db-dev
     helm:
       releaseName: mini-commerce
+      valueFiles: [../../envs/dev/database-default-values.yaml]
   destination:
     server: https://kubernetes.default.svc
     namespace: app-dev

@@ -1,3 +1,4 @@
+{{- include "mini-commerce.validateTelemetry" . }}
 {{- if .Values.telemetry.enabled }}
 {{- $endpoint := required "telemetry.otlpEndpoint is required when telemetry is enabled" .Values.telemetry.otlpEndpoint }}
 apiVersion: v1

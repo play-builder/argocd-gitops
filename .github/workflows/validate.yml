@@ -75,6 +75,15 @@ jobs:
           kubectl kustomize argocd/bootstrap/dev > /tmp/argocd-dev.yaml
           kubectl kustomize argocd/bootstrap/prod > /tmp/argocd-prod.yaml
 
+      - name: Verify External Secrets Chart authorization
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm template external-secrets external-secrets/external-secrets --version 2.10.0 \
+            --namespace external-secrets --set installCRDs=true --set serviceMonitor.enabled=false \
+            > "$RUNNER_TEMP/external-secrets-2.10.0.yaml"
+          EXTERNAL_SECRETS_RENDERED_MANIFEST="$RUNNER_TEMP/external-secrets-2.10.0.yaml" \
+            bash tests/bootstrap-contract.sh --case external-secrets-project
+
       - name: Verify production rollback window
         run: |
           awk '
@@ -117,6 +126,9 @@ jobs:
           helm lint charts/mini-commerce-recovery --set-string snapshotHandle=snap-0123456789abcdef0
           helm template mini-commerce charts/mini-commerce-db-dev >/dev/null
           helm template mini-commerce charts/mini-commerce-recovery --set-string snapshotHandle=snap-0123456789abcdef0 >/dev/null
+
+      - name: Verify repository governance contract
+        run: bash tests/governance-contract.sh docs/github-ruleset.example.json
 
       - name: Run complete static delivery contracts
         env:

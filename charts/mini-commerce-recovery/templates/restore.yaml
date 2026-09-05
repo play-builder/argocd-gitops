@@ -1,5 +1,7 @@
 {{- if ne .Values.environment "dev" }}{{ fail "dev-only snapshot recovery chart" }}{{ end }}
 {{- $snapshot := required "snapshotHandle required; select a retained Dev snapshot" .Values.snapshotHandle }}
+{{- if not (regexMatch "^snap-[0-9a-f]{17}$" $snapshot) }}{{ fail "snapshotHandle must be a validated EBS snapshot ID" }}{{ end }}
+{{- if or (ne .Values.namespace "app-recovery") (ne .Values.source.namespace "app-dev") (ne .Values.source.pvcName "data-mini-commerce-postgresql-0") }}{{ fail "recovery source/destination identity mismatch" }}{{ end }}
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotContent
 metadata:

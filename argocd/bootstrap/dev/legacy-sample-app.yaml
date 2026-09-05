@@ -11,14 +11,6 @@ spec:
   goTemplateOptions: ["missingkey=error"]
   syncPolicy:
     preserveResourcesOnDeletion: true
-  templatePatch: |
-    {{- if and (eq .environment "dev") .chaosInjectionEnabled }}
-    spec:
-      syncPolicy:
-        managedNamespaceMetadata:
-          annotations:
-            chaos-mesh.org/inject: enabled
-    {{- end }}
   generators:
     - list:
         elements:
@@ -42,16 +34,8 @@ spec:
         path: charts/sample-app
         helm:
           releaseName: sample-app
+          parameters: [{name: namespace.create, value: 'false'}]
           valueFiles: ["../../{{ .valuesFile }}", "../../{{ .statefulValuesFile }}", "../../{{ .phaseValuesFile }}"]
       destination: {server: https://kubernetes.default.svc, namespace: "{{ .namespace }}"}
       syncPolicy:
-        managedNamespaceMetadata:
-          labels:
-            course.playbuilder.io/admission: enabled
-            gateway-access: "true"
-            environment: "{{ .environment }}"
-            pod-security.kubernetes.io/warn: restricted
-            pod-security.kubernetes.io/audit: restricted
-            pod-security.kubernetes.io/warn-version: "{{ .podSecurityVersion }}"
-            pod-security.kubernetes.io/audit-version: "{{ .podSecurityVersion }}"
-        syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]
+        syncOptions: [ServerSideApply=true, RespectIgnoreDifferences=true]

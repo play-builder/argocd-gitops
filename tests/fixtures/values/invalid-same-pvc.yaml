@@ -2,10 +2,11 @@ database:
   enabled: true
 recovery:
   restoreEnabled: true
+  readerRoleArn: arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role
   namespace: app-recovery
   pvcName: data-mini-commerce-postgresql-0
   snapshotName: mini-commerce-postgresql-recovery-snapshot
-  snapshotHandle: snap-0123456789abcdef
+  snapshotHandle: snap-0123456789abcdef0
   snapshotDriver: ebs.csi.aws.com
   snapshotContentName: mini-commerce-postgresql-recovery-content
   source:

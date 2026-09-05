@@ -1,4 +1,6 @@
 environment: dev
+snapshot: {captureEnabled: false}
+maintenance: {writersStopped: false}
 namespace:
   name: app-dev
 externalSecrets:

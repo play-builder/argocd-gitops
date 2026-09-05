@@ -12,7 +12,6 @@ spec:
   sourceRepos:
   # Git signing key distribution is EKS-owned; HEAD precedes strict/seal migration.
   - https://github.com/REPLACE_ME/argocd-gitops.git
-  - https://charts.external-secrets.io
   sourceIntegrity:
     git:
       policies:
@@ -21,8 +20,6 @@ spec:
   destinations:
   - server: https://kubernetes.default.svc
     namespace: argocd
-  - server: https://kubernetes.default.svc
-    namespace: external-secrets
   - server: https://kubernetes.default.svc
     namespace: cosign-system
   clusterResourceWhitelist:
@@ -61,43 +58,45 @@ spec:
   - server: https://kubernetes.default.svc
     namespace: app-prod
   clusterResourceWhitelist:
-  - group: ''
-    kind: Namespace
-  - group: gateway.networking.k8s.io
-    kind: GatewayClass
-  - group: gateway.k8s.aws
-    kind: LoadBalancerConfiguration
+    - group: ""
+      kind: Namespace
+    - group: gateway.networking.k8s.io
+      kind: GatewayClass
   namespaceResourceWhitelist:
-  - group: ''
-    kind: ServiceAccount
-  - group: ''
-    kind: Service
-  - group: apps
-    kind: Deployment
-  - group: apps
-    kind: StatefulSet
-  - group: batch
-    kind: Job
-  - group: autoscaling
-    kind: HorizontalPodAutoscaler
-  - group: policy
-    kind: PodDisruptionBudget
-  - group: networking.k8s.io
-    kind: NetworkPolicy
-  - group: external-secrets.io
-    kind: SecretStore
-  - group: external-secrets.io
-    kind: ExternalSecret
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-  - group: gateway.k8s.aws
-    kind: TargetGroupConfiguration
-  - group: argoproj.io
-    kind: Rollout
-  - group: argoproj.io
-    kind: AnalysisTemplate
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: Service
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: batch
+      kind: Job
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: policy
+      kind: PodDisruptionBudget
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: external-secrets.io
+      kind: SecretStore
+    - group: external-secrets.io
+      kind: ExternalSecret
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+    - group: gateway.k8s.aws
+      kind: TargetGroupConfiguration
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+    - group: argoproj.io
+      kind: Rollout
+    - group: argoproj.io
+      kind: AnalysisTemplate
   orphanedResources:
     warn: true
 ---

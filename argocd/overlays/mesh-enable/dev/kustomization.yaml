@@ -5,8 +5,8 @@ resources: [../../../bootstrap/dev]
 # It never activates namespaces: operator admission/traffic approval is still required.
 # Activate only with Task9 native routing and runtime reinjection approval.
 patches:
-  - target: {kind: ApplicationSet, name: sample-app-dev}
+  - target: {kind: Namespace, name: app-dev}
     patch: |-
       - op: add
-        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/istio.io~1rev
+        path: /metadata/labels/istio.io~1rev
         value: dev-stable

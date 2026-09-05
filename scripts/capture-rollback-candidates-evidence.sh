@@ -58,6 +58,15 @@ validate_source() {
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root | .completedRollback as $rollback |
+    ([ $rollback.replicaSetList.items[] |
+       select((.metadata.annotations["rollouts.argoproj.io/experiment-name"] // "") == "") |
+       {hash:.metadata.labels["rollouts-pod-template-hash"],
+        revision:(.metadata.annotations["rollout.argoproj.io/revision"] | tonumber),
+        observed:(.metadata.creationTimestamp | fromdateiso8601)} ]) as $eligible |
+    ([ $eligible[] | select(.hash == $rollback.stableHash) ]) as $stable |
+    ([ $eligible[] | select(.observed < $stable[0].observed) ] |
+      sort_by(.revision) | reverse | .[0:$rollback.rollbackWindow.revisions] |
+      map({hash,revision}) | sort_by(.revision)) as $expected |
     ((keys | sort) == ["completedRollback","releaseLineage"] or
      (keys | sort) == ["completedRollback","inProgressStableReapply","releaseLineage"]) and
     ($rollback | keys | sort) == ["candidates","replicaSetList","rollbackWindow","rolloutName","rolloutUid","stableHash","targetHash"] and
@@ -105,17 +114,8 @@ validate_source() {
     ([ $rollback.candidates[].podTemplateHash ] | unique | length) == ($rollback.candidates | length) and
     ([ $rollback.candidates[].rolloutRevision ] | unique | length) == ($rollback.candidates | length) and
     any($rollback.candidates[]; .podTemplateHash == $rollback.targetHash) and
-    ([ $rollback.replicaSetList.items[] |
-       select((.metadata.annotations["rollouts.argoproj.io/experiment-name"] // "") == "") |
-       {hash:.metadata.labels["rollouts-pod-template-hash"],
-        revision:(.metadata.annotations["rollout.argoproj.io/revision"] | tonumber),
-        observed:(.metadata.creationTimestamp | fromdateiso8601)} ]) as $eligible |
-    ([ $eligible[] | select(.hash == $rollback.stableHash) ]) as $stable |
     ($stable | length) == 1 and
     ([ $eligible[] | select(.hash == $rollback.targetHash) ] | length) == 1 and
-    ([ $eligible[] | select(.observed < $stable[0].observed) ] |
-      sort_by(.revision) | reverse | .[0:$rollback.rollbackWindow.revisions] |
-      map({hash,revision}) | sort_by(.revision)) as $expected |
     ([ $rollback.candidates[] | {hash:.podTemplateHash,revision:.rolloutRevision} ] | sort_by(.revision)) == $expected and
     ($root | if has("inProgressStableReapply") then
       (.inProgressStableReapply | keys | sort) == ["action","candidateDigest","requiresDesiredStateReconcile","stableDigest"] and
@@ -222,6 +222,31 @@ validate_application_binding() {
     fail 'fresh Argo desired revision or pre-Sync state differs from rollback evidence'
 }
 
+validate_finalize_binding() {
+  local application revision
+  [[ -z $(git -C "$repository_root" status --porcelain --untracked-files=all -- . ':(exclude)evidence') ]] ||
+    fail 'GitOps source outside evidence/ must match the reviewed finalize commit'
+  revision=$(git -C "$repository_root" rev-parse HEAD) || fail 'unable to read the finalize GitOps revision'
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail 'finalize GitOps revision is not a full commit SHA'
+  application=$(argocd app get mini-commerce-prod -o json) ||
+    fail 'unable to re-query mini-commerce-prod before rollback evidence cleanup'
+  jq -e --arg revision "$revision" '
+    .metadata.name == "mini-commerce-prod" and
+    .status.sync.status == "Synced" and .status.sync.revision == $revision and
+    .status.health.status == "Healthy" and
+    ((.status.operationState.phase // "") | IN("", "Succeeded")) and
+    (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
+    ((.spec.syncPolicy.automated // null) == null) and
+    .spec.source.helm.valueFiles == [
+      "../../envs/prod/values.yaml",
+      "../../envs/prod/stateful-values.yaml",
+      "../../envs/prod/migration-finalize-values.yaml",
+      "../../envs/prod/pre-cutover-ownership-values.yaml"
+    ]
+  ' <<<"$application" >/dev/null ||
+    fail 'Prod Application is not Synced and Healthy at the reviewed finalize revision'
+}
+
 validate_cluster_binding() {
   local evidence=$1 cluster live_endpoint kubeconfig kube_server
   cluster=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --output json) ||
@@ -263,6 +288,7 @@ write_configmap_payload() {
 cleanup_configmap() {
   local evidence=$1 cleanup_now=$2 existing uid job deleted payload delete_options
   validate_record "$evidence" CLOUD_RUNTIME
+  validate_finalize_binding
   validate_cluster_binding "$evidence"
   [[ $(kubectl auth can-i delete configmaps --namespace "$namespace") == yes ]] ||
     fail 'caller is not authorized to delete the rollback candidate ConfigMap'
@@ -292,6 +318,7 @@ cleanup_configmap() {
       . as $value |
       type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
+    (.spec.template.spec.containers[] | select(.name == "migrate")) as $container |
     .metadata.name == "mini-commerce-migration" and .metadata.namespace == "app-prod" and
     .metadata.labels["app.kubernetes.io/component"] == "migration" and
     .metadata.labels["app.kubernetes.io/part-of"] == "mini-commerce" and
@@ -300,24 +327,12 @@ cleanup_configmap() {
     ((.status.completionTime | fromdateiso8601) > ($evidence.observedAt | fromdateiso8601)) and
     ((.status.completionTime | fromdateiso8601) < ($evidence.expiresAt | fromdateiso8601)) and
     ((.status.completionTime | fromdateiso8601) <= ($now | fromdateiso8601)) and
-    (.spec.template.spec.containers[] | select(.name == "migrate")) as $container |
-    ([ $container.env[] | select(.name | startswith("ROLLBACK_")) ] | sort_by(.name)) ==
-      ([
-        {name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"},
-        {name:"ROLLBACK_EXPECTED_CLUSTER_ARN",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"clusterArn"}}},
-        {name:"ROLLBACK_EXPECTED_ENVIRONMENT",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"environment"}}},
-        {name:"ROLLBACK_EXPECTED_GITOPS_REVISION",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"gitopsRevision"}}},
-        {name:"ROLLBACK_EXPECTED_REGION",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"region"}}},
-        {name:"ROLLBACK_EXPECTED_ROLLOUT_NAME",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"rolloutName"}}},
-        {name:"ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"sourceEvidenceDigest"}}}
-      ] | sort_by(.name)) and
-    ([ $container.volumeMounts[] | select(.name == "rollback-candidates") ] ==
-      [{name:"rollback-candidates",mountPath:"/var/run/course-evidence",readOnly:true}]) and
-    ([ .spec.template.spec.volumes[] | select(.name == "rollback-candidates") ] == [{
-      name:"rollback-candidates",configMap:{name:"mini-commerce-rollback-candidates",defaultMode:292,
-        items:[{key:"rollback-candidates.json",path:"rollback-candidates.json"}]}
-    }])
-  ' <<<"$job" >/dev/null || fail 'Contract 003 migration Job has not safely consumed the exact ConfigMap'
+    $container.command == ["node", "scripts/migrate.mjs"] and
+    $container.args == ["--target", "003_contract_product_name"] and
+    ([ $container.env[]? | select(.name | startswith("ROLLBACK_")) ] | length) == 0 and
+    ([ $container.volumeMounts[]? | select(.name == "rollback-candidates") ] | length) == 0 and
+    ([ .spec.template.spec.volumes[]? | select(.name == "rollback-candidates") ] | length) == 0
+  ' <<<"$job" >/dev/null || fail 'finalize migration Job is not complete or still consumes rollback evidence'
   delete_options=$(mktemp)
   jq -n --arg uid "$uid" \
     '{apiVersion:"v1",kind:"DeleteOptions",propagationPolicy:"Background",preconditions:{uid:$uid}}' \
@@ -359,12 +374,12 @@ if [[ "$mode" == cleanup ]]; then
     fail 'AWS_REGION must be ap-northeast-2 or us-east-1 for rollback ConfigMap cleanup'
   [[ ${EKS_CLUSTER_NAME:-} =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] ||
     fail 'EKS_CLUSTER_NAME is invalid for rollback ConfigMap cleanup'
-  for command in aws kubectl; do command -v "$command" >/dev/null || fail "$command is required for rollback ConfigMap cleanup"; done
+  for command in argocd aws git kubectl; do command -v "$command" >/dev/null || fail "$command is required for rollback ConfigMap cleanup"; done
   cleanup_configmap "$cleanup_evidence" "$cleanup_now"
   if [[ -n "$adapter_dir" ]]; then
     echo '[STATIC] simulated UID-bound rollback ConfigMap cleanup; no live cluster was changed.'
   else
-    echo "[CLOUD_RUNTIME] removed $namespace/$configmap_name after successful Contract 003 migration"
+    echo "[CLOUD_RUNTIME] removed $namespace/$configmap_name after successful finalize migration"
   fi
   exit 0
 fi
@@ -533,7 +548,10 @@ validate_record "$tmp" "$evidence_grade" "$clock_now"
 if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
   ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
 fi
-if [[ -e "$output" ]]; then
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/publish-incident-capture.rb" "$tmp" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+  rm -f -- "$tmp"
+elif [[ -e "$output" ]]; then
   require_regular_file "$output" 'existing rollback candidate evidence'
   cmp -s "$tmp" "$output" || fail 'existing rollback candidate evidence differs from the immutable capture'
   rm -f -- "$tmp"
@@ -542,7 +560,4 @@ else
 fi
 trap - EXIT
 if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then publish_configmap "$output"; fi
-if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
-  ruby "$script_dir/write-incident-companion.rb" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
-fi
 echo "[$evidence_grade] wrote $output"

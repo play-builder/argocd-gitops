@@ -1,0 +1,9 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: missing-configmap
+spec:
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration

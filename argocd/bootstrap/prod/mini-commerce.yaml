@@ -18,6 +18,7 @@ spec:
         podSecurityVersion: v1.36
         valuesFile: envs/prod/values.yaml
         statefulValuesFile: envs/prod/stateful-values.yaml
+        phaseValuesFile: envs/prod/migration-expand-values.yaml
         ownershipValuesFile: envs/prod/pre-cutover-ownership-values.yaml
   template:
     metadata:
@@ -37,6 +38,7 @@ spec:
           valueFiles:
           - "../../{{ .valuesFile }}"
           - "../../{{ .statefulValuesFile }}"
+          - "../../{{ .phaseValuesFile }}"
           - "../../{{ .ownershipValuesFile }}"
       destination:
         server: https://kubernetes.default.svc

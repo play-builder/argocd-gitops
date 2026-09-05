@@ -30,6 +30,9 @@ render_application_source() {
       fail "unresolved ApplicationSet value file: $template"
     helm_arguments+=(--values "$source_root/$value")
   done < <(yq -r '.spec.template.spec.source.helm.valueFiles[]' "$appset")
+  while IFS=$'\t' read -r name value; do
+    [[ -z "$name" ]] || helm_arguments+=(--set-string "$name=$value")
+  done < <(yq -r '.spec.template.spec.source.helm.parameters[]? | [.name,.value] | @tsv' "$appset")
   helm template "$release" "$source_root/$chart" "${helm_arguments[@]}" "$@" >"$output"
 }
 
@@ -85,10 +88,11 @@ for environment in dev prod; do
 
   render_application_source "$current_appset" "$repository_root" "$negative_render" \
     --values "$test_root/fixtures/rename/shared-ownership-overlap.yaml"
-  write_shared_ownership_overlap "$legacy_render" "$negative_render" "$negative_overlap" "$namespace"
+  root_namespace="$repository_root/argocd/bootstrap/$environment/application-namespace.yaml"
+  write_shared_ownership_overlap "$root_namespace" "$negative_render" "$negative_overlap" "$namespace"
   [[ "$(wc -l <"$negative_overlap" | tr -d ' ')" == "1" ]] || {
     cat "$negative_overlap" >&2
-    fail "$environment overlap fixture did not reproduce the remaining namespace collision"
+    fail "$environment overlap fixture did not reproduce the root namespace collision"
   }
 done
 

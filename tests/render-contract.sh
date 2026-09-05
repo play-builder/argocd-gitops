@@ -14,7 +14,8 @@ case "$requested" in
     ruby tests/data-governance-contract.rb
     ruby tests/management-mesh-contract.rb
     ;;
-  telemetry) ruby tests/management-mesh-contract.rb ;;
+  telemetry) ruby tests/management-mesh-contract.rb; ruby tests/rc-integration-contract.rb telemetry ;;
+  project-scope) ruby tests/rc-integration-contract.rb project-scope ;;
   secret-reload) ruby tests/application-secrets-contract.rb ;;
   matrix)
     ruby tests/data-governance-contract.rb

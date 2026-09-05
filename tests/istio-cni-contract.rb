@@ -79,7 +79,7 @@ repository = '111122223333.dkr.ecr.ap-northeast-2.amazonaws.com/playdevops/platf
   namespace = bootstrap.find { |r| r['kind'] == 'Namespace' && r['metadata']['name'] == 'istio-cni' }
   check(namespace.dig('metadata', 'labels', 'pod-security.kubernetes.io/enforce') == 'privileged', 'CNI infrastructure namespace must admit elevated node agent')
   governance = YAML.load_stream(run('kubectl', 'kustomize', "platform/security/#{environment}")).compact
-  app_namespace = governance.find { |r| r['kind'] == 'Namespace' && r['metadata']['name'] == "app-#{environment}" }
+  app_namespace = bootstrap.find { |r| r['kind'] == 'Namespace' && r['metadata']['name'] == "app-#{environment}" }
   check(app_namespace.dig('metadata', 'labels', 'pod-security.kubernetes.io/enforce') == 'restricted', 'application PSA weakened')
   project = bootstrap.find { |r| r['kind'] == 'AppProject' && r['metadata']['name'] == application['spec']['project'] }
   check(project.dig('spec', 'destinations').map { |d| d['namespace'] } == ['istio-cni'], 'CNI controller project can write application namespaces')

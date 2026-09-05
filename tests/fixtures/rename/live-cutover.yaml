@@ -8,6 +8,7 @@ forbiddenActions: [direct-prune, pvc-delete]
 sharedResourceOwnership:
   preCutover:
     owner: legacy-application
+    rootSyncBlockedUntilHandoff: true
     currentApplicationMode: reference-only
   handoff:
     removeLegacyApplicationFirst: true
@@ -16,4 +17,4 @@ sharedResourceOwnership:
     deletionMode: non-cascading
     approveLegacyResourcePrune: false
   postCutover:
-    owner: mini-commerce-application
+    owner: root-bootstrap

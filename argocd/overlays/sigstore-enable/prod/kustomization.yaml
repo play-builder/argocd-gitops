@@ -4,10 +4,10 @@ resources: [../../../bootstrap/prod]
 # First run verify-platform-mirror-activation.rb HANDOFF.json prod --verify-live.
 # It never activates namespaces: operator admission/traffic approval is still required.
 # Explicit opt-in only after controller, TrustRoot and both CIPs are Ready.
-# The legacy Application remains the namespace owner during pre-cutover.
+# Final enterprise Namespace is root-owned; complete non-cascading handoff before sync.
 patches:
-  - target: {kind: ApplicationSet, name: sample-app-prod}
+  - target: {kind: Namespace, name: app-prod}
     patch: |-
       - op: add
-        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/policy.sigstore.dev~1include
+        path: /metadata/labels/policy.sigstore.dev~1include
         value: "true"

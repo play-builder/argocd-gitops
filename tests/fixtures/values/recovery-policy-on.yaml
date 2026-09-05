@@ -2,7 +2,8 @@ database:
   enabled: true
 recovery:
   restoreEnabled: true
-  snapshotHandle: snap-0123456789abcdef
+  readerRoleArn: arn:aws:iam::123456789012:role/dev-course-recovery-db-secret-reader-role
+  snapshotHandle: snap-0123456789abcdef0
 networkPolicy:
   enabled: true
   gateway:

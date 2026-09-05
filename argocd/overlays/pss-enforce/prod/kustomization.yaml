@@ -6,17 +6,16 @@ resources:
 
 patches:
   - target:
-      group: argoproj.io
-      version: v1alpha1
-      kind: ApplicationSet
-      name: sample-app-prod
+      version: v1
+      kind: Namespace
+      name: app-prod
     patch: |-
       - op: add
-        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/pod-security.kubernetes.io~1enforce
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce
         value: restricted
       - op: add
-        path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/pod-security.kubernetes.io~1enforce-version
-        value: "{{ .podSecurityVersion }}"
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce-version
+        value: v1.36
   - target:
       group: admissionregistration.k8s.io
       version: v1

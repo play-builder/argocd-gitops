@@ -1,25 +1,5 @@
 schemaVersion: course.rename-aliases/v1
 entries:
-  - path: argocd/overlays/mesh-enable/dev/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: gated mesh revision label updates the existing namespace owner only
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/overlays/mesh-enable/prod/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: gated mesh revision label updates the existing namespace owner only
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/overlays/sigstore-enable/dev/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: gated namespace opt-in modifies the existing namespace owner only
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/overlays/sigstore-enable/prod/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: gated namespace opt-in modifies the existing namespace owner only
-    removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/rename/live-cutover.yaml
     literal: "sample\u002dapp-prod"
     count: 1
@@ -132,23 +112,8 @@ entries:
     removalEvidence: course.rename-cutover/v1
   - path: tests/bootstrap-contract.sh
     literal: "sample\u002dapp"
-    count: 5
-    reason: bootstrap contract verifies that the legacy Application exclusively owns namespace metadata before handoff
-    removalEvidence: course.rename-cutover/v1
-  - path: tests/chaos-contract.sh
-    literal: "sample\u002dapp"
-    count: 1
-    reason: namespace injection remains attached to the legacy namespace owner before handoff
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/overlays/pss-enforce/dev/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: the pre-cutover enforcement overlay targets the current namespace owner
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/overlays/pss-enforce/prod/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: the pre-cutover enforcement overlay targets the current namespace owner
+    count: 2
+    reason: bootstrap contract verifies that the legacy Application preserves resources while relinquishing namespace
     removalEvidence: course.rename-cutover/v1
   - path: tests/source-integrity-contract.sh
     literal: "sample\u002dapp"
@@ -159,4 +124,29 @@ entries:
     literal: "cicd-course-sample\u002dapp"
     count: 1
     reason: pre-cutover trust fixture preserves the authorized legacy workflow identity
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/namespace-bootstrap-contract.rb
+    literal: "sample\u002dapp"
+    count: 1
+    reason: legacy Namespace producer must be disabled before root adoption
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/lib/resolve-sample-verifier.sh
+    literal: "SAMPLE\u005fAPP"
+    count: 12
+    reason: explicit verifier checkout environment API retained from main RC fixes
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/rollback-candidates-runtime-contract.sh
+    literal: "SAMPLE\u005fAPP"
+    count: 1
+    reason: explicit verifier checkout environment API retained from main RC fixes
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/sample-verifier-binding-contract.sh
+    literal: "SAMPLE\u005fAPP"
+    count: 16
+    reason: explicit verifier checkout environment API retained from main RC fixes
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/test-all.sh
+    literal: "SAMPLE\u005fAPP"
+    count: 3
+    reason: explicit verifier checkout environment API retained from main RC fixes
     removalEvidence: course.rename-cutover/v1

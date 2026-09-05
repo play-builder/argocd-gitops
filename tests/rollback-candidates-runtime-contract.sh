@@ -6,7 +6,8 @@ repository_root=$(cd -- "$test_root/.." && pwd -P)
 script="$repository_root/scripts/capture-rollback-candidates-evidence.sh"
 source_record="$repository_root/envs/prod/rollback-compatibility.yaml"
 canonical="$repository_root/evidence/prod/rollback-candidates.json"
-sample_verifier=/private/tmp/cicd-course-final-worktrees/mini-commerce/src/migration-ledger.js
+sample_verifier_resolver="$test_root/lib/resolve-sample-verifier.sh"
+sample_verifier=$("$sample_verifier_resolver")
 tmp_root=$(mktemp -d)
 trap 'rm -rf -- "$tmp_root"' EXIT
 
@@ -138,8 +139,11 @@ for (const key of Object.keys(expected)) {
   if (!rejected) throw new Error(`Sample verifier accepted expected ${key} drift`);
 }
 NODE
+  sample_repository=$(git -C "$(dirname -- "$sample_verifier")" rev-parse --show-toplevel)
+  sample_revision=$(git -C "$sample_repository" rev-parse HEAD)
+  echo "[STATIC] verified Sample Contract 003 with $sample_repository at $sample_revision"
 else
-  echo '[STATIC] Sample Contract 003 checkout absent; cross-repository verifier invocation skipped.'
+  echo '[STATIC] Sample Contract 003 verification skipped by explicit SAMPLE_APP_VERIFIER_OPTIONAL=1.'
 fi
 
 for label in dirty-git git-mismatch already-synced automated-sync running-operation cluster-account cluster-region cluster-name kube-endpoint rollout-name rollout-uid rollout-window rollout-unhealthy foreign-owner non-controller missing-candidate-rs extra-candidate-rs experiment-candidate wrong-candidate-image source-missing-candidate source-extra-candidate source-duplicate-candidate source-wrong-lineage source-wrong-revert source-window; do
@@ -296,10 +300,32 @@ done
 cleanup_runtime="$tmp_root/runtime-cleanup"
 cp -R "$runtime" "$cleanup_runtime"
 jq '.metadata.uid="88888888-8888-8888-8888-888888888888"' "$created" >"$cleanup_runtime/existing-configmap.json"
+printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$cleanup_runtime/git-revision.txt"
+jq -n '{
+  metadata:{name:"mini-commerce-prod"},
+  spec:{
+    source:{
+      repoURL:"https://github.com/OWNER/argocd-gitops.git",
+      helm:{valueFiles:[
+        "../../envs/prod/values.yaml",
+        "../../envs/prod/stateful-values.yaml",
+        "../../envs/prod/migration-finalize-values.yaml",
+      "../../envs/prod/pre-cutover-ownership-values.yaml"
+      ]}
+    },
+    syncPolicy:{}
+  },
+  status:{
+    sync:{status:"Synced",revision:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    health:{status:"Healthy"},
+    operationState:{phase:"Succeeded"}
+  }
+}' >"$cleanup_runtime/application.json"
 helm template mini-commerce "$repository_root/charts/mini-commerce" \
   --values "$repository_root/envs/prod/values.yaml" \
   --values "$repository_root/envs/prod/stateful-values.yaml" \
   --values "$test_root/fixtures/values/stateful-policy-on.yaml" \
+  --values "$repository_root/envs/prod/migration-finalize-values.yaml" \
   --set-string image.repository=example.invalid/mini-commerce \
   --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set-string database.migrationImage.repository=example.invalid/mini-commerce \
@@ -309,14 +335,20 @@ helm template mini-commerce "$repository_root/charts/mini-commerce" \
       .status={succeeded:1,failed:0,completionTime:"2026-09-03T01:05:00Z"}' \
     >"$cleanup_runtime/migration-job.json"
 
-for label in configmap-drift missing-uid failed-job early-job delete-denied; do
+for label in configmap-drift missing-uid app-outofsync app-wrong-revision app-wrong-phase \
+  failed-job early-job wrong-target stale-evidence delete-denied; do
   invalid_cleanup="$tmp_root/cleanup-$label"
   cp -R "$cleanup_runtime" "$invalid_cleanup"
   case "$label" in
     configmap-drift) jq '.data.region="us-east-1"' "$invalid_cleanup/existing-configmap.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/existing-configmap.json" ;;
     missing-uid) jq '.metadata.uid="\uFEFF"' "$invalid_cleanup/existing-configmap.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/existing-configmap.json" ;;
+    app-outofsync) jq '.status.sync.status="OutOfSync"' "$invalid_cleanup/application.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/application.json" ;;
+    app-wrong-revision) jq '.status.sync.revision="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$invalid_cleanup/application.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/application.json" ;;
+    app-wrong-phase) jq '.spec.source.helm.valueFiles[2]="../../envs/prod/migration-contract-values.yaml"' "$invalid_cleanup/application.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/application.json" ;;
     failed-job) jq '.status.succeeded=0 | .status.failed=1' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     early-job) jq '.status.completionTime="2026-09-03T00:59:58Z"' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
+    wrong-target) jq '.spec.template.spec.containers[0].args[1]="002_expand_product_display_name"' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
+    stale-evidence) jq '.spec.template.spec.containers[0].env += [{name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"}]' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     delete-denied) printf '%s\n' no >"$invalid_cleanup/configmap-delete-permission.txt" ;;
   esac
   if run_cleanup_fixture "$invalid_cleanup" "$cloud_fixture" >/dev/null 2>&1; then
