@@ -1,9 +1,6 @@
 namespace:
   create: false
 
-gateway:
-  createClass: false
-
 externalSecrets:
   createReaderServiceAccount: false
   createSecretStore: false

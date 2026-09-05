@@ -388,6 +388,11 @@ if [[ -n "$publish_fixture" ]]; then
 fi
 
 evidence_grade=CLOUD_RUNTIME
+if [[ -z "$adapter_dir" ]]; then
+  : "${PLATFORM_INCIDENT_EVIDENCE:?reviewed live incident binding is required}"
+  : "${PLATFORM_DR_METADATA:?live encrypted export/isolated restore metadata is required}"
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 if [[ -n "$adapter_dir" ]]; then
   [[ "$runtime_override" == true && -n "$now_override" ]] ||
@@ -525,6 +530,9 @@ jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$clust
 ' >"$tmp" || fail 'unable to construct rollback candidate evidence'
 chmod 600 "$tmp"
 validate_record "$tmp" "$evidence_grade" "$clock_now"
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
+fi
 if [[ -e "$output" ]]; then
   require_regular_file "$output" 'existing rollback candidate evidence'
   cmp -s "$tmp" "$output" || fail 'existing rollback candidate evidence differs from the immutable capture'
@@ -534,4 +542,7 @@ else
 fi
 trap - EXIT
 if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then publish_configmap "$output"; fi
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/write-incident-companion.rb" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 echo "[$evidence_grade] wrote $output"

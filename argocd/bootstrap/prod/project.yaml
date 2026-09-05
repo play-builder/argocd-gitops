@@ -134,8 +134,6 @@ spec:
     kind: Service
   - group: apps
     kind: Deployment
-  - group: apps
-    kind: StatefulSet
   - group: batch
     kind: Job
   - group: autoscaling
@@ -146,12 +144,12 @@ spec:
     kind: NetworkPolicy
   - group: external-secrets.io
     kind: ExternalSecret
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-  - group: gateway.k8s.aws
-    kind: TargetGroupConfiguration
+  - group: networking.istio.io
+    kind: VirtualService
+  - group: telemetry.istio.io
+    kind: Telemetry
+  - group: ''
+    kind: ConfigMap
   - group: argoproj.io
     kind: Rollout
   - group: argoproj.io

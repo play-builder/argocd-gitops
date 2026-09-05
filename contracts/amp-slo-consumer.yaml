@@ -1,6 +1,6 @@
 schemaVersion: platform.slo/v1
 owner: EKS-infra
-status: producer-rules-implementation-pending-eks-task-11
+status: producer-static-verified-runtime-pending
 objective: 0.999
 windows: [5m, 1h]
 requestRateFloor: 0.1
@@ -8,5 +8,5 @@ labels: [service, environment, severity, runbook]
 metrics: [istio_requests_total, istio_request_duration_milliseconds_bucket]
 selector:
   reporter: destination
-  destination_service_name: mini-commerce
+  destination_canonical_service: mini-commerce
 revisionIdentityLocation: Argo notification and release evidence

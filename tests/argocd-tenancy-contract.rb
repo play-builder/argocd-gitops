@@ -5,7 +5,7 @@ def valid(project,app,env)
   s=project.fetch('spec'); a=app.fetch('spec').fetch('template').fetch('spec')
   return false if s['destinations'].any?{|d|d['namespace']=='argocd'}
   return false unless s['clusterResourceWhitelist']==[]
-  return false if s['namespaceResourceWhitelist'].any?{|r|%w[SecretStore Secret AppProject Application ApplicationSet ConfigMap].include?(r['kind'])}
+  return false if s['namespaceResourceWhitelist'].any?{|r|%w[SecretStore Secret AppProject Application ApplicationSet].include?(r['kind'])}
   return false unless s['orphanedResources']=={'warn'=>true}
   s.fetch('roles').each do |role|
     role['policies'].each do |line|

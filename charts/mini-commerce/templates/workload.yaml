@@ -17,6 +17,8 @@ spec:
   replicas: 0
   {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- else }}
+  replicas: {{ .Values.autoscaling.minReplicas }}
   {{- end }}
   revisionHistoryLimit: {{ .Values.workload.revisionHistoryLimit }}
   strategy:
@@ -48,6 +50,8 @@ spec:
   replicas: 0
   {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- else }}
+  replicas: {{ .Values.autoscaling.minReplicas }}
   {{- end }}
   revisionHistoryLimit: {{ .Values.workload.revisionHistoryLimit }}
   {{- if gt (int .Values.rollout.rollbackWindow.revisions) 0 }}
@@ -62,10 +66,10 @@ spec:
       stableService: {{ include "mini-commerce.fullname" . }}-stable
       canaryService: {{ include "mini-commerce.fullname" . }}-canary
       trafficRouting:
-        plugins:
-          argoproj-labs/gatewayAPI:
-            httpRoute: {{ include "mini-commerce.fullname" . }}
-            namespace: {{ include "mini-commerce.namespace" . }}
+        istio:
+          virtualService:
+            name: {{ include "mini-commerce.fullname" . }}
+            routes: [primary]
       steps:
         {{- toYaml .Values.rollout.canary.steps | nindent 8 }}
   template:

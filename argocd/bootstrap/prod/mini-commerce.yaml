@@ -49,11 +49,13 @@ spec:
       - group: apps
         kind: Deployment
         jsonPointers:
+        - /spec/replicas
         - "/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"
         name: mini-commerce
       - group: argoproj.io
         kind: Rollout
         jsonPointers:
+        - /spec/replicas
         - "/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"
         name: mini-commerce
       - group: ''
@@ -61,11 +63,10 @@ spec:
         jqPathExpressions:
         - .spec.selector["rollouts-pod-template-hash"]
         name: mini-commerce-stable
-      - group: gateway.networking.k8s.io
-        kind: HTTPRoute
+      - group: networking.istio.io
+        kind: VirtualService
         jqPathExpressions:
-        - select(.metadata.labels["rollouts.argoproj.io/gatewayapi-canary"] == "in-progress")
-          | .spec.rules
+        - .spec.http[] | select(.name == "primary") | .route[].weight
         name: mini-commerce
       - group: ''
         kind: Service

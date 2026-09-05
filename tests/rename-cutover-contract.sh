@@ -86,9 +86,9 @@ for environment in dev prod; do
   render_application_source "$current_appset" "$repository_root" "$negative_render" \
     --values "$test_root/fixtures/rename/shared-ownership-overlap.yaml"
   write_shared_ownership_overlap "$legacy_render" "$negative_render" "$negative_overlap" "$namespace"
-  [[ "$(wc -l <"$negative_overlap" | tr -d ' ')" == "4" ]] || {
+  [[ "$(wc -l <"$negative_overlap" | tr -d ' ')" == "1" ]] || {
     cat "$negative_overlap" >&2
-    fail "$environment overlap fixture did not reproduce the four shared-resource collisions"
+    fail "$environment overlap fixture did not reproduce the remaining namespace collision"
   }
 done
 

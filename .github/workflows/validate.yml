@@ -88,21 +88,14 @@ jobs:
             }
           ' /tmp/mini-commerce-prod.yaml
 
-      - name: Verify Stateful application contract
-        run: bash tests/stateful-contract.sh
-
-      - name: Run static course contracts
-        run: bash tests/test-all.sh
-
       - name: Verify locked Helm archives and rendered API schemas
         run: |
           GOBIN="$RUNNER_TEMP/schema-bin" go install github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0
           export PATH="$RUNNER_TEMP/schema-bin:$PATH"
           export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
-          bash tests/kubeconform-contract.sh
-          bash tests/render-lock-contract.sh
+          echo "$RUNNER_TEMP/schema-bin" >> "$GITHUB_PATH"
 
-      - name: Analyze both locked Istio revisions locally
+      - name: Install locked Istio, CUE and Prometheus validation tools
         run: |
           mkdir -p "$RUNNER_TEMP/istio-bin"
           curl -fsSL "$(yq -r '.tooling.istioctl.linuxAmd64Url' versions.lock.yaml)" -o "$RUNNER_TEMP/istioctl.tgz"
@@ -110,9 +103,25 @@ jobs:
           tar -xzf "$RUNNER_TEMP/istioctl.tgz" -C "$RUNNER_TEMP/istio-bin"
           export PATH="$RUNNER_TEMP/istio-bin:$PATH"
           export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
-          ruby tests/istio-analyze-contract.rb
-          bash tests/istio-platform-contract.sh
-          bash tests/edge-waf-contract.sh
+          echo "$RUNNER_TEMP/istio-bin" >> "$GITHUB_PATH"
+          curl -fsSL "$(yq -r '.tooling.cue.linuxAmd64Url' versions.lock.yaml)" -o "$RUNNER_TEMP/cue.tgz"
+          printf '%s  %s\n' "$(yq -r '.tooling.cue.linuxAmd64Sha256' versions.lock.yaml)" "$RUNNER_TEMP/cue.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/cue.tgz" -C "$RUNNER_TEMP/istio-bin" cue
+          curl -fsSL https://github.com/prometheus/prometheus/releases/download/v3.14.0/prometheus-3.14.0.linux-amd64.tar.gz -o "$RUNNER_TEMP/prometheus.tgz"
+          printf '%s  %s\n' f665c6da19eb7ba399c915d30c7d9793c9b417bf8a749b504bc470678631478d "$RUNNER_TEMP/prometheus.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/prometheus.tgz" -C "$RUNNER_TEMP/istio-bin" --strip-components=1 prometheus-3.14.0.linux-amd64/promtool
+
+      - name: Validate isolated operation charts
+        run: |
+          helm lint charts/mini-commerce-db-dev
+          helm lint charts/mini-commerce-recovery --set-string snapshotHandle=snap-0123456789abcdef0
+          helm template mini-commerce charts/mini-commerce-db-dev >/dev/null
+          helm template mini-commerce charts/mini-commerce-recovery --set-string snapshotHandle=snap-0123456789abcdef0 >/dev/null
+
+      - name: Run complete static delivery contracts
+        env:
+          CHART_CACHE_DIR: ${{ runner.temp }}/locked-charts
+        run: bash tests/test-all.sh
 
       - name: Package chart
         run: scripts/package-chart.sh "$RUNNER_TEMP/chart-package"

@@ -1,5 +1,5 @@
 {{- if and .Values.database.enabled .Values.database.migration.enabled (not .Values.maintenance.writersStopped) }}
-{{- $secretName := include "mini-commerce.databaseSecretName" . }}
+{{- $secretName := .Values.externalSecrets.migration.targetSecretName }}
 {{- $rollbackConfigMapName := "" }}
 {{- if .Values.database.migration.rollbackCandidates.enabled }}
 {{- $rollbackConfigMapName = required "database.migration.rollbackCandidates.configMapName is required when rollback candidate handoff is enabled" .Values.database.migration.rollbackCandidates.configMapName }}
@@ -23,6 +23,8 @@ spec:
   activeDeadlineSeconds: {{ .Values.database.migration.activeDeadlineSeconds }}
   template:
     metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
       labels:
         app.kubernetes.io/name: mini-commerce-migration
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -48,6 +50,11 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
+            {{- if eq .Values.environment "prod" }}
+            - name: rds-ca
+              mountPath: /etc/rds-ca
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
             {{- if .Values.database.migration.rollbackCandidates.enabled }}
@@ -55,7 +62,12 @@ spec:
               mountPath: /var/run/course-evidence
               readOnly: true
             {{- end }}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
           env:
+            - name: APP_ENV
+              value: {{ ternary "production" "development" (eq .Values.environment "prod") | quote }}
             - name: DATABASE_ENABLED
               value: "true"
             - name: DB_HOST
@@ -84,7 +96,11 @@ spec:
                   name: {{ $secretName }}
                   key: DB_PASSWORD
             - name: DB_SSL
-              value: "false"
+              value: {{ ternary "true" "false" (eq .Values.environment "prod") | quote }}
+            {{- if eq .Values.environment "prod" }}
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/rds-ca/global-bundle.pem
+            {{- end }}
             {{- if .Values.database.migration.rollbackCandidates.enabled }}
             - name: ROLLBACK_CANDIDATES_FILE
               value: /var/run/course-evidence/rollback-candidates.json
@@ -120,6 +136,11 @@ spec:
                   key: sourceEvidenceDigest
             {{- end }}
       volumes:
+        {{- if eq .Values.environment "prod" }}
+        - name: rds-ca
+          configMap:
+            name: mini-commerce-rds-ca
+        {{- end }}
         - name: tmp
           emptyDir: {}
         {{- if .Values.database.migration.rollbackCandidates.enabled }}

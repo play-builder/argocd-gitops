@@ -93,7 +93,7 @@ jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini
   {items:[{metadata:{name:"mini-commerce-stable-v1",labels:{"rollouts-pod-template-hash":"stable-v1"},annotations:{"rollout.argoproj.io/revision":"1"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
    spec:{replicas:3,template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
 ' >"$runtime/replicasets.json"
-jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{rules:[{backendRefs:[{name:"mini-commerce-stable",port:80,weight:100},{name:"mini-commerce-canary",port:80,weight:0}]}]}}' >"$runtime/httproute.json"
+jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{http:[{name:"primary",route:[{destination:{host:"mini-commerce-stable",port:{number:3000}},weight:100},{destination:{host:"mini-commerce-canary",port:{number:3000}},weight:0}]}]}}' >"$runtime/virtualservice.json"
 
 run_static() {
   local source=$1 output=$2
@@ -140,9 +140,9 @@ for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision no
     wrong-owner) jq '.items[0].metadata.ownerReferences[0].uid="foreign"' "$candidate/replicasets.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/replicasets.json" ;;
     wrong-owner-name) jq '.items[0].metadata.ownerReferences[0].name="other-rollout"' "$candidate/replicasets.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/replicasets.json" ;;
     wrong-revision) jq '.items[0].metadata.annotations["rollout.argoproj.io/revision"]="2"' "$candidate/replicasets.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/replicasets.json" ;;
-    nonfinal-route) jq '.spec.rules[0].backendRefs[0].weight=50 | .spec.rules[0].backendRefs[1].weight=50' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
-    extra-route-backend) jq '.spec.rules[0].backendRefs += [{name:"shadow",port:80,weight:0}]' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
-    extra-route-rule) jq '.spec.rules += [.spec.rules[0]]' "$candidate/httproute.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/httproute.json" ;;
+    nonfinal-route) jq '.spec.http[0].route[0].weight=50 | .spec.http[0].route[1].weight=50' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
+    extra-route-backend) jq '.spec.http[0].route += [{destination:{host:"shadow",port:{number:3000}},weight:0}]' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
+    extra-route-rule) jq '.spec.http += [.spec.http[0]]' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
     image-account) set_runtime_repository "$candidate" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce' ;;
     image-region) set_runtime_repository "$candidate" '123456789012.dkr.ecr.us-east-1.amazonaws.com/course/mini-commerce' ;;
     image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce' ;;

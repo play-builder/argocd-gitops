@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mini-commerce-operations-dev
+  namespace: argocd
+  annotations: {argocd.argoproj.io/sync-wave: "-30"}
+spec:
+  sourceRepos: [https://github.com/REPLACE_ME/argocd-gitops.git]
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+          gpg: {mode: head, keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]}
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: app-dev}
+    - {server: https://kubernetes.default.svc, namespace: app-recovery}
+  clusterResourceWhitelist:
+    - {group: snapshot.storage.k8s.io, kind: VolumeSnapshotContent}
+  namespaceResourceWhitelist:
+    - {group: '', kind: Service}
+    - {group: '', kind: PersistentVolumeClaim}
+    - {group: apps, kind: StatefulSet}
+    - {group: batch, kind: Job}
+    - {group: networking.k8s.io, kind: NetworkPolicy}
+    - {group: snapshot.storage.k8s.io, kind: VolumeSnapshot}
+    - {group: chaos-mesh.org, kind: PodChaos}
+    - {group: chaos-mesh.org, kind: NetworkChaos}
+  orphanedResources: {warn: true}

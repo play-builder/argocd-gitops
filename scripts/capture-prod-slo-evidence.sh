@@ -62,8 +62,8 @@ validate_record() {
     (.analysisRun.name | nonblank) and (.analysisRun.uid | nonblank) and (.analysisRun.templateName | nonblank) and
     .analysisRun.phase == "Successful" and
     .analysisRun.templateName == "mini-commerce-success-rate" and
-    (.metricResults | type == "array" and length == 2) and
-    ([.metricResults[].name] | sort) == ["request-rate","success-rate"] and
+    (.metricResults | type == "array" and length == 3) and
+    ([.metricResults[].name] | sort) == ["latency","request-rate","success-rate"] and
     all(.metricResults[]; (keys | sort) == ["measurements","name","phase"] and .phase == "Successful" and ([.measurements[] | select(.phase == "Successful")] | length) > 0 and
       all(.measurements[]; (keys | sort) == ["finishedAt","phase","startedAt","value"] and
         (.phase | IN("Successful","Failed","Error")) and
@@ -85,6 +85,11 @@ if [[ -n "$fixture" ]]; then
 fi
 
 evidence_grade=CLOUD_RUNTIME
+if [[ -z "$adapter_dir" ]]; then
+  : "${PLATFORM_INCIDENT_EVIDENCE:?reviewed live incident binding is required}"
+  : "${PLATFORM_DR_METADATA:?live encrypted export/isolated restore metadata is required}"
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 if [[ -n "$adapter_dir" ]]; then
   [[ -d "$adapter_dir" ]] || fail "COURSE_CHECK_BIN_DIR is not a directory"
@@ -236,7 +241,7 @@ jq -e '
   (.status.replicas | type == "number" and . > 0) and
   .status.readyReplicas == .status.replicas and .status.availableReplicas == .status.replicas and
   ((.status.pauseConditions // []) | length) == 0 and
-  [.spec.strategy.canary.analysis.templates[].templateName] == ["mini-commerce-success-rate"]
+  ([.spec.strategy.canary.steps[] | select(.analysis) | .analysis.templates[].templateName] | unique) == ["mini-commerce-success-rate"]
 ' <<<"$rollout_json" >/dev/null || fail "Prod Rollout is not a completed healthy SLO release"
 [[ "$image" =~ ^([^@]+)@(sha256:[0-9a-f]{64})$ ]] || fail "Prod Rollout image must use an immutable digest"
 image_repository=${BASH_REMATCH[1]}
@@ -264,14 +269,14 @@ rollout_revision=$(jq -er '.metadata.annotations["rollout.argoproj.io/revision"]
 baseline_revision=$(jq -r '.rollout.revision' <<<"$baseline_json")
 ((rollout_revision > baseline_revision)) || fail "Prod SLO revision did not advance beyond the baseline"
 
-route_json=$(kubectl -n app-prod get httproute mini-commerce -o json) || fail "unable to read the Prod HTTPRoute"
+route_json=$(kubectl -n app-prod get virtualservice mini-commerce -o json) || fail "unable to read the Prod VirtualService"
 jq -e '
   .metadata.name == "mini-commerce" and .metadata.namespace == "app-prod" and
-  (.spec.rules | length) == 1 and (.spec.rules[0].backendRefs | length) == 2 and
-  ([.spec.rules[0].backendRefs[] | {name,port,weight}] | sort_by(.name)) ==
-    [{name:"mini-commerce-canary",port:80,weight:0},{name:"mini-commerce-stable",port:80,weight:100}] and
-  ([.spec.rules[0].backendRefs[].weight] | add) == 100
-' <<<"$route_json" >/dev/null || fail "Prod HTTPRoute is not routing 100 percent to the stable service"
+  (.spec.http | length) == 1 and (.spec.http[0].route | length) == 2 and
+  ([.spec.http[0].route[] | {name:.destination.host,port:.destination.port.number,weight}] | sort_by(.name)) ==
+    [{name:"mini-commerce-canary",port:3000,weight:0},{name:"mini-commerce-stable",port:3000,weight:100}] and
+  ([.spec.http[0].route[].weight] | add) == 100
+' <<<"$route_json" >/dev/null || fail "Prod VirtualService is not routing 100 percent to the stable service"
 
 analysis_json=$(kubectl -n app-prod get analysisruns.argoproj.io -o json) || fail "unable to read Prod AnalysisRuns"
 analysis_matches=$(jq -ce --arg uid "$rollout_uid" --arg revision "$rollout_revision" '
@@ -289,8 +294,8 @@ jq -e '
   (.metadata.name | type == "string" and length > 0) and
   (.metadata.uid | type == "string" and length > 0) and
   .status.phase == "Successful" and
-  ([.spec.metrics[].name] | sort) == ["request-rate","success-rate"] and
-  ([.status.metricResults[].name] | sort) == ["request-rate","success-rate"] and
+  ([.spec.metrics[].name] | sort) == ["latency","request-rate","success-rate"] and
+  ([.status.metricResults[].name] | sort) == ["latency","request-rate","success-rate"] and
   all(.status.metricResults[].measurements[]?; .finishedAt != null)
 ' <<<"$analysis" >/dev/null || fail "the unique owned AnalysisRun is not a successful canonical SLO analysis"
 
@@ -320,6 +325,9 @@ jq -n --arg source "$source_sha" --arg sourceRepository "$source_repository" \
    observedAt:$observed}
 ' >"$tmp" || fail "failed to construct Prod SLO evidence"
 validate_record "$tmp" "$evidence_grade" "$clock_now"
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
+fi
 if [[ -e "$output" ]]; then
   [[ -f "$output" && ! -L "$output" ]] || fail "Prod SLO output is not a regular non-symlink file"
   validate_record "$output" "$evidence_grade" "$clock_now"
@@ -335,4 +343,7 @@ fi
 chmod 600 "$tmp"
 mv "$tmp" "$output"
 trap - EXIT
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/write-incident-companion.rb" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 echo "[$evidence_grade] wrote $output"

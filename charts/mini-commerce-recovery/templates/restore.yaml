@@ -1,0 +1,88 @@
+{{- if ne .Values.environment "dev" }}{{ fail "dev-only snapshot recovery chart" }}{{ end }}
+{{- $snapshot := required "snapshotHandle required; select a retained Dev snapshot" .Values.snapshotHandle }}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotContent
+metadata:
+  name: mini-commerce-postgresql-recovery-content
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+    operations.mini-commerce.io/source-pvc: {{ printf "%s/%s" .Values.source.namespace .Values.source.pvcName | quote }}
+spec:
+  deletionPolicy: Retain
+  driver: ebs.csi.aws.com
+  source:
+    snapshotHandle: {{ $snapshot | quote }}
+  sourceVolumeMode: Filesystem
+  volumeSnapshotRef:
+    name: mini-commerce-postgresql-recovery-snapshot
+    namespace: {{ .Values.namespace }}
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: mini-commerce-postgresql-recovery-snapshot
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  source:
+    volumeSnapshotContentName: mini-commerce-postgresql-recovery-content
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mini-commerce-postgresql-recovery
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.storageSize }}
+  dataSource:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: mini-commerce-postgresql-recovery-snapshot
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mini-commerce-snapshot-inspect
+  namespace: {{ .Values.namespace }}
+  labels:
+    operations.mini-commerce.io/cleanup: manual-dev
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: inspect
+          image: {{ .Values.image }}
+          command: [sh, -ec, 'test -s /snapshot/pgdata/PG_VERSION && test "$(cat /snapshot/pgdata/PG_VERSION)" = 17']
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: snapshot, mountPath: /snapshot, readOnly: true}
+      volumes:
+        - name: snapshot
+          persistentVolumeClaim:
+            claimName: mini-commerce-postgresql-recovery
+            readOnly: true

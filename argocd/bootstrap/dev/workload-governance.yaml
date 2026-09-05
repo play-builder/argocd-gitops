@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mini-commerce-governance-dev
+  namespace: argocd
+  annotations: {argocd.argoproj.io/sync-wave: "-40"}
+spec:
+  sourceRepos: [https://github.com/REPLACE_ME/argocd-gitops.git]
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+          gpg: {mode: head, keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]}
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: app-dev}
+  clusterResourceWhitelist:
+    - {group: '', kind: Namespace}
+    - {group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicy}
+    - {group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicyBinding}
+  namespaceResourceWhitelist:
+    - {group: '', kind: ResourceQuota}
+    - {group: '', kind: LimitRange}
+  orphanedResources: {warn: true}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mini-commerce-governance-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  project: mini-commerce-governance-dev
+  source:
+    repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
+    targetRevision: main
+    path: platform/security/dev
+  destination: {server: https://kubernetes.default.svc, namespace: app-dev}
+  syncPolicy:
+    syncOptions: [ServerSideApply=true]

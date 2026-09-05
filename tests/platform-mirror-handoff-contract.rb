@@ -20,7 +20,7 @@ Dir.mktmpdir('mirror-handoff-') do |dir|
   cases = {
     'public registry' => ['platform_istio_proxy_repository_url', 'docker.io/istio/proxyv2'],
     'wrong path' => ['platform_istio_proxy_repository_url', handoff['outputs']['platform_istio_proxy_repository_url'].sub('/platform/', '/')],
-    'sample app role' => ['platform_image_publisher_role_arn', 'arn:aws:iam::111122223333:role/prod-playdevops-sample-app'],
+    'application role' => ['platform_image_publisher_role_arn', 'arn:aws:iam::111122223333:role/prod-playdevops-mini-commerce'],
     'cross account role' => ['platform_image_publisher_role_arn', 'arn:aws:iam::444455556666:role/prod-platform-image-publisher']
   }
   cases.each do |name, (key, value)|

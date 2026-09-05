@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app-dev
+  annotations:
+    argocd.argoproj.io/sync-wave: "-36"
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    environment: dev
+    istio.io/rev: dev-stable
+    policy.sigstore.dev/include: "true"
+    operations.mini-commerce.io/security: enforced
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.36
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.36
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mini-commerce
+  namespace: app-dev
+  annotations: {argocd.argoproj.io/sync-wave: "-10"}
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 12Gi
+    limits.cpu: "24"
+    limits.memory: 24Gi
+    pods: "30"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mini-commerce
+  namespace: app-dev
+  annotations: {argocd.argoproj.io/sync-wave: "-10"}
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 100m, memory: 128Mi}
+      default: {cpu: 500m, memory: 256Mi}

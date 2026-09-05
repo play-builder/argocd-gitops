@@ -4,7 +4,7 @@ def valid(c)
  c['objective']==0.999 && c['windows']==['5m','1h'] && c['requestRateFloor'].is_a?(Numeric) && c['requestRateFloor']>0 &&
  c['labels'].sort==%w[environment runbook service severity] &&
  c['metrics'].sort==%w[istio_request_duration_milliseconds_bucket istio_requests_total] &&
- c['selector']=={'reporter'=>'destination','destination_service_name'=>'mini-commerce'}
+ c['selector']=={'reporter'=>'destination','destination_canonical_service'=>'mini-commerce'}
 end
 c=YAML.load_file('contracts/amp-slo-consumer.yaml')
 abort 'FAIL: invalid EKS SLO consumer schema' unless valid(c)

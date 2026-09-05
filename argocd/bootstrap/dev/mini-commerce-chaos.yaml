@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mini-commerce-chaos
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: mini-commerce-operations-dev
+  source:
+    repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
+    targetRevision: main
+    path: experiments/chaos/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: app-dev
+  syncPolicy:
+    syncOptions: [ServerSideApply=true]

@@ -1,3 +1,4 @@
+{{- if ne .Values.environment "dev" }}{{ fail "dev-only database chart" }}{{ end }}
 {{- if .Values.database.enabled }}
 {{- if not .Values.externalSecrets.enabled }}
 {{- fail "externalSecrets.enabled must be true when database is enabled" }}
@@ -10,6 +11,7 @@ metadata:
   namespace: {{ include "mini-commerce.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
+    argocd.argoproj.io/sync-options: Prune=false
   labels:
     app.kubernetes.io/name: postgresql
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -27,6 +29,8 @@ spec:
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
       labels:
         app.kubernetes.io/name: postgresql
         app.kubernetes.io/instance: {{ .Release.Name }}

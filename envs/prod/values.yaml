@@ -40,17 +40,17 @@ externalSecrets:
   awsRegion: "REPLACE_ME_REGION"
   readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/prod-REPLACE_ME_PROJECT-external-secrets-reader-role"
   runtime:
-    remoteSecretName: "mini-commerce/prod/mini-commerce-runtime"
+    remoteSecretName: "REPLACE_FROM_EKS_prod_mini_commerce_secrets_sources_runtime_sourceArn"
     targetSecretName: mini-commerce-runtime
   database:
-    remoteSecretName: "mini-commerce/prod/mini-commerce-db"
-    targetSecretName: mini-commerce-db
+    remoteSecretName: "REPLACE_FROM_EKS_prod_mini_commerce_secrets_sources_database_sourceArn"
+    targetSecretName: mini-commerce-database
+  migration:
+    remoteSecretName: "REPLACE_FROM_EKS_prod_mini_commerce_secrets_sources_migration_sourceArn"
+    targetSecretName: mini-commerce-migration
 
-gateway:
-  enabled: true
-  hostname: "mini-commerce.example.com"
-  httpEnabled: true
-  httpsEnabled: false
+routing:
+  hostname: "mini-commerce.prod.example.com"
 
 rollout:
   rollbackWindow:

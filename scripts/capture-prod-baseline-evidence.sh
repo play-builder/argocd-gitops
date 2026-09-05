@@ -72,6 +72,11 @@ if [[ -n "$fixture" ]]; then
 fi
 
 evidence_grade=CLOUD_RUNTIME
+if [[ -z "$adapter_dir" ]]; then
+  : "${PLATFORM_INCIDENT_EVIDENCE:?reviewed live incident binding is required}"
+  : "${PLATFORM_DR_METADATA:?live encrypted export/isolated restore metadata is required}"
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 if [[ -n "$adapter_dir" ]]; then
   [[ -d "$adapter_dir" && "$runtime_override" == true && -n "$now_override" ]] ||
@@ -171,14 +176,14 @@ rollout_revision=$(jq -er '.metadata.annotations["rollout.argoproj.io/revision"]
   fail 'stable ReplicaSet revision is invalid'
 [[ "$rollout_revision" -eq 1 ]] || fail 'Prod baseline stable ReplicaSet must be revision 1'
 
-route_json=$(kubectl -n app-prod get httproute mini-commerce -o json) || fail 'unable to read the Prod HTTPRoute'
+route_json=$(kubectl -n app-prod get virtualservice mini-commerce -o json) || fail 'unable to read the Prod VirtualService'
 jq -e '
   .metadata.name == "mini-commerce" and .metadata.namespace == "app-prod" and
-  (.spec.rules | length) == 1 and (.spec.rules[0].backendRefs | length) == 2 and
-  ([.spec.rules[0].backendRefs[] | {name,port,weight}] | sort_by(.name)) ==
-    [{name:"mini-commerce-canary",port:80,weight:0},{name:"mini-commerce-stable",port:80,weight:100}] and
-  ([.spec.rules[0].backendRefs[].weight] | add) == 100
-' <<<"$route_json" >/dev/null || fail 'Prod HTTPRoute is not routing 100 percent to the stable service'
+  (.spec.http | length) == 1 and (.spec.http[0].route | length) == 2 and
+  ([.spec.http[0].route[] | {name:.destination.host,port:.destination.port.number,weight}] | sort_by(.name)) ==
+    [{name:"mini-commerce-canary",port:3000,weight:0},{name:"mini-commerce-stable",port:3000,weight:100}] and
+  ([.spec.http[0].route[].weight] | add) == 100
+' <<<"$route_json" >/dev/null || fail 'Prod VirtualService is not routing 100 percent to the stable service'
 
 cluster_account=${cluster_arn#arn:aws:eks:$AWS_REGION:}
 cluster_account=${cluster_account%%:*}
@@ -204,6 +209,9 @@ jq -n --arg repository "$image_repository" --arg digest "$image_digest" \
   }
 ' >"$tmp" || fail 'failed to construct Prod baseline evidence'
 validate_record "$tmp" "$evidence_grade" "$clock_now"
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
+fi
 if [[ -e "$output" ]]; then
   [[ -f "$output" && ! -L "$output" ]] || fail 'Prod baseline output is not a regular non-symlink file'
   validate_record "$output" "$evidence_grade" "$clock_now"
@@ -215,4 +223,7 @@ fi
 chmod 600 "$tmp"
 mv "$tmp" "$output"
 trap - EXIT
+if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
+  ruby "$script_dir/write-incident-companion.rb" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
+fi
 echo "[$evidence_grade] wrote $output"

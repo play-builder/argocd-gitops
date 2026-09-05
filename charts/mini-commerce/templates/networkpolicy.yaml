@@ -1,187 +1,41 @@
-{{- if .Values.networkPolicy.enabled }}
-{{- include "mini-commerce.validateNetworkPolicy" . }}
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "mini-commerce.fullname" . }}
-  namespace: {{ include "mini-commerce.namespace" . }}
-  labels:
-    {{- include "mini-commerce.labels" . | nindent 4 }}
-spec:
-  podSelector:
-    matchLabels:
-      {{- include "mini-commerce.selectorLabels" . | nindent 6 }}
-  policyTypes: [Ingress, Egress]
-  ingress:
-    - from:
-        {{- range .Values.networkPolicy.gateway.sourceCidrs }}
-        - ipBlock:
-            cidr: {{ . | quote }}
-        {{- end }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.publicPort }}
-    - from:
-        {{- range .Values.networkPolicy.gateway.healthCheckSourceCidrs }}
-        - ipBlock:
-            cidr: {{ . | quote }}
-        {{- end }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.managementPort }}
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.telemetry.namespaceLabels | nindent 14 }}
-          podSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.telemetry.podLabels | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.managementPort }}
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 14 }}
-          podSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.telemetry.namespaceLabels | nindent 14 }}
-          podSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.telemetry.podLabels | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.telemetry.port }}
 {{- if .Values.database.enabled }}
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "mini-commerce.databaseFullname" . }}
+  name: mini-commerce-database-egress
   namespace: {{ include "mini-commerce.namespace" . }}
-  labels:
-    {{- include "mini-commerce.labels" . | nindent 4 }}
-    app.kubernetes.io/component: database
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: postgresql
-      app.kubernetes.io/instance: {{ .Release.Name }}
-      app.kubernetes.io/component: database
-  policyTypes: [Ingress, Egress]
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
-            matchExpressions:
-              - key: app.kubernetes.io/component
-                operator: In
-                values: [application, migration]
-        {{- if .Values.recovery.restoreEnabled }}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.recovery.namespace }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: recovery
-        {{- end }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.database.port }}
-  egress: []
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "mini-commerce.fullname" . }}-database-clients
-  namespace: {{ include "mini-commerce.namespace" . }}
-  labels:
-    {{- include "mini-commerce.labels" . | nindent 4 }}
-    app.kubernetes.io/component: database-clients
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/part-of: mini-commerce
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
         values: [application, migration]
-  policyTypes: [Ingress, Egress]
-  ingress: []
+  policyTypes: [Egress]
   egress:
     - to:
         - namespaceSelector:
             matchLabels:
-              {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 14 }}
+              kubernetes.io/metadata.name: kube-system
           podSelector:
             matchLabels:
-              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
+              k8s-app: kube-dns
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    {{- if eq .Values.environment "prod" }}
+    {{- range .Values.database.allowedCidrs }}
+    {{- include "mini-commerce.validateCIDR" (dict "cidr" . "field" "database.allowedCidrs" "privateOnly" true) }}
+    - to:
+        - ipBlock:
+            cidr: {{ . | quote }}
+      ports: [{protocol: TCP, port: 5432}]
+    {{- end }}
+    {{- else }}
     - to:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: postgresql
-              app.kubernetes.io/instance: {{ .Release.Name }}
               app.kubernetes.io/component: database
-      ports:
-        - protocol: TCP
-          port: {{ .Values.database.port }}
-{{- if .Values.recovery.restoreEnabled }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "mini-commerce.fullname" . }}-recovery
-  namespace: {{ .Values.recovery.namespace }}
-  labels:
-    {{- include "mini-commerce.labels" . | nindent 4 }}
-    app.kubernetes.io/component: recovery
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/component: recovery
-  policyTypes: [Ingress, Egress]
-  ingress: []
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.dns.namespaceLabels | nindent 14 }}
-          podSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ include "mini-commerce.namespace" . }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: postgresql
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              app.kubernetes.io/component: database
-      ports:
-        - protocol: TCP
-          port: {{ .Values.database.port }}
-{{- end }}
-{{- end }}
+      ports: [{protocol: TCP, port: 5432}]
+    {{- end }}
 {{- end }}

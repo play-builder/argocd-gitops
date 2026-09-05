@@ -19,7 +19,13 @@ def strict(schema)
  if schema['properties'] && !schema['x-kubernetes-preserve-unknown-fields'] && !schema.key?('additionalProperties')
   schema['additionalProperties']=false
  end
- schema.each_value{|v|v.is_a?(Array) ? v.each{|x|strict(x)} : strict(v)}
+ # Property maps are not schemas. A provider can legitimately name a field
+ # "properties"; injecting additionalProperties into that map corrupts the schema.
+ %w[properties patternProperties definitions $defs].each do |key|
+  (schema[key] || {}).each_value{|v|strict(v)} if schema[key].is_a?(Hash)
+ end
+ %w[items additionalProperties additionalItems not if then else].each{|key|strict(schema[key])}
+ %w[allOf anyOf oneOf].each{|key|(schema[key] || []).each{|v|strict(v)}}
 end
 begin
  lock=YAML.load_file(ENV.fetch('VERSION_LOCK','versions.lock.yaml'))
@@ -28,7 +34,8 @@ begin
  cache=ENV.fetch('CHART_CACHE_DIR',File.join(Dir.tmpdir,'mini-commerce-locked-charts'))
  FileUtils.mkdir_p(cache)
  charts={}
- lock.fetch('delivery').fetch('helmSources').each do |c|
+ operation_sources=lock.fetch('delivery').fetch('operationSchemaSources')
+ (lock.fetch('delivery').fetch('helmSources')+[operation_sources.fetch('chaosMesh')]).each do |c|
   raise 'chart digest required' unless c.fetch('sha256').match?(/\A[0-9a-f]{64}\z/)
   path=File.join(cache,"#{c.fetch('chart')}-#{c.fetch('version')}.tgz")
   unless File.exist?(path)
@@ -50,6 +57,12 @@ begin
   raise 'chart identity mismatch' unless meta['name']==c['chart'] && meta['version'].to_s==c['version'].to_s
   charts[[c['chart'],c['version']]]=path
  end
+ snapshots=operation_sources.fetch('snapshotCrds').map do |source|
+  path=File.join(cache,source.fetch('file'))
+  download(source.fetch('url'),path) unless File.exist?(path)
+  raise 'snapshot schema checksum mismatch' unless Digest::SHA256.file(path).hexdigest==source.fetch('sha256')
+  path
+ end
  if ARGV.include?('--locks-only')
   puts 'PASS: every chart archive checksum and chart identity verified'
   exit
@@ -57,7 +70,7 @@ begin
  Dir.mktmpdir('gitops-schema-') do |tmp|
   schemas=File.join(tmp,'schemas');FileUtils.mkdir_p(schemas)
   crds=[]
-  [['argo-cd','10.4.3'],['argo-rollouts','2.42.0'],['external-secrets','2.10.0'],['policy-controller','0.10.5'],['aws-load-balancer-controller','3.5.0'],['base','1.31.0']].each do |key|
+  [['argo-cd','10.4.3'],['argo-rollouts','2.42.0'],['external-secrets','2.10.0'],['policy-controller','0.10.5'],['aws-load-balancer-controller','3.5.0'],['base','1.31.0'],['chaos-mesh','2.8.0']].each do |key|
    args=['helm','template','schema',charts.fetch(key),'--include-crds']
    args+=['--set','clusterName=static-fixture'] if key[0]=='aws-load-balancer-controller'
    crds+=YAML.load_stream(run(*args)).compact.select{|d|d['kind']=='CustomResourceDefinition'}
@@ -67,6 +80,7 @@ begin
   download(gateway.fetch('url'),gp) unless File.exist?(gp)
   raise 'Gateway API checksum mismatch' unless Digest::SHA256.file(gp).hexdigest==gateway['sha256']
   crds+=YAML.load_stream(File.read(gp)).compact
+  snapshots.each{|path|crds+=YAML.load_stream(File.read(path)).compact}
   crds.each do |d|
    next unless d['kind']=='CustomResourceDefinition'
    d.fetch('spec').fetch('versions').select{|v|v['served']}.each do |v|
@@ -85,11 +99,15 @@ begin
    if Dir.exist?("platform/istio/overlays/#{env}")
     manifest+=YAML.load_stream(run('kubectl','kustomize',"platform/istio/overlays/#{env}")).compact
    end
+   manifest+=YAML.load_stream(run('kubectl','kustomize',"platform/security/#{env}")).compact
    args=['helm','template','mini-commerce','charts/mini-commerce','-f',"envs/#{env}/values.yaml",'-f',"envs/#{env}/pre-cutover-ownership-values.yaml",
     '--set-string','image.repository=example.invalid/mini-commerce','--set-string',"image.digest=sha256:#{'a'*64}",
     '--set-string','database.migrationImage.repository=example.invalid/mini-commerce','--set-string',"database.migrationImage.digest=sha256:#{'a'*64}"]
    manifest+=YAML.load_stream(run(*args)).compact
   end
+  manifest+=YAML.load_stream(run('helm','template','mini-commerce','charts/mini-commerce-db-dev')).compact
+  manifest+=YAML.load_stream(run('helm','template','mini-commerce','charts/mini-commerce-recovery','--set-string','snapshotHandle=snap-0123456789abcdef0')).compact
+  manifest+=YAML.load_stream(run('kubectl','kustomize','experiments/chaos/dev')).compact
   manifest=YAML.load_stream(File.read(ARGV[ARGV.index('--file')+1])).compact if ARGV.include?('--file')
   remote=[]
   manifest.select{|d|d['kind']=='Application' && d.dig('spec','source','chart')}.each do |d|
@@ -105,7 +123,12 @@ begin
   puts "Pinned upstream CRD definitions used separately: #{crd_count}"
   path=File.join(tmp,'rendered.yaml');File.write(path,manifest.map{|d|YAML.dump(d)}.join)
   schema_uri=File.join(schemas,'{{.Group}}-{{.ResourceKind}}-{{.ResourceAPIVersion}}.json')
-  puts run('kubeconform','-strict','-summary','-kubernetes-version','1.36.0','-schema-location',schema_uri,'-schema-location','default',path)
+  FileUtils.mkdir_p(File.join(cache,'kubernetes-schemas'))
+  puts run('kubeconform','-strict','-summary','-cache',File.join(cache,'kubernetes-schemas'),'-kubernetes-version','1.36.0','-schema-location',schema_uri,'-schema-location','default',path)
+  %w[StatefulSet VolumeSnapshot VolumeSnapshotContent PodChaos NetworkChaos].each do |kind|
+   raise "operation manifest absent: #{kind}" unless manifest.any?{|d|d['kind']==kind}
+   puts "PASS: operation schema #{kind}"
+  end unless ARGV.include?('--file')
   if ARGV.include?('--negative')
    rollout=manifest.find{|d|d['kind']=='Rollout'};raise 'Rollout fixture missing' unless rollout
    rollout['spec']['unknownInvalidField']=true

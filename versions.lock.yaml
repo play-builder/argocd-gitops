@@ -18,6 +18,20 @@ tooling:
   setupKubectlActionSha: "829323503d1be3d00ca8346e5391ca0b07a9ab0d"
 
 delivery:
+  operationSchemaSources:
+    chaosMesh:
+      owner: EKS-infra
+      chart: chaos-mesh
+      version: 2.8.0
+      url: https://charts.chaos-mesh.org/chaos-mesh-2.8.0.tgz
+      sha256: d8d650368b632ea6409971a4778a77475ac47573861a378326a2ca45561d2aae
+    snapshotCrds:
+      - file: volumesnapshotcontents-v8.2.0.yaml
+        url: https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+        sha256: 895a3c1e73b60f06a0deb566dd123d01bdf1b2efc5d5ff5231ff8bbcf42dafc7
+      - file: volumesnapshots-v8.2.0.yaml
+        url: https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+        sha256: b032116e987fb1d7d93cec7d942833adeb9d95c9bdc7e00c10b280c2fe4a6c33
   platformImages:
     istioCni:
       version: 1.31.0

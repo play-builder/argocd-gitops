@@ -29,8 +29,6 @@ serviceAccount:
   name: mini-commerce
 
 app:
-  failureRate: "0"
-  latencyMs: "0"
   readyDelayMs: "0"
   shutdownDelayMs: "5000"
   secretKeys: "DB_HOST,DB_PASSWORD,API_KEY"
@@ -58,7 +56,7 @@ probes:
     failureThreshold: 3
 
 service:
-  port: 80
+  port: 3000
   publicPort: 3000
   managementPort: 3001
 
@@ -75,14 +73,14 @@ podDisruptionBudget:
 topologySpread:
   enabled: true
   maxSkew: 1
-  whenUnsatisfiable: ScheduleAnyway
+  whenUnsatisfiable: DoNotSchedule
 
 externalSecrets:
   enabled: false
   awsRegion: ""
-  readerServiceAccount: external-secrets-reader
-  createReaderServiceAccount: true
-  createSecretStore: true
+  readerServiceAccount: mini-commerce-secrets-reader
+  createReaderServiceAccount: false
+  createSecretStore: false
   readerRoleArn: ""
   refreshInterval: 1h
   runtime:
@@ -90,11 +88,15 @@ externalSecrets:
     targetSecretName: mini-commerce-runtime
   database:
     remoteSecretName: ""
-    targetSecretName: mini-commerce-db
+    targetSecretName: mini-commerce-database
+  migration:
+    remoteSecretName: ""
+    targetSecretName: mini-commerce-migration
 
-# PostgreSQL stays opt-in so the default deployment remains stateless.
+# Database endpoint and credentials are external to this chart.
 database:
   enabled: false
+  allowedCidrs: []
   terminationGracePeriodSeconds: 120
   host: ""
   port: 5432
@@ -125,18 +127,8 @@ database:
       cpu: 500m
       memory: 512Mi
 
-gateway:
-  enabled: true
-  createClass: true
-  className: aws-alb
-  controllerName: gateway.k8s.aws/alb
-  name: mini-commerce
-  scheme: internet-facing
-  sourceRanges: []
-  hostname: ""
-  certificateArn: ""
-  httpEnabled: true
-  httpsEnabled: false
+routing:
+  hostname: mini-commerce.dev.example.com
 
 rollout:
   rollbackWindow:
@@ -151,6 +143,7 @@ rollout:
     consecutiveErrorLimit: 5
     minimumRequestRate: 0.1
     successRateThreshold: 99
+    latencyThresholdMs: 500
   canary:
     manualPromotion: false
     steps:
@@ -193,32 +186,8 @@ networkPolicy:
     podLabels: {}
     port: 4318
 
-recovery:
-  restoreEnabled: false
-  namespace: app-recovery
-  snapshotClassName: ebs.csi.aws.com
-  snapshotDriver: ebs.csi.aws.com
-  snapshotContentName: mini-commerce-postgresql-recovery-content
-  snapshotName: mini-commerce-postgresql-recovery-snapshot
-  pvcName: mini-commerce-postgresql-recovery
-  snapshotHandle: ""
-  cleanupLabel: recovery
-  source:
-    namespace: app-dev
-    pvcName: data-mini-commerce-postgresql-0
-    snapshotName: mini-commerce-postgresql-snapshot
-snapshot:
-  captureEnabled: false
 maintenance:
   writersStopped: false
-
-chaos:
-  enabled: false
-  environment: dev
-  maximumDuration: 5m
-  targetLabels:
-    app.kubernetes.io/name: mini-commerce
-    app.kubernetes.io/component: application
 
 courseCleanup:
   workloadsDisabled: false

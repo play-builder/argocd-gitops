@@ -1,61 +1,35 @@
 {{- if and (eq .Values.workload.kind "Rollout") .Values.rollout.analysis.enabled }}
-{{- $address := required "rollout.analysis.prometheusAddress is required when analysis is enabled" .Values.rollout.analysis.prometheusAddress }}
+{{- $selector := printf "reporter=\"destination\",destination_canonical_service=\"mini-commerce\",destination_workload_namespace=\"%s\",destination_rollout_hash=\"{{args.latest-hash}}\"" (include "mini-commerce.namespace" .) }}
+{{- $rate := printf "sum(rate(istio_requests_total{%s}[2m])) or vector(0)" $selector }}
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   name: mini-commerce-success-rate
   namespace: {{ include "mini-commerce.namespace" . }}
-  labels:
-    {{- include "mini-commerce.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   args:
     - name: latest-hash
   metrics:
-    - name: request-rate
+    {{- range $metric := list
+      (dict "name" "request-rate" "condition" (printf "result[0] >= %v" $.Values.rollout.analysis.minimumRequestRate) "query" $rate)
+      (dict "name" "success-rate" "condition" (printf "result[0] >= %v" $.Values.rollout.analysis.successRateThreshold) "query" (printf "(1 - ((sum(rate(istio_requests_total{%s,response_code=~\"5..\"}[2m])) or vector(0)) / clamp_min((%s), 0.001))) * 100" $selector $rate))
+      (dict "name" "latency" "condition" (printf "result[0] <= %v" $.Values.rollout.analysis.latencyThresholdMs) "query" (printf "histogram_quantile(0.95, sum by (le) (rate(istio_request_duration_milliseconds_bucket{%s}[2m])))" $selector))
+    }}
+    - name: {{ $metric.name }}
       initialDelay: 30s
-      interval: {{ .Values.rollout.analysis.interval }}
-      count: {{ .Values.rollout.analysis.count }}
-      failureLimit: {{ .Values.rollout.analysis.failureLimit }}
-      consecutiveErrorLimit: {{ .Values.rollout.analysis.consecutiveErrorLimit }}
-      successCondition: result[0] >= {{ .Values.rollout.analysis.minimumRequestRate }}
+      interval: {{ $.Values.rollout.analysis.interval }}
+      count: {{ $.Values.rollout.analysis.count }}
+      failureLimit: {{ $.Values.rollout.analysis.failureLimit }}
+      consecutiveErrorLimit: {{ $.Values.rollout.analysis.consecutiveErrorLimit }}
+      successCondition: {{ printf "len(result) == 1 && !isNaN(result[0]) && (%s)" $metric.condition | quote }}
       provider:
         prometheus:
-          address: {{ $address | quote }}
+          address: {{ required "analysis prometheus address required" $.Values.rollout.analysis.prometheusAddress | quote }}
           authentication:
             sigv4:
-              region: {{ .Values.rollout.analysis.awsRegion | quote }}
-          query: |
-            sum(rate(http_requests_total{
-              app="mini-commerce",
-              namespace="{{ include "mini-commerce.namespace" . }}",
-              rollouts_pod_template_hash="{{`{{args.latest-hash}}`}}"
-            }[2m])) or vector(0)
-    - name: success-rate
-      initialDelay: 30s
-      interval: {{ .Values.rollout.analysis.interval }}
-      count: {{ .Values.rollout.analysis.count }}
-      failureLimit: {{ .Values.rollout.analysis.failureLimit }}
-      consecutiveErrorLimit: {{ .Values.rollout.analysis.consecutiveErrorLimit }}
-      successCondition: result[0] >= {{ .Values.rollout.analysis.successRateThreshold }}
-      provider:
-        prometheus:
-          address: {{ $address | quote }}
-          authentication:
-            sigv4:
-              region: {{ .Values.rollout.analysis.awsRegion | quote }}
-          query: |
-            (1 - (
-              (sum(rate(http_requests_total{
-                app="mini-commerce",
-                namespace="{{ include "mini-commerce.namespace" . }}",
-                rollouts_pod_template_hash="{{`{{args.latest-hash}}`}}",
-                status=~"5.."
-              }[2m])) or vector(0))
-              /
-              clamp_min((sum(rate(http_requests_total{
-                app="mini-commerce",
-                namespace="{{ include "mini-commerce.namespace" . }}",
-                rollouts_pod_template_hash="{{`{{args.latest-hash}}`}}"
-              }[2m])) or vector(0)), 0.001)
-            )) * 100
+              region: {{ $.Values.rollout.analysis.awsRegion | quote }}
+          query: {{ $metric.query | quote }}
+    {{- end }}
 {{- end }}

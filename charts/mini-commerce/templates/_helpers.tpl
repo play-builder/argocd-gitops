@@ -62,9 +62,9 @@ app.kubernetes.io/component: application
 {{- printf "%s-telemetry" (include "mini-commerce.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "mini-commerce.validateGatewayCIDR" -}}
+{{- define "mini-commerce.validateCIDR" -}}
 {{- $cidr := .cidr -}}
-{{- $error := printf "networkPolicy.gateway.%s must contain bounded CIDRs in canonical IPv4 network notation" .field -}}
+{{- $error := printf "%s must contain bounded CIDRs in canonical IPv4 network notation" .field -}}
 {{- if not (regexMatch "^((0|[1-9][0-9]{0,2})\\.){3}(0|[1-9][0-9]{0,2})/([1-9]|[12][0-9]|3[0-2])$" $cidr) -}}
 {{- fail $error -}}
 {{- end -}}
@@ -98,33 +98,6 @@ app.kubernetes.io/component: application
 {{- end -}}
 {{- end -}}
 
-{{- define "mini-commerce.validateNetworkPolicy" -}}
-{{- if .Values.networkPolicy.enabled -}}
-{{- if eq (len .Values.networkPolicy.gateway.sourceCidrs) 0 -}}
-{{- fail "networkPolicy.gateway.sourceCidrs must contain platform-validated CIDRs when NetworkPolicy is enabled" -}}
-{{- end -}}
-{{- range $cidr := .Values.networkPolicy.gateway.sourceCidrs -}}
-{{- include "mini-commerce.validateGatewayCIDR" (dict "cidr" $cidr "field" "sourceCidrs" "privateOnly" false) -}}
-{{- end -}}
-{{- if eq (len .Values.networkPolicy.gateway.healthCheckSourceCidrs) 0 -}}
-{{- fail "networkPolicy.gateway.healthCheckSourceCidrs must contain private ALB health-check CIDRs when NetworkPolicy is enabled" -}}
-{{- end -}}
-{{- range $cidr := .Values.networkPolicy.gateway.healthCheckSourceCidrs -}}
-{{- include "mini-commerce.validateGatewayCIDR" (dict "cidr" $cidr "field" "healthCheckSourceCidrs" "privateOnly" true) -}}
-{{- end -}}
-{{- if eq (len .Values.networkPolicy.telemetry.namespaceLabels) 0 -}}
-{{- fail "networkPolicy.telemetry.namespaceLabels must select the platform collector" -}}
-{{- end -}}
-{{- if eq (len .Values.networkPolicy.telemetry.podLabels) 0 -}}
-{{- fail "networkPolicy.telemetry.podLabels must select the platform collector" -}}
-{{- end -}}
-{{- $telemetryPort := int .Values.networkPolicy.telemetry.port -}}
-{{- if or (lt $telemetryPort 1) (gt $telemetryPort 65535) -}}
-{{- fail "networkPolicy.telemetry.port must be between 1 and 65535" -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-
 {{- define "mini-commerce.databaseImage" -}}
 {{- $repository := required "database.image.repository is required" .Values.database.image.repository -}}
 {{- $digest := required "database.image.digest is required; mutable tags are not accepted" .Values.database.image.digest -}}
@@ -153,7 +126,15 @@ app.kubernetes.io/component: application
 metadata:
   labels:
     {{- include "mini-commerce.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/part-of: mini-commerce
+    service.istio.io/canonical-name: mini-commerce
   annotations:
+    prometheus.istio.io/merge-metrics: "false"
+    sidecar.istio.io/rewriteAppHTTPProbers: "true"
+    sidecar.istio.io/proxyCPU: "100m"
+    sidecar.istio.io/proxyCPULimit: "500m"
+    sidecar.istio.io/proxyMemory: "128Mi"
+    sidecar.istio.io/proxyMemoryLimit: "256Mi"
     {{- if .Values.telemetry.enabled }}
     prometheus.io/scrape: "true"
     prometheus.io/path: /metrics
@@ -178,6 +159,18 @@ spec:
       labelSelector:
         matchLabels:
           {{- include "mini-commerce.selectorLabels" . | nindent 10 }}
+    - maxSkew: {{ .Values.topologySpread.maxSkew }}
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
+      labelSelector:
+        matchLabels:
+          {{- include "mini-commerce.selectorLabels" . | nindent 10 }}
+  {{- end }}
+  {{- if and .Values.database.enabled (eq .Values.environment "prod") }}
+  volumes:
+    - name: rds-ca
+      configMap:
+        name: mini-commerce-rds-ca
   {{- end }}
   containers:
     - name: mini-commerce
@@ -196,6 +189,8 @@ spec:
           containerPort: {{ .Values.service.managementPort }}
           protocol: TCP
       env:
+        - name: APP_ENV
+          value: {{ ternary "production" "development" (eq .Values.environment "prod") | quote }}
         - name: PORT
           value: {{ .Values.service.publicPort | quote }}
         - name: MANAGEMENT_PORT
@@ -210,10 +205,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        - name: FAILURE_RATE
-          value: {{ .Values.app.failureRate | quote }}
-        - name: LATENCY_MS
-          value: {{ .Values.app.latencyMs | quote }}
         - name: READY_DELAY_MS
           value: {{ .Values.app.readyDelayMs | quote }}
         - name: SHUTDOWN_DELAY_MS
@@ -271,7 +262,11 @@ spec:
               name: {{ include "mini-commerce.databaseSecretName" . }}
               key: DB_PASSWORD
         - name: DB_SSL
-          value: "false"
+          value: {{ ternary "true" "false" (eq .Values.environment "prod") | quote }}
+        {{- if eq .Values.environment "prod" }}
+        - name: NODE_EXTRA_CA_CERTS
+          value: /etc/rds-ca/global-bundle.pem
+        {{- end }}
         {{- end }}
       {{- if .Values.externalSecrets.enabled }}
       envFrom:
@@ -292,6 +287,12 @@ spec:
         initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
         periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
         failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+      {{- if and .Values.database.enabled (eq .Values.environment "prod") }}
+      volumeMounts:
+        - name: rds-ca
+          mountPath: /etc/rds-ca
+          readOnly: true
+      {{- end }}
       resources:
         {{- toYaml .Values.resources | nindent 8 }}
 {{- end -}}

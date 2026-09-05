@@ -68,15 +68,6 @@
         ]
       },
       {
-        "from": [
-          {
-            "source": {
-              "principals": [
-                "cluster.local/ns/opentelemetry-operator-system/sa/adot-collector-prometheus-collector"
-              ]
-            }
-          }
-        ],
         "to": [
           {
             "operation": {
@@ -186,6 +177,10 @@
           {
             "protocol": "TCP",
             "port": 3001
+          },
+          {
+            "protocol": "TCP",
+            "port": 15090
           }
         ]
       }
@@ -406,5 +401,32 @@
         ]
       }
     ]
+  }
+}
+---
+{
+  "apiVersion": "security.istio.io/v1",
+  "kind": "PeerAuthentication",
+  "metadata": {
+    "name": "mini-commerce-management",
+    "namespace": "app-prod",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-20"
+    }
+  },
+  "spec": {
+    "selector": {
+      "matchLabels": {
+        "app.kubernetes.io/name": "mini-commerce"
+      }
+    },
+    "mtls": {
+      "mode": "STRICT"
+    },
+    "portLevelMtls": {
+      "3001": {
+        "mode": "DISABLE"
+      }
+    }
   }
 }

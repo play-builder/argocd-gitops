@@ -145,7 +145,9 @@ case_least_privilege() {
   render_bootstrap prod "$bootstrap_prod"
 
   for manifest in "$bootstrap_dev" "$bootstrap_prod"; do
-    assert_document_count "$manifest" AppProject 4
+    # New platform Applications have separate bounded AppProjects.
+    yq eval-all -o=json '[select(.kind == "AppProject") | .metadata.name]' "$manifest" |
+      jq -e 'length == (unique | length)' >/dev/null || fail "duplicate AppProject identity"
     yq eval-all -o=json '[select(.kind == "AppProject")]' "$manifest" | jq -e '
       all(.[].spec.sourceRepos[]; . != "*") and
       all(.[].spec.destinations[]; .namespace != "*") and
@@ -265,10 +267,10 @@ case_reloader_diff() {
     ' "$manifest" | jq -e '
       (map(select(.group == "apps" and .kind == "Deployment")) |
         length == 1 and .[0].jsonPointers ==
-          ["/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"]) and
+          ["/spec/replicas","/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"]) and
       (map(select(.group == "argoproj.io" and .kind == "Rollout")) |
         length == 1 and .[0].jsonPointers ==
-          ["/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"]) and
+          ["/spec/replicas","/spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from"]) and
       (map(select(
         (.jsonPointers // []) | any(
           . == "/metadata/annotations" or

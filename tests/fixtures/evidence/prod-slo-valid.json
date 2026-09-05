@@ -2,17 +2,76 @@
   "schemaVersion": "course.prod-slo/v1",
   "evidenceGrade": "CLOUD_RUNTIME",
   "status": "PASS",
-  "source": {"repository": "OWNER/cicd-course-sample-app", "sha": "0123456789abcdef0123456789abcdef01234567"},
-  "image": {"repository": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce", "indexDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+  "source": {
+    "repository": "OWNER/cicd-course-sample-app",
+    "sha": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "image": {
+    "repository": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce",
+    "indexDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
   "gitopsRevision": "fedcba9876543210fedcba9876543210fedcba98",
   "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",
   "region": "ap-northeast-2",
   "evidenceId": "prod-slo-20260903T013000Z",
-  "rollout": {"name":"mini-commerce","uid":"22222222-2222-2222-2222-222222222222","revision":2,"stableHash":"stable-hash","currentPodHash":"stable-hash","trafficWeight":100,"phase":"Healthy"},
-  "analysisRun": {"name":"mini-commerce-2","uid":"33333333-3333-3333-3333-333333333333","phase":"Successful","templateName":"mini-commerce-success-rate"},
+  "rollout": {
+    "name": "mini-commerce",
+    "uid": "22222222-2222-2222-2222-222222222222",
+    "revision": 2,
+    "stableHash": "stable-hash",
+    "currentPodHash": "stable-hash",
+    "trafficWeight": 100,
+    "phase": "Healthy"
+  },
+  "analysisRun": {
+    "name": "mini-commerce-2",
+    "uid": "33333333-3333-3333-3333-333333333333",
+    "phase": "Successful",
+    "templateName": "mini-commerce-success-rate"
+  },
   "metricResults": [
-    {"name":"request-rate","phase":"Successful","measurements":[{"value":"12.5","phase":"Failed","startedAt":"2026-09-03T01:20:00Z","finishedAt":"2026-09-03T01:20:30Z"},{"value":"14.2","phase":"Successful","startedAt":"2026-09-03T01:21:00Z","finishedAt":"2026-09-03T01:21:30Z"}]},
-    {"name":"success-rate","phase":"Successful","measurements":[{"value":"99.9","phase":"Successful","startedAt":"2026-09-03T01:21:00Z","finishedAt":"2026-09-03T01:21:30Z"}]}
+    {
+      "name": "request-rate",
+      "phase": "Successful",
+      "measurements": [
+        {
+          "value": "12.5",
+          "phase": "Failed",
+          "startedAt": "2026-09-03T01:20:00Z",
+          "finishedAt": "2026-09-03T01:20:30Z"
+        },
+        {
+          "value": "14.2",
+          "phase": "Successful",
+          "startedAt": "2026-09-03T01:21:00Z",
+          "finishedAt": "2026-09-03T01:21:30Z"
+        }
+      ]
+    },
+    {
+      "name": "success-rate",
+      "phase": "Successful",
+      "measurements": [
+        {
+          "value": "99.9",
+          "phase": "Successful",
+          "startedAt": "2026-09-03T01:21:00Z",
+          "finishedAt": "2026-09-03T01:21:30Z"
+        }
+      ]
+    },
+    {
+      "name": "latency",
+      "phase": "Successful",
+      "measurements": [
+        {
+          "phase": "Successful",
+          "value": "125",
+          "startedAt": "2026-09-03T01:20:00Z",
+          "finishedAt": "2026-09-03T01:20:30Z"
+        }
+      ]
+    }
   ],
-  "observedAt":"2026-09-03T01:22:00Z"
+  "observedAt": "2026-09-03T01:22:00Z"
 }
