@@ -34,3 +34,32 @@ out,s=run(record,dr);raise "incident validator missing: #{out}" unless s.success
  _,status=run(r,d);raise 'invalid incident/DR binding accepted' if status.success?
 end
 puts 'STATIC_VERIFIED: incident/DR parser rejects identity mismatch, metadata-only and grade uplift'
+require 'tmpdir'
+Dir.mktmpdir('incident-consumer-') do |dir|
+ source=File.join(File.realpath(dir),'baseline.json')
+ File.write(source,JSON.generate({'evidenceGrade'=>'CLOUD_RUNTIME','clusterArn'=>arn,'gitopsRevision'=>sha,'image'=>{'indexDigest'=>digest},'rollout'=>{'revision'=>2,'trafficWeight'=>100}}))
+ raw_dr=JSON.pretty_generate(dr)+"\n"
+ incident=Marshal.load(Marshal.dump(record))
+ incident['drMetadataSha256']="sha256:#{Digest::SHA256.hexdigest(raw_dr)}"
+ companion={'schemaVersion'=>'platform.runtime-capture/v1','evidenceGrade'=>'CLOUD_RUNTIME','sourceSha256'=>"sha256:#{Digest::SHA256.file(source).hexdigest}",'incident'=>incident,'drMetadata'=>raw_dr}
+ path="#{source}.platform.json"
+ File.write(path,JSON.generate(companion))
+ output,status=Open3.capture2e('ruby','scripts/verify-incident-companion.rb',source)
+ raise "actual companion consumer missing: #{output}" unless status.success? && output.include?('STATIC_VERIFIED')
+ [->(x){x['sourceSha256']='sha256:'+'0'*64},
+  ->(x){x['evidenceGrade']='STATIC_VERIFIED'},
+  ->(x){x['incident'].delete('notificationEventId')},
+  ->(x){x['drMetadata']+=" "},
+  ->(x){x['incident']['applicationRevision']='d'*40},
+  ->(x){x['incident']['rolloutRevision']=3}
+ ].each do |mutate|
+  bad=Marshal.load(Marshal.dump(companion));mutate.call(bad)
+  File.write(path,JSON.generate(bad))
+  _,status=Open3.capture2e('ruby','scripts/verify-incident-companion.rb',source)
+  raise 'invalid source/incident companion accepted' if status.success?
+ end
+ File.unlink(path)
+ _,status=Open3.capture2e('ruby','scripts/verify-incident-companion.rb',source)
+ raise 'missing incident companion accepted' if status.success?
+end
+puts 'STATIC_VERIFIED: production source companion requires exact bytes and complete incident/DR binding'

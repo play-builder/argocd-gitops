@@ -10,6 +10,17 @@ Metadata JSON만으로 복구할 수 없다. 실제 export payload는 encrypted,
 3. 격리 bootstrap에서 ExternalSecrets Ready를 확인하고 import 후 Application revisions와 health를 raw capture한다.
 4. secret-free metadata만 incident evidence에 결속한다. payload, Secret 또는 production restore output은 Git에 넣지 않는다.
 
+EKS 구현은 `scripts/lib/argocd-backup.py`와 `docs/runbooks/argocd-protected-backup.md`를 기준으로 한다.
+export 결과의 CAPTURED와 pure evaluator의 LOCAL_VERIFIED는 GitOps release 증거로 거부된다.
+실제 isolated import receipt와 S3/AWS/Kubernetes 관측을 검증한 verify 결과만 CLOUD_RUNTIME으로 소비한다.
+격리 DB/Secret destination 설정은 backup baseline 이전 승인된 동일 Git SHA에 준비한다.
+복구 Application이 Prod DB를 가리키면 sync하지 말고 중단한다.
+`capture-incident-binding.rb DR_METADATA_JSON REVIEWED_NOTIFICATION_EVENT_ID`는 별도 검토한
+notification provider receipt ID를 요구한다. 이 인수 자체는 notification delivery 증명이 아니며
+해당 provider receipt 원문/시각/대상과 실제 수신 확인은 운영자가 별도로 보존한다.
+production baseline/SLO/rollback 파일은 `.platform.json` companion의 원문 DR metadata 및 source
+checksum과 함께 검증한다. companion 누락 또는 byte mismatch는 canonical evidence gate가 거부한다.
+
 RDS PITR은 별도 recovery Terraform root/state에서 새 private RDS를 생성하고 실제 CA/retention/pending modification convergence 후 SQL 검증한다.
 Dev snapshot inspection Job은 PG_VERSION 파일 확인만 수행하므로 SQL/PITR/Argo 복구 성공 증거가 아니다.
 

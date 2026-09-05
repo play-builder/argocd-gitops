@@ -199,6 +199,9 @@ case_real_path() {
   [[ ! -f "$deployment" ]] || validate_deployment "$deployment"
   [[ ! -f "$slo" ]] || validate_slo "$slo"
   [[ ! -f "$baseline" ]] || validate_baseline "$baseline"
+  for file in "$baseline" "$repository_root/evidence/prod/slo.json" "$repository_root/evidence/prod/rollback-candidates.json"; do
+    [[ ! -f "$file" ]] || ruby "$repository_root/scripts/verify-incident-companion.rb" "$file"
+  done
   echo "PASS: deployment, SLO, and Prod baseline real evidence paths are absent or provenance-guarded."
 }
 

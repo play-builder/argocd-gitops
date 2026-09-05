@@ -31,6 +31,7 @@ begin
   s=JSON.parse(File.read(source_path))
   check(s['evidenceGrade']=='CLOUD_RUNTIME' && s['clusterArn']==r['clusterArn'] && s['gitopsRevision']==r['applicationRevision'],'capture source identity mismatch')
   check(s.dig('image','indexDigest')==r['imageDigest'],'capture source image mismatch') if s.key?('image')
+  check(s.dig('rollout','revision')==r['rolloutRevision'] && s.dig('rollout','trafficWeight')==100,'capture source Rollout identity mismatch') if s.key?('rollout')
  end
  puts 'STATIC_VERIFIED: runtime evidence structure/binding accepted; no cloud execution performed'
 rescue StandardError=>e

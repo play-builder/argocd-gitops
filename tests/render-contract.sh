@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
-# Main-chart legacy ownership was retired; validate the independently rendered owners.
-ruby tests/data-governance-contract.rb
-ruby tests/isolated-operations-contract.rb
+# Keep the incident catalog's named entry point bound to actual rendered owners.
+requested=matrix
+if [[ "${1:-}" == --case && $# == 2 ]]; then
+  requested=$2
+elif [[ $# != 0 ]]; then
+  echo "Usage: $0 [--case matrix|network-policy|telemetry|secret-reload]" >&2
+  exit 2
+fi
+case "$requested" in
+  network-policy)
+    ruby tests/data-governance-contract.rb
+    ruby tests/management-mesh-contract.rb
+    ;;
+  telemetry) ruby tests/management-mesh-contract.rb ;;
+  secret-reload) ruby tests/application-secrets-contract.rb ;;
+  matrix)
+    ruby tests/data-governance-contract.rb
+    ruby tests/isolated-operations-contract.rb
+    ;;
+  *) echo "FAIL: unknown render case: $requested" >&2; exit 2 ;;
+esac

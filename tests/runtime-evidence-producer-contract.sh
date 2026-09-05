@@ -90,7 +90,7 @@ grep -Fq 'rollout.argoproj.io/revision' "$repository_root/scripts/capture-prod-b
 if grep -Fq 'rollouts.argoproj.io/revision' "$repository_root/scripts/capture-prod-baseline-evidence.sh"; then
   fail 'baseline producer still uses the non-canonical plural revision annotation'
 fi
-grep -Fq 'get httproute mini-commerce' "$repository_root/scripts/capture-prod-baseline-evidence.sh" ||
+grep -Fq 'get virtualservice mini-commerce' "$repository_root/scripts/capture-prod-baseline-evidence.sh" ||
   fail 'baseline producer does not inspect live 100/0 traffic routing'
 grep -Fq 'status --porcelain --untracked-files=all' "$repository_root/scripts/capture-prod-baseline-evidence.sh" ||
   fail 'baseline producer does not enforce a clean GitOps source tree'
