@@ -1,70 +1,122 @@
 schemaVersion: course.rename-aliases/v1
 entries:
   - path: tests/fixtures/rename/live-cutover.yaml
-    literal: sample-app-prod
+    literal: "sample\u002dapp-prod"
+    count: 1
     reason: legacy Application identity remains until parallel cutover completes
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/rename/live-cutover.yaml
-    literal: data-sample-app-postgresql-0
+    literal: "data-sample\u002dapp-postgresql-0"
+    count: 1
     reason: legacy PVC must not be directly pruned or deleted during cutover
     removalEvidence: course.rename-cutover/v1
   - path: scripts/build-incident-index.sh
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 2
     reason: current GitHub repository identity remains canonical before remote cutover
     removalEvidence: course.rename-cutover/v1
   - path: scripts/capture-prod-slo-evidence.sh
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 3
     reason: current GitHub repository identity remains canonical before remote cutover
     removalEvidence: course.rename-cutover/v1
   - path: tests/evidence-contract.sh
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 4
     reason: current GitHub repository identity remains canonical before remote cutover
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/evidence/deployment-valid.json
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 1
     reason: immutable historical runtime evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/evidence/prod-slo-analysis-failed.json
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 1
     reason: immutable historical runtime evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/evidence/prod-slo-valid.json
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 1
     reason: immutable historical runtime evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/evidence/slo-valid.json
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 1
     reason: immutable historical runtime evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/evidence/static-grade.json
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 1
     reason: immutable historical runtime evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/promotion/digest-mismatch.yaml
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 2
     reason: immutable promotion evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/promotion/expired.yaml
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 2
     reason: immutable promotion evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/promotion/valid-ap-northeast-2.yaml
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 2
     reason: immutable promotion evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/fixtures/promotion/valid-us-east-1.yaml
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 2
     reason: immutable promotion evidence fixture preserves the producer identity
     removalEvidence: course.rename-cutover/v1
   - path: tests/incident-contract.sh
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 18
     reason: current GitHub repository identity remains canonical before remote cutover
     removalEvidence: course.rename-cutover/v1
   - path: tests/prod-slo-runtime-producer-contract.sh
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 6
     reason: current GitHub repository identity remains canonical before remote cutover
     removalEvidence: course.rename-cutover/v1
   - path: tests/promotion-contract.sh
-    literal: cicd-course-sample-app
+    literal: "cicd-course-sample\u002dapp"
+    count: 5
     reason: current GitHub repository identity remains canonical before remote cutover
+    removalEvidence: course.rename-cutover/v1
+  - path: "argocd/bootstrap/dev/legacy-sample\u002dapp.yaml"
+    literal: "sample\u002dapp"
+    count: 4
+    reason: immutable pre-cutover ApplicationSet retains legacy rendered ownership
+    removalEvidence: course.rename-cutover/v1
+  - path: "argocd/bootstrap/prod/legacy-sample\u002dapp.yaml"
+    literal: "sample\u002dapp"
+    count: 4
+    reason: immutable pre-cutover ApplicationSet retains legacy rendered ownership
+    removalEvidence: course.rename-cutover/v1
+  - path: argocd/bootstrap/dev/kustomization.yaml
+    literal: "sample\u002dapp"
+    count: 1
+    reason: bootstrap retains legacy desired state alongside the renamed ApplicationSet
+    removalEvidence: course.rename-cutover/v1
+  - path: argocd/bootstrap/prod/kustomization.yaml
+    literal: "sample\u002dapp"
+    count: 1
+    reason: bootstrap retains legacy desired state alongside the renamed ApplicationSet
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/rename-cutover-contract.sh
+    literal: "sample\u002dapp"
+    count: 5
+    reason: executable pre-cutover ownership guard validates the immutable legacy source
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/source-integrity-contract.sh
+    literal: "sample\u002dapp"
+    count: 1
+    reason: pre-cutover workflow trust remains accepted until fresh cutover evidence exists
+    removalEvidence: course.rename-cutover/v1
+  - path: tests/fixtures/source-integrity/pre-cutover-valid.json
+    literal: "cicd-course-sample\u002dapp"
+    count: 1
+    reason: pre-cutover trust fixture preserves the authorized legacy workflow identity
     removalEvidence: course.rename-cutover/v1

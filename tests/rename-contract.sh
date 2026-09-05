@@ -15,8 +15,8 @@ fail() {
   exit 1
 }
 
-yq -e '.schemaVersion == "course.rename-aliases/v1" and (.entries | length) == 17 and ([.entries[] | select(.path != "" and .literal != "" and .reason != "" and .removalEvidence == "course.rename-cutover/v1")] | length) == 17' "$allowlist" >/dev/null || fail "legacy migration allowlist shape is invalid"
-LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" LEGACY_REPOSITORY="$legacy_repository" yq -e '[.entries[] | select((.path == "tests/fixtures/rename/live-cutover.yaml" and (.literal == strenv(LEGACY_APPLICATION) or .literal == strenv(LEGACY_PVC))) or (.path != "tests/fixtures/rename/live-cutover.yaml" and .literal == strenv(LEGACY_REPOSITORY)))] | length == 17' "$allowlist" >/dev/null || fail "legacy migration allowlist is not exact"
+yq -e '.schemaVersion == "course.rename-aliases/v1" and (.entries | length) == 24 and ([.entries[] | select(.path != "" and .literal != "" and (.count | type == "!!int") and .count > 0 and .reason != "" and .removalEvidence == "course.rename-cutover/v1")] | length) == 24' "$allowlist" >/dev/null || fail "legacy migration allowlist shape is invalid"
+LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '[.entries[] | select(.path == "tests/fixtures/rename/live-cutover.yaml" and (.literal == strenv(LEGACY_APPLICATION) or .literal == strenv(LEGACY_PVC)))] | length == 2' "$allowlist" >/dev/null || fail "legacy migration allowlist must retain the live cutover identities"
 
 LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '
   .mode == "live-parallel-cutover" and
@@ -30,14 +30,17 @@ LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '
 
 yq -e '.delivery.runtime.name == "mini-commerce" and .delivery.runtime.repositoryId == 1352247019' "$repository_root/versions.lock.yaml" >/dev/null || fail "runtime identity lock is missing"
 
-exclude_arguments=(-g '!scripts/mod.md' -g '!tests/fixtures/rename/legacy-alias-allowlist.yaml')
-while IFS= read -r allowlisted_path; do
-  exclude_arguments+=(-g "!$allowlisted_path")
-done < <(yq -r '.entries[].path' "$allowlist" | sort -u)
+expected_total=0
+while IFS=$'\t' read -r path literal expected_count; do
+  actual_count=$(rg -o -i -F "$literal" "$repository_root/$path" | wc -l | tr -d ' ')
+  [[ "$actual_count" == "$expected_count" ]] || fail "allowlisted alias multiset differs for $path:$literal (expected $expected_count, got $actual_count)"
+  expected_total=$((expected_total + expected_count))
+done < <(yq -r '.entries[] | [.path, .literal, (.count | tostring)] | @tsv' "$allowlist")
 
-legacy_matches=$(rg -n -i 'sample[-_]app' \
+# Every real occurrence is counted above; no path is excluded from this scan.
+actual_total=$(rg -o -i 'sample[-_]app' \
   "$repository_root/charts" "$repository_root/argocd" "$repository_root/envs" "$repository_root/scripts" "$repository_root/tests" \
-  "${exclude_arguments[@]}" || true)
-[[ -z "$legacy_matches" ]] || fail "legacy runtime literals escaped the explicit migration allowlist: $legacy_matches"
+  -g '!scripts/mod.md' | wc -l | tr -d ' ')
+[[ "$actual_total" == "$expected_total" ]] || fail "legacy runtime literals escaped the exact migration allowlist (expected $expected_total, got $actual_total)"
 
 echo "PASS: runtime rename contract is exact and cutover-safe"

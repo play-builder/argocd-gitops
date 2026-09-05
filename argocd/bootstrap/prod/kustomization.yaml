@@ -5,6 +5,7 @@ resources:
   - project.yaml
   - external-secrets.yaml
   - admission-policy.yaml
+  - legacy-sample-app.yaml
   - mini-commerce.yaml
 
 patches:

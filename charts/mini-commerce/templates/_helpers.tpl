@@ -72,6 +72,14 @@ app.kubernetes.io/component: application
 {{- fail "networkPolicy.gateway.sourceCidrs must contain bounded CIDRs and must not contain a wildcard" -}}
 {{- end -}}
 {{- end -}}
+{{- if eq (len .Values.networkPolicy.gateway.healthCheckSourceCidrs) 0 -}}
+{{- fail "networkPolicy.gateway.healthCheckSourceCidrs must contain private ALB health-check CIDRs when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- range $cidr := .Values.networkPolicy.gateway.healthCheckSourceCidrs -}}
+{{- if or (eq $cidr "0.0.0.0/0") (eq $cidr "::/0") (not (regexMatch "^(10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}|172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]{1,3}\\.[0-9]{1,3})/[0-9]{1,2}$" $cidr)) -}}
+{{- fail "networkPolicy.gateway.healthCheckSourceCidrs must contain bounded private CIDRs and must not contain a wildcard" -}}
+{{- end -}}
+{{- end -}}
 {{- if eq (len .Values.networkPolicy.telemetry.namespaceLabels) 0 -}}
 {{- fail "networkPolicy.telemetry.namespaceLabels must select the platform collector" -}}
 {{- end -}}

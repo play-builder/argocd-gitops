@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: sample-app-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: Prune=confirm
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - environment: prod
+            namespace: app-prod
+            podSecurityVersion: v1.36
+            valuesFile: envs/prod/values.yaml
+            statefulValuesFile: envs/prod/stateful-values.yaml
+  template:
+    metadata:
+      name: "sample-app-{{ .environment }}"
+      annotations:
+        argocd.argoproj.io/sync-options: Prune=confirm
+      finalizers: [resources-finalizer.argocd.argoproj.io]
+    spec:
+      project: course-prod
+      source:
+        repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
+        targetRevision: 2db9276ce171babd87047eb778a3a39cc0585619
+        path: charts/sample-app
+        helm:
+          releaseName: sample-app
+          valueFiles: ["../../{{ .valuesFile }}", "../../{{ .statefulValuesFile }}"]
+      destination: {server: https://kubernetes.default.svc, namespace: "{{ .namespace }}"}
+      syncPolicy:
+        syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]

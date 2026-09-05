@@ -22,6 +22,14 @@ spec:
         - protocol: TCP
           port: {{ .Values.service.publicPort }}
     - from:
+        {{- range .Values.networkPolicy.gateway.healthCheckSourceCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.managementPort }}
+    - from:
         - namespaceSelector:
             matchLabels:
               {{- toYaml .Values.networkPolicy.telemetry.namespaceLabels | nindent 14 }}

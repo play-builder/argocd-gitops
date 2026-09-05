@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+test_root=${CONTRACT_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}
 contracts=(
   argocd-tenancy-contract.sh
   notification-contract.sh

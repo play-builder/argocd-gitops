@@ -76,6 +76,7 @@ spec:
     targetType: ip
     healthCheckConfig:
       healthCheckProtocol: HTTP
+      healthCheckPort: "3001"
       healthCheckPath: /readyz
       matcher:
         httpCode: "200"
@@ -95,6 +96,7 @@ spec:
     targetType: ip
     healthCheckConfig:
       healthCheckProtocol: HTTP
+      healthCheckPort: "3001"
       healthCheckPath: /readyz
       matcher:
         httpCode: "200"

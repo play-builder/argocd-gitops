@@ -317,6 +317,6 @@ bash scripts/capture-cleanup-evidence.sh removal --eks-repo-root "$LAB_EKS_REPO"
 # Static verification boundary
 
 `bash tests/test-all.sh` establishes local static contract coverage only. Use
-`ENTERPRISE_CONTRACTS=1 bash tests/test-all.sh` after the enterprise Task 5–11
-contracts exist; it does not prove cloud admission, notification delivery,
+`bash tests/test-all.sh` validates the available local contracts and aggregate
+dispatch behavior. It does not prove cloud admission, notification delivery,
 mesh traffic, alert delivery, or recovery.

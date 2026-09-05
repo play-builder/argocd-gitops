@@ -6,6 +6,7 @@ resources:
   - external-secrets.yaml
   - admission-policy.yaml
   - recovery-namespace.yaml
+  - legacy-sample-app.yaml
   - mini-commerce.yaml
 
 patches:

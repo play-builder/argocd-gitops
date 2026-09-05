@@ -179,6 +179,7 @@ networkPolicy:
   enabled: false
   gateway:
     sourceCidrs: []
+    healthCheckSourceCidrs: []
   dns:
     namespaceLabels:
       kubernetes.io/metadata.name: kube-system
