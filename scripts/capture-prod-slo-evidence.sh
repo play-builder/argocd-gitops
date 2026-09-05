@@ -61,7 +61,7 @@ validate_record() {
     (.analysisRun | (keys | sort) == ["name","phase","templateName","uid"]) and
     (.analysisRun.name | nonblank) and (.analysisRun.uid | nonblank) and (.analysisRun.templateName | nonblank) and
     .analysisRun.phase == "Successful" and
-    .analysisRun.templateName == "sample-app-success-rate" and
+    .analysisRun.templateName == "mini-commerce-success-rate" and
     (.metricResults | type == "array" and length == 2) and
     ([.metricResults[].name] | sort) == ["request-rate","success-rate"] and
     all(.metricResults[]; (keys | sort) == ["measurements","name","phase"] and .phase == "Successful" and ([.measurements[] | select(.phase == "Successful")] | length) > 0 and
@@ -202,13 +202,13 @@ baseline_region=$(jq -r '.region' <<<"$baseline_json")
 [[ "$expected_digest" != "$baseline_digest" ]] || fail "Prod candidate reuses the baseline digest"
 [[ "$dev_cluster_arn" != "$baseline_cluster_arn" ]] || fail "DEV_READY and baseline must bind distinct clusters"
 
-app_json=$(argocd app get sample-app-prod -o json) || fail "unable to read sample-app-prod from Argo CD"
+app_json=$(argocd app get mini-commerce-prod -o json) || fail "unable to read mini-commerce-prod from Argo CD"
 gitops_revision=$(jq -er '.status.operationState.syncResult.revision // .status.sync.revision' <<<"$app_json") ||
   fail "Argo CD did not report a GitOps revision"
 jq -e '
-  .metadata.name == "sample-app-prod" and .status.sync.status == "Synced" and
+  .metadata.name == "mini-commerce-prod" and .status.sync.status == "Synced" and
   .status.health.status == "Healthy" and (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$"))
-' <<<"$app_json" >/dev/null || fail "sample-app-prod must be Synced, Healthy, and GitOps-backed"
+' <<<"$app_json" >/dev/null || fail "mini-commerce-prod must be Synced, Healthy, and GitOps-backed"
 [[ "$gitops_revision" == "$local_git_revision" ]] ||
   fail "live Argo CD revision does not match the checked-out GitOps commit"
 
@@ -225,18 +225,18 @@ kube_server=$(jq -er '.clusters | if length == 1 then .[0].cluster.server else e
   fail "active kube context does not contain exactly one cluster server"
 [[ "$kube_server" == "$cluster_endpoint" ]] || fail "active kube context endpoint does not match the Prod EKS cluster"
 
-rollout_json=$(kubectl -n app-prod get rollout sample-app -o json) || fail "unable to read the Prod Rollout"
+rollout_json=$(kubectl -n app-prod get rollout mini-commerce -o json) || fail "unable to read the Prod Rollout"
 rollout_uid=$(jq -er '.metadata.uid' <<<"$rollout_json") || fail "Prod Rollout UID is missing"
 stable_hash=$(jq -er '.status.stableRS' <<<"$rollout_json") || fail "Prod stable ReplicaSet hash is missing"
-image=$(jq -er '[.spec.template.spec.containers[] | select(.name == "sample-app") | .image] | if length == 1 then .[0] else empty end' <<<"$rollout_json") ||
-  fail "Prod Rollout must contain exactly one sample-app image"
+image=$(jq -er '[.spec.template.spec.containers[] | select(.name == "mini-commerce") | .image] | if length == 1 then .[0] else empty end' <<<"$rollout_json") ||
+  fail "Prod Rollout must contain exactly one mini-commerce image"
 jq -e '
-  .metadata.name == "sample-app" and .metadata.namespace == "app-prod" and
+  .metadata.name == "mini-commerce" and .metadata.namespace == "app-prod" and
   .status.phase == "Healthy" and .status.stableRS == .status.currentPodHash and
   (.status.replicas | type == "number" and . > 0) and
   .status.readyReplicas == .status.replicas and .status.availableReplicas == .status.replicas and
   ((.status.pauseConditions // []) | length) == 0 and
-  [.spec.strategy.canary.analysis.templates[].templateName] == ["sample-app-success-rate"]
+  [.spec.strategy.canary.analysis.templates[].templateName] == ["mini-commerce-success-rate"]
 ' <<<"$rollout_json" >/dev/null || fail "Prod Rollout is not a completed healthy SLO release"
 [[ "$image" =~ ^([^@]+)@(sha256:[0-9a-f]{64})$ ]] || fail "Prod Rollout image must use an immutable digest"
 image_repository=${BASH_REMATCH[1]}
@@ -252,8 +252,8 @@ stable_rs=$(jq -cer --arg uid "$rollout_uid" --arg hash "$stable_hash" --arg ima
     (.metadata.annotations["rollout.argoproj.io/revision"] | test("^[0-9]+$")) and
     any(.metadata.ownerReferences[]?;
       .apiVersion == "argoproj.io/v1alpha1" and .kind == "Rollout" and
-      .name == "sample-app" and .uid == $uid and .controller == true) and
-    ([.spec.template.spec.containers[] | select(.name == "sample-app") | .image] == [$image]) and
+      .name == "mini-commerce" and .uid == $uid and .controller == true) and
+    ([.spec.template.spec.containers[] | select(.name == "mini-commerce") | .image] == [$image]) and
     (.spec.replicas | type == "number" and . > 0) and
     .status.readyReplicas == .spec.replicas and .status.availableReplicas == .spec.replicas
   )] | if length == 1 then .[0] else empty end
@@ -264,12 +264,12 @@ rollout_revision=$(jq -er '.metadata.annotations["rollout.argoproj.io/revision"]
 baseline_revision=$(jq -r '.rollout.revision' <<<"$baseline_json")
 ((rollout_revision > baseline_revision)) || fail "Prod SLO revision did not advance beyond the baseline"
 
-route_json=$(kubectl -n app-prod get httproute sample-app -o json) || fail "unable to read the Prod HTTPRoute"
+route_json=$(kubectl -n app-prod get httproute mini-commerce -o json) || fail "unable to read the Prod HTTPRoute"
 jq -e '
-  .metadata.name == "sample-app" and .metadata.namespace == "app-prod" and
+  .metadata.name == "mini-commerce" and .metadata.namespace == "app-prod" and
   (.spec.rules | length) == 1 and (.spec.rules[0].backendRefs | length) == 2 and
   ([.spec.rules[0].backendRefs[] | {name,port,weight}] | sort_by(.name)) ==
-    [{name:"sample-app-canary",port:80,weight:0},{name:"sample-app-stable",port:80,weight:100}] and
+    [{name:"mini-commerce-canary",port:80,weight:0},{name:"mini-commerce-stable",port:80,weight:100}] and
   ([.spec.rules[0].backendRefs[].weight] | add) == 100
 ' <<<"$route_json" >/dev/null || fail "Prod HTTPRoute is not routing 100 percent to the stable service"
 
@@ -278,7 +278,7 @@ analysis_matches=$(jq -ce --arg uid "$rollout_uid" --arg revision "$rollout_revi
   [.items[] | select(
     any(.metadata.ownerReferences[]?;
       .apiVersion == "argoproj.io/v1alpha1" and .kind == "Rollout" and
-      .name == "sample-app" and .uid == $uid and .controller == true) and
+      .name == "mini-commerce" and .uid == $uid and .controller == true) and
     ((.metadata.annotations["rollout.argoproj.io/revision"] // "") | tostring) == $revision
   )]
 ' <<<"$analysis_json") || fail "unable to select owned AnalysisRuns for the stable revision"
@@ -314,7 +314,7 @@ jq -n --arg source "$source_sha" --arg sourceRepository "$source_repository" \
    evidenceId:("prod-slo-" + (($observed | fromdateiso8601) | floor | tostring)),
    rollout:{name:$ro.metadata.name,uid:$ro.metadata.uid,revision:$revision,stableHash:$ro.status.stableRS,
      currentPodHash:$ro.status.currentPodHash,trafficWeight:100,phase:$ro.status.phase},
-   analysisRun:{name:$ar.metadata.name,uid:$ar.metadata.uid,phase:$ar.status.phase,templateName:"sample-app-success-rate"},
+   analysisRun:{name:$ar.metadata.name,uid:$ar.metadata.uid,phase:$ar.status.phase,templateName:"mini-commerce-success-rate"},
    metricResults:[$ar.status.metricResults[] | {name,phase,
      measurements:([.measurements[] | select(.finishedAt != null) | {value,phase,startedAt,finishedAt}])}],
    observedAt:$observed}

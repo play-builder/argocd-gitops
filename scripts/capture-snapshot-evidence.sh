@@ -66,8 +66,8 @@ validate_a1() {
     .phaseValuesFile == "envs/dev/snapshot-maintenance-values.yaml" and
     (.phaseValuesDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.source | (keys | sort) == ["containerName","databaseImage","namespace","podName","podUid","pvcName","pvcUid","statefulSet","volumeName"] and
-      .namespace == "app-dev" and .statefulSet == "sample-app-postgresql" and
-      .pvcName == "data-sample-app-postgresql-0" and .podName == "sample-app-postgresql-0" and
+      .namespace == "app-dev" and .statefulSet == "mini-commerce-postgresql" and
+      .pvcName == "data-mini-commerce-postgresql-0" and .podName == "mini-commerce-postgresql-0" and
       .containerName == "postgresql" and
       ([.podUid,.pvcUid,.volumeName] | all(. | nonblank)) and
       (.databaseImage | test("^[^[:space:]@]+@sha256:[0-9a-f]{64}$"))) and
@@ -96,8 +96,8 @@ validate_record() {
     (.clusterArn | test("^arn:aws:eks:" + $record.region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     (.source | (keys | sort) == ["namespace","pvcName","pvcUid","statefulSet","volumeName"] and
-      .namespace == "app-dev" and .statefulSet == "sample-app-postgresql" and
-      .pvcName == "data-sample-app-postgresql-0" and ([.pvcUid,.volumeName] | all(. | nonblank))) and
+      .namespace == "app-dev" and .statefulSet == "mini-commerce-postgresql" and
+      .pvcName == "data-mini-commerce-postgresql-0" and ([.pvcUid,.volumeName] | all(. | nonblank))) and
     .writers == {applicationReplicas:0,migrationActive:0,migrationPending:0} and
     (.database | (keys | sort) == ["cleanShutdownEvidenceId","cleanShutdownObserved","desiredReplicas","readyReplicas","shutdownSignal","stoppedAt"] and
       .desiredReplicas == 0 and .readyReplicas == 0 and .shutdownSignal == "SIGINT" and
@@ -151,9 +151,9 @@ query_cluster() {
 
 query_application() {
   local revision=$1 final=${2:-false} application
-  application=$(argocd app get sample-app-dev -o json) || fail 'unable to query sample-app-dev from Argo CD'
+  application=$(argocd app get mini-commerce-dev -o json) || fail 'unable to query mini-commerce-dev from Argo CD'
   jq -e --arg revision "$revision" --argjson final "$final" '
-    .metadata.name == "sample-app-dev" and .status.sync.revision == $revision and
+    .metadata.name == "mini-commerce-dev" and .status.sync.revision == $revision and
     (.spec.source.repoURL | test("^https://github\\.com/[^/[:space:]]+/argocd-gitops(\\.git)?$")) and
     .spec.source.helm.valueFiles == ["../../envs/dev/values.yaml","../../envs/dev/stateful-values.yaml","../../envs/dev/snapshot-maintenance-values.yaml"] and
     .spec.syncPolicy.automated.prune == true and .spec.syncPolicy.automated.selfHeal == true and
@@ -168,12 +168,12 @@ query_application() {
 
 query_writers() {
   local deployment jobs
-  deployment=$(kubectl -n app-dev get deployment sample-app -o json) || fail 'unable to query application writer Deployment'
+  deployment=$(kubectl -n app-dev get deployment mini-commerce -o json) || fail 'unable to query application writer Deployment'
   application_replicas=$(jq -er '(.status.readyReplicas // 0) as $ready |
-    if .metadata.name == "sample-app" and .metadata.namespace == "app-dev" and .spec.replicas == 0 and
+    if .metadata.name == "mini-commerce" and .metadata.namespace == "app-dev" and .spec.replicas == 0 and
        (.status.replicas // 0) == 0 and $ready == 0 and (.status.availableReplicas // 0) == 0 then 0 else empty end' <<<"$deployment") ||
     fail 'application writers are not fully stopped'
-  jobs=$(kubectl -n app-dev get jobs -l app.kubernetes.io/part-of=sample-app,app.kubernetes.io/component=migration -o json) || fail 'unable to query migration writers'
+  jobs=$(kubectl -n app-dev get jobs -l app.kubernetes.io/part-of=mini-commerce,app.kubernetes.io/component=migration -o json) || fail 'unable to query migration writers'
   migration_active=$(jq '[.items[] | (.status.active // 0)] | add // 0' <<<"$jobs")
   migration_pending=$(jq '[.items[] | select((.status.active // 0) == 0 and (.status.succeeded // 0) == 0 and (.status.failed // 0) == 0)] | length' <<<"$jobs")
   [[ "$migration_active" == 0 && "$migration_pending" == 0 ]] || fail 'migration writers are active or pending'
@@ -181,18 +181,18 @@ query_writers() {
 
 query_pvc_pv() {
   local pvc pv
-  pvc=$(kubectl -n app-dev get pvc data-sample-app-postgresql-0 -o json) || fail 'unable to query source PVC'
+  pvc=$(kubectl -n app-dev get pvc data-mini-commerce-postgresql-0 -o json) || fail 'unable to query source PVC'
   pvc_uid=$(jq -er '.metadata.uid' <<<"$pvc") || fail 'source PVC UID is missing'
   volume_name=$(jq -er '.spec.volumeName' <<<"$pvc") || fail 'source PVC volumeName is missing'
   jq -e '
     def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
-    .metadata.name == "data-sample-app-postgresql-0" and .metadata.namespace == "app-dev" and
+    .metadata.name == "data-mini-commerce-postgresql-0" and .metadata.namespace == "app-dev" and
     (.metadata.uid | nonblank) and (.spec.volumeName | nonblank) and .status.phase == "Bound"
   ' <<<"$pvc" >/dev/null || fail 'source PVC is not the exact Bound snapshot source'
   pv=$(kubectl get pv "$volume_name" -o json) || fail 'unable to query source PV'
   jq -e --arg name "$volume_name" --arg uid "$pvc_uid" '
     .metadata.name == $name and .status.phase == "Bound" and
-    .spec.claimRef == {namespace:"app-dev",name:"data-sample-app-postgresql-0",uid:$uid} and
+    .spec.claimRef == {namespace:"app-dev",name:"data-mini-commerce-postgresql-0",uid:$uid} and
     .spec.csi.driver == "ebs.csi.aws.com" and (.spec.csi.volumeHandle | test("^vol-[0-9a-f]{8,64}$"))
   ' <<<"$pv" >/dev/null || fail 'source PV claim, CSI driver, or EBS volume identity differs'
 }
@@ -205,20 +205,20 @@ require_no_snapshot() {
 
 query_a1_database() {
   local statefulset pods attachments
-  statefulset=$(kubectl -n app-dev get statefulset sample-app-postgresql -o json) || fail 'unable to query the A1 database StatefulSet'
+  statefulset=$(kubectl -n app-dev get statefulset mini-commerce-postgresql -o json) || fail 'unable to query the A1 database StatefulSet'
   statefulset_uid=$(jq -er '.metadata.uid' <<<"$statefulset") || fail 'database StatefulSet UID is missing'
   jq -e '
-    .metadata.name == "sample-app-postgresql" and .metadata.namespace == "app-dev" and .spec.replicas == 1 and
+    .metadata.name == "mini-commerce-postgresql" and .metadata.namespace == "app-dev" and .spec.replicas == 1 and
     .status.observedGeneration == .metadata.generation and .status.currentReplicas == 1 and
     .status.updatedReplicas == 1 and .status.readyReplicas == 1
   ' <<<"$statefulset" >/dev/null || fail 'A1 database must have exactly one current ready replica'
-  pods=$(kubectl -n app-dev get pods -l app.kubernetes.io/name=postgresql,app.kubernetes.io/instance=sample-app -o json) || fail 'unable to query the A1 database Pod'
+  pods=$(kubectl -n app-dev get pods -l app.kubernetes.io/name=postgresql,app.kubernetes.io/instance=mini-commerce -o json) || fail 'unable to query the A1 database Pod'
   jq -e --arg owner "$statefulset_uid" '
-    .items | length == 1 and .[0].metadata.name == "sample-app-postgresql-0" and
+    .items | length == 1 and .[0].metadata.name == "mini-commerce-postgresql-0" and
     ([.[0].metadata.ownerReferences[] | select(.apiVersion == "apps/v1" and .kind == "StatefulSet" and
-      .name == "sample-app-postgresql" and .uid == $owner and .controller == true)] | length) == 1 and
+      .name == "mini-commerce-postgresql" and .uid == $owner and .controller == true)] | length) == 1 and
     .[0].status.phase == "Running" and any(.[0].status.conditions[]; .type == "Ready" and .status == "True") and
-    any(.[0].spec.volumes[]; .persistentVolumeClaim.claimName == "data-sample-app-postgresql-0") and
+    any(.[0].spec.volumes[]; .persistentVolumeClaim.claimName == "data-mini-commerce-postgresql-0") and
     ([.[0].spec.containers[] | select(.name == "postgresql" and (.image | test("^[^[:space:]@]+@sha256:[0-9a-f]{64}$")))] | length) == 1
   ' <<<"$pods" >/dev/null || fail 'A1 database Pod ownership, readiness, mount, or digest is invalid'
   pod_name=$(jq -r '.items[0].metadata.name' <<<"$pods")
@@ -231,17 +231,17 @@ query_a1_database() {
 
 query_a2_detach() {
   local statefulset db_pods all_pods attachments
-  statefulset=$(kubectl -n app-dev get statefulset sample-app-postgresql -o json) || fail 'unable to query the A2 database StatefulSet'
+  statefulset=$(kubectl -n app-dev get statefulset mini-commerce-postgresql -o json) || fail 'unable to query the A2 database StatefulSet'
   jq -e '
-    .metadata.name == "sample-app-postgresql" and .metadata.namespace == "app-dev" and .spec.replicas == 0 and
+    .metadata.name == "mini-commerce-postgresql" and .metadata.namespace == "app-dev" and .spec.replicas == 0 and
     .status.observedGeneration == .metadata.generation and (.status.currentReplicas // 0) == 0 and
     (.status.updatedReplicas // 0) == 0 and (.status.readyReplicas // 0) == 0
   ' <<<"$statefulset" >/dev/null || fail 'A2 database has not converged to zero replicas'
-  db_pods=$(kubectl -n app-dev get pods -l app.kubernetes.io/name=postgresql,app.kubernetes.io/instance=sample-app -o json) ||
+  db_pods=$(kubectl -n app-dev get pods -l app.kubernetes.io/name=postgresql,app.kubernetes.io/instance=mini-commerce -o json) ||
     fail 'unable to query remaining database Pods'
   [[ $(jq -r '.items | length' <<<"$db_pods") == 0 ]] || fail 'database Pod remains after A2 scale-to-zero'
   all_pods=$(kubectl -n app-dev get pods -o json) || fail 'unable to query PVC mounts'
-  mounted_pod_uids=$(jq -c --arg pvc data-sample-app-postgresql-0 '[.items[] | select(any(.spec.volumes[]?; .persistentVolumeClaim.claimName == $pvc)) | .metadata.uid]' <<<"$all_pods")
+  mounted_pod_uids=$(jq -c --arg pvc data-mini-commerce-postgresql-0 '[.items[] | select(any(.spec.volumes[]?; .persistentVolumeClaim.claimName == $pvc)) | .metadata.uid]' <<<"$all_pods")
   [[ "$mounted_pod_uids" == '[]' ]] || fail 'source PVC remains mounted by a Pod'
   attachments=$(kubectl get volumeattachment -o json) || fail 'unable to query final VolumeAttachments'
   volume_attachment_names=$(jq -c --arg volume "$volume_name" '[.items[] | select(.spec.source.persistentVolumeName == $volume) | .metadata.name]' <<<"$attachments")
@@ -372,8 +372,8 @@ COMMAND
     {schemaVersion:"course.snapshot-quiesce-a1/v1",evidenceGrade:$grade,environment:"dev",
      region:$region,clusterArn:$arn,gitopsRevision:$revision,
      phaseValuesFile:"envs/dev/snapshot-maintenance-values.yaml",phaseValuesDigest:$phaseDigest,
-     source:{namespace:"app-dev",statefulSet:"sample-app-postgresql",pvcName:"data-sample-app-postgresql-0",
-       pvcUid:$pvcUid,volumeName:$volume,podName:"sample-app-postgresql-0",podUid:$podUid,
+     source:{namespace:"app-dev",statefulSet:"mini-commerce-postgresql",pvcName:"data-mini-commerce-postgresql-0",
+       pvcUid:$pvcUid,volumeName:$volume,podName:"mini-commerce-postgresql-0",podUid:$podUid,
        containerName:"postgresql",databaseImage:$image},
      writers:{applicationReplicas:0,migrationActive:0,migrationPending:0},
      checksum:{algorithm:"sha256",value:$checksum,capturedAt:$captured}}
@@ -403,17 +403,17 @@ a2_phase_digest=$(sha256_file "$phase_values")
 start_pod=$(kubectl -n app-dev get pod "$(jq -r '.source.podName' "$a1")" -o json --ignore-not-found) ||
   fail 'unable to query the A1 database Pod before its GitOps termination'
 jq -e --arg uid "$(jq -r '.source.podUid' "$a1")" --arg image "$(jq -r '.source.databaseImage' "$a1")" '
-  .metadata.name == "sample-app-postgresql-0" and .metadata.uid == $uid and
-  any(.spec.volumes[]; .persistentVolumeClaim.claimName == "data-sample-app-postgresql-0") and
+  .metadata.name == "mini-commerce-postgresql-0" and .metadata.uid == $uid and
+  any(.spec.volumes[]; .persistentVolumeClaim.claimName == "data-mini-commerce-postgresql-0") and
   any(.spec.containers[]; .name == "postgresql" and .image == $image)
 ' <<<"$start_pod" >/dev/null || fail 'A1 database Pod identity changed before the A2 shutdown watcher started'
 
 shutdown_log="$work_dir/postgresql-shutdown.log"
-kubectl -n app-dev logs -f sample-app-postgresql-0 -c postgresql --timestamps >"$shutdown_log" 2>"$work_dir/log-error" &
+kubectl -n app-dev logs -f mini-commerce-postgresql-0 -c postgresql --timestamps >"$shutdown_log" 2>"$work_dir/log-error" &
 watcher_pid=$!
 converged=false
 for _ in {1..60}; do
-  if statefulset=$(kubectl -n app-dev get statefulset sample-app-postgresql -o json 2>/dev/null) &&
+  if statefulset=$(kubectl -n app-dev get statefulset mini-commerce-postgresql -o json 2>/dev/null) &&
      jq -e '.spec.replicas == 0 and .status.observedGeneration == .metadata.generation and
        (.status.currentReplicas // 0) == 0 and (.status.readyReplicas // 0) == 0 and (.status.updatedReplicas // 0) == 0' <<<"$statefulset" >/dev/null; then
     converged=true
@@ -462,7 +462,7 @@ jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$clust
   --arg observed "$clock_now" --arg expires "$expires_at" '
   {schemaVersion:"course.snapshot-quiesce/v1",evidenceGrade:$grade,environment:"dev",
    region:$region,clusterArn:$arn,gitopsRevision:$revision,
-   source:{namespace:"app-dev",statefulSet:"sample-app-postgresql",pvcName:"data-sample-app-postgresql-0",pvcUid:$pvcUid,volumeName:$volume},
+   source:{namespace:"app-dev",statefulSet:"mini-commerce-postgresql",pvcName:"data-mini-commerce-postgresql-0",pvcUid:$pvcUid,volumeName:$volume},
    writers:{applicationReplicas:0,migrationActive:0,migrationPending:0},
    database:{desiredReplicas:0,readyReplicas:0,shutdownSignal:"SIGINT",cleanShutdownObserved:true,
      cleanShutdownEvidenceId:$shutdown,stoppedAt:$stopped},

@@ -7,7 +7,7 @@ scope:
   forbiddenNamespaces: [app-prod, app-recovery, argocd, kube-system]
 maximumDuration: 5m
 inject:
-  manifest: charts/sample-app/templates/chaos.yaml
+  manifest: charts/mini-commerce/templates/chaos.yaml
   action: inject-bounded-network-delay
 stop:
   action: stop-incident-writers

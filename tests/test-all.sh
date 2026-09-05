@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+bash "$test_root/rename-contract.sh"
+bash "$test_root/observability-contract.sh"
+bash "$test_root/application-evidence-contract.sh"
 bash "$test_root/render-contract.sh" --case matrix
 bash "$test_root/render-contract.sh" --case secret-reload
 bash "$test_root/render-contract.sh" --case network-policy
@@ -22,4 +25,7 @@ bash "$test_root/chaos-contract.sh" --case prod-deny
 bash "$test_root/chaos-contract.sh" --case namespace-injection
 bash "$test_root/incident-contract.sh" --all
 bash "$test_root/cleanup-contract.sh" --all
+if [[ "${ENTERPRISE_CONTRACTS:-0}" == "1" ]]; then
+  bash "$test_root/enterprise-contract-suite.sh"
+fi
 echo "[STATIC] PASS: complete local contract suite"

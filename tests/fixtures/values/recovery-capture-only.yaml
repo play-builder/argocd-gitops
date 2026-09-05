@@ -13,5 +13,5 @@ recovery:
   snapshotClassName: ebs.csi.aws.com
   source:
     namespace: app-dev
-    pvcName: data-sample-app-postgresql-0
-    snapshotName: sample-app-postgresql-snapshot
+    pvcName: data-mini-commerce-postgresql-0
+    snapshotName: mini-commerce-postgresql-snapshot

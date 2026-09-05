@@ -8,7 +8,7 @@ digest만 사용합니다.
 ## 핵심 구조
 
 ```text
-charts/sample-app/              공통 Helm chart
+charts/mini-commerce/              공통 Helm chart
 ├── templates/workload.yaml     Deployment 또는 Rollout
 ├── templates/gateway.yaml      AWS LBC Gateway API + HTTPRoute
 ├── templates/analysistemplate.yaml
@@ -76,11 +76,11 @@ rg -n 'REPLACE_ME|example\.com|sha256:0{64}' .
 ## 로컬 검증
 
 ```bash
-helm lint charts/sample-app -f envs/dev/values.yaml
-helm lint charts/sample-app -f envs/prod/values.yaml
+helm lint charts/mini-commerce -f envs/dev/values.yaml
+helm lint charts/mini-commerce -f envs/prod/values.yaml
 
-helm template sample-app charts/sample-app -f envs/dev/values.yaml > /tmp/dev.yaml
-helm template sample-app charts/sample-app -f envs/prod/values.yaml > /tmp/prod.yaml
+helm template mini-commerce charts/mini-commerce -f envs/dev/values.yaml > /tmp/dev.yaml
+helm template mini-commerce charts/mini-commerce -f envs/prod/values.yaml > /tmp/prod.yaml
 
 kubectl kustomize argocd/bootstrap/dev > /tmp/bootstrap-dev.yaml
 kubectl kustomize argocd/bootstrap/prod > /tmp/bootstrap-prod.yaml
@@ -134,7 +134,7 @@ Dev ApplicationSet은 기본적으로 `phaseValuesFile=envs/dev/phase-default-va
 render가 PostgreSQL, recovery object, Chaos object를 만들지 않습니다. Stateful, Chaos, snapshot,
 recovery lifecycle은 각각 검토한 Git commit에서만 phase selector를 해당 파일로 바꿉니다.
 
-A1에서는 `argocd/bootstrap/dev/sample-app.yaml`의 `phaseValuesFile`을
+A1에서는 `argocd/bootstrap/dev/mini-commerce.yaml`의 `phaseValuesFile`을
 `envs/dev/snapshot-maintenance-values.yaml`로 바꿔 commit하고 Sync합니다. 이 파일은 application
 replica와 HPA, migration Job을 모두 끄되 PostgreSQL은 `replicaCount: 1`로 유지합니다. 다음 producer는
 clean `HEAD == Argo desired revision`, 현재 EKS/context, DB Pod→PVC UID→PV→VolumeAttachment identity를
@@ -239,12 +239,12 @@ Producer는 clean `HEAD == Argo desired revision`, manual/OutOfSync Application,
 context, Rollout UID/stable hash, controller-owned non-Experiment ReplicaSet 전체를 fresh query한
 뒤 `envs/prod/rollback-compatibility.yaml`의 exact bytes SHA-256과 결속합니다. 그 결과는
 `course.rollback-candidates/v1`/`CLOUD_RUNTIME`으로 원자적 `0600` 파일에 기록되고,
-`app-prod/sample-app-rollback-candidates` immutable ConfigMap에도 exact bytes와 여섯 identity
+`app-prod/mini-commerce-rollback-candidates` immutable ConfigMap에도 exact bytes와 여섯 identity
 scalar로 저장됩니다. 이 ConfigMap은 Argo가 렌더하거나 prune하는 리소스가 아니며 Secret,
 token, password를 포함하지 않습니다. 기존 ConfigMap이 byte-for-byte 동일하면 재실행은
 idempotent하고, bytes/identity가 다르면 자동 overwrite/delete 없이 실패합니다.
 
-그 뒤에만 selective resource Sync가 아닌 `sample-app-prod` 전체 Sync를 실행합니다. Sync wave는
+그 뒤에만 selective resource Sync가 아닌 `mini-commerce-prod` 전체 Sync를 실행합니다. Sync wave는
 PostgreSQL `-2`, migration hook Job `-1`, application Rollout `0`이며, migration Pod는 ConfigMap
 파일을 `0444`/read-only로 mount하고 여섯 expected identity를 같은 ConfigMap key에서 읽습니다.
 Job 성공은 Contract 003 gate가 DB에 기록되었다는 경계입니다. 성공한 Job의 completion time,
@@ -314,3 +314,9 @@ AWS_REGION="$AWS_REGION" DEV_CLUSTER_NAME="$DEV_CLUSTER_NAME" PROD_CLUSTER_NAME=
 bash scripts/capture-cleanup-evidence.sh removal --eks-repo-root "$LAB_EKS_REPO" \
   --dev-context "$DEV_KUBE_CONTEXT" --prod-context "$PROD_KUBE_CONTEXT"
 ```
+# Static verification boundary
+
+`bash tests/test-all.sh` establishes local static contract coverage only. Use
+`ENTERPRISE_CONTRACTS=1 bash tests/test-all.sh` after the enterprise Task 5–11
+contracts exist; it does not prove cloud admission, notification delivery,
+mesh traffic, alert delivery, or recovery.

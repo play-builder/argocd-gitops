@@ -1,16 +1,16 @@
 {{- if .Values.networkPolicy.enabled }}
-{{- include "sample-app.validateNetworkPolicy" . }}
+{{- include "mini-commerce.validateNetworkPolicy" . }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "sample-app.fullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "sample-app.selectorLabels" . | nindent 6 }}
+      {{- include "mini-commerce.selectorLabels" . | nindent 6 }}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -20,7 +20,7 @@ spec:
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ .Values.containerPort }}
+          port: {{ .Values.service.publicPort }}
     - from:
         - namespaceSelector:
             matchLabels:
@@ -30,7 +30,7 @@ spec:
               {{- toYaml .Values.networkPolicy.telemetry.podLabels | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.containerPort }}
+          port: {{ .Values.service.managementPort }}
   egress:
     - to:
         - namespaceSelector:
@@ -59,10 +59,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "sample-app.databaseFullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.databaseFullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
     app.kubernetes.io/component: database
 spec:
   podSelector:
@@ -96,10 +96,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "sample-app.fullname" . }}-database-clients
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}-database-clients
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
     app.kubernetes.io/component: database-clients
 spec:
   podSelector:
@@ -138,10 +138,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "sample-app.fullname" . }}-recovery
+  name: {{ include "mini-commerce.fullname" . }}-recovery
   namespace: {{ .Values.recovery.namespace }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
     app.kubernetes.io/component: recovery
 spec:
   podSelector:
@@ -165,7 +165,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ include "sample-app.namespace" . }}
+              kubernetes.io/metadata.name: {{ include "mini-commerce.namespace" . }}
           podSelector:
             matchLabels:
               app.kubernetes.io/name: postgresql

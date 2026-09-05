@@ -8,6 +8,9 @@ tooling:
   setupKubectlActionSha: "829323503d1be3d00ca8346e5391ca0b07a9ab0d"
 
 delivery:
+  runtime:
+    name: mini-commerce
+    repositoryId: 1352247019
   helmCli: "4.2.4"
   argoCdController: "3.5.2"
   argoRolloutsController: "1.9.1"

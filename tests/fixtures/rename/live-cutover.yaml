@@ -1,0 +1,7 @@
+mode: live-parallel-cutover
+runtimeName: mini-commerce
+repositoryId: 1352247019
+legacyApplication: sample-app-prod
+legacyPvc: data-sample-app-postgresql-0
+requiredEvidence: course.rename-cutover/v1
+forbiddenActions: [direct-prune, pvc-delete]

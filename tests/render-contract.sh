@@ -52,9 +52,9 @@ run_case() {
 
   if [[ "$case_name" == "stateless-policy-off" ]]; then
     yq eval-all -o=json '
-      select(.kind == "Deployment" and .metadata.name == "sample-app") |
+      select(.kind == "Deployment" and .metadata.name == "mini-commerce") |
       .spec.template.spec.containers[] |
-      select(.name == "sample-app") |
+      select(.name == "mini-commerce") |
       .env
     ' "$manifest" | jq -e '
       (map(select(.name == "DATABASE_ENABLED")) | length) == 1 and
@@ -74,14 +74,14 @@ case_network_policy() {
   render_environment dev "$recovery_policy_on" "$fixture_root/recovery-policy-on.yaml"
 
   yq eval-all -o=json -I=0 \
-    '[select(.kind == "NetworkPolicy" and .metadata.name == "sample-app")]' \
+    '[select(.kind == "NetworkPolicy" and .metadata.name == "mini-commerce")]' \
     "$stateful_policy_on" | jq -e '
       length == 1 and
       any(.[0].spec.ingress[]?.from[]?; .ipBlock.cidr == "10.0.0.0/16")
     ' >/dev/null || fail "app policy lacks the configured Gateway source CIDR"
 
   yq eval-all -o=json -I=0 \
-    '[select(.kind == "NetworkPolicy" and .metadata.name == "sample-app")]' \
+    '[select(.kind == "NetworkPolicy" and .metadata.name == "mini-commerce")]' \
     "$stateless_policy_on" | jq -e '
       length == 1 and
       .[0].spec.policyTypes == ["Ingress", "Egress"] and
@@ -90,7 +90,7 @@ case_network_policy() {
         any(.from[]?;
           .namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "opentelemetry-operator-system" and
           .podSelector.matchLabels["app.kubernetes.io/name"] == "adot-collector-prometheus-collector") and
-        .ports == [{"protocol":"TCP","port":3000}]) and
+        .ports == [{"protocol":"TCP","port":3001}]) and
       any(.[0].spec.egress[]?;
         any(.to[]?;
           .namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "kube-system" and
@@ -104,7 +104,7 @@ case_network_policy() {
     ' >/dev/null || fail "app policy lacks selected DNS or telemetry peers and explicit ports"
 
   yq eval-all -o=json -I=0 \
-    '[select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-postgresql")]' \
+    '[select(.kind == "NetworkPolicy" and .metadata.name == "mini-commerce-postgresql")]' \
     "$recovery_policy_on" | jq -e '
       length == 1 and
       .[0].spec.policyTypes == ["Ingress", "Egress"] and
@@ -126,12 +126,12 @@ case_network_policy() {
       all(.[];
         ([.spec.ingress[]?.from[]?.ipBlock.cidr?, .spec.egress[]?.to[]?.ipBlock.cidr?] |
           all(.[]; . != "0.0.0.0/0" and . != "::/0"))) and
-      (map(select(.metadata.name == "sample-app-database-clients")) | length) == 1 and
-      (map(select(.metadata.name == "sample-app-recovery")) | length) == 1
+      (map(select(.metadata.name == "mini-commerce-database-clients")) | length) == 1 and
+      (map(select(.metadata.name == "mini-commerce-recovery")) | length) == 1
     ' >/dev/null || fail "policy set contains a wildcard, unselected peer, missing port, or missing client policy"
 
   yq eval-all -o=json '
-    select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-database-clients")
+    select(.kind == "NetworkPolicy" and .metadata.name == "mini-commerce-database-clients")
   ' "$stateful_policy_on" | jq -e '
     .spec.podSelector.matchExpressions == [{
       "key":"app.kubernetes.io/component",
@@ -146,7 +146,7 @@ case_network_policy() {
   ' >/dev/null || fail "application and migration database egress is not explicitly selected"
 
   yq eval-all -o=json '
-    select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-recovery")
+    select(.kind == "NetworkPolicy" and .metadata.name == "mini-commerce-recovery")
   ' "$recovery_policy_on" | jq -e '
     .metadata.namespace == "app-recovery" and
     .spec.podSelector.matchLabels["app.kubernetes.io/component"] == "recovery" and
@@ -195,32 +195,32 @@ case_telemetry() {
     fi
 
     yq eval-all -o=json '
-      select(.kind == "ConfigMap" and .metadata.name == "sample-app-telemetry")
+      select(.kind == "ConfigMap" and .metadata.name == "mini-commerce-telemetry")
     ' "$manifest" | ENVIRONMENT="$environment" NAMESPACE="$namespace" jq -e '
-      .data.OTEL_SERVICE_NAME == "sample-app" and
+      .data.OTEL_SERVICE_NAME == "mini-commerce" and
       .data.OTEL_EXPORTER_OTLP_ENDPOINT ==
         "http://adot-collector-prometheus-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces" and
       .data.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf" and
       .data.OTEL_RESOURCE_ATTRIBUTES ==
-        ("service.name=sample-app,service.namespace=" + env.NAMESPACE +
+        ("service.name=mini-commerce,service.namespace=" + env.NAMESPACE +
           ",deployment.environment=" + env.ENVIRONMENT) and
       ([.data[]] | any(test("API_KEY|DB_[A-Z_]+"))) == false
     ' >/dev/null || fail "$environment telemetry metadata or ADOT endpoint contract is invalid"
 
     yq eval-all -o=json '
-      select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app") |
+      select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "mini-commerce") |
       .spec.template
     ' "$manifest" | jq -e '
       .metadata.annotations["prometheus.io/scrape"] == "true" and
       .metadata.annotations["prometheus.io/path"] == "/metrics" and
-      .metadata.annotations["prometheus.io/port"] == "3000" and
+      .metadata.annotations["prometheus.io/port"] == "3001" and
       (.spec.containers[0].env |
         map(select(.name | startswith("OTEL_"))) |
         map({name, configMapKeyRef: .valueFrom.configMapKeyRef})) == [
-          {"name":"OTEL_SERVICE_NAME","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_SERVICE_NAME"}},
-          {"name":"OTEL_RESOURCE_ATTRIBUTES","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_RESOURCE_ATTRIBUTES"}},
-          {"name":"OTEL_EXPORTER_OTLP_ENDPOINT","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_EXPORTER_OTLP_ENDPOINT"}},
-          {"name":"OTEL_EXPORTER_OTLP_PROTOCOL","configMapKeyRef":{"name":"sample-app-telemetry","key":"OTEL_EXPORTER_OTLP_PROTOCOL"}}
+          {"name":"OTEL_SERVICE_NAME","configMapKeyRef":{"name":"mini-commerce-telemetry","key":"OTEL_SERVICE_NAME"}},
+          {"name":"OTEL_RESOURCE_ATTRIBUTES","configMapKeyRef":{"name":"mini-commerce-telemetry","key":"OTEL_RESOURCE_ATTRIBUTES"}},
+          {"name":"OTEL_EXPORTER_OTLP_ENDPOINT","configMapKeyRef":{"name":"mini-commerce-telemetry","key":"OTEL_EXPORTER_OTLP_ENDPOINT"}},
+          {"name":"OTEL_EXPORTER_OTLP_PROTOCOL","configMapKeyRef":{"name":"mini-commerce-telemetry","key":"OTEL_EXPORTER_OTLP_PROTOCOL"}}
         ] and
       (.spec.containers[0].env |
         map(select(.name == "DATABASE_ENABLED"))) ==
@@ -242,7 +242,7 @@ case_secret_reload() {
 
   yq eval-all -o=json -I=0 '[select(.kind == "ExternalSecret")]' \
     "$dev_stateful" | jq -e '
-      (map(.spec.target.name) | sort) == ["sample-app-db", "sample-app-runtime"]
+      (map(.spec.target.name) | sort) == ["mini-commerce-db", "mini-commerce-runtime"]
     ' >/dev/null || fail "runtime and database ExternalSecret targets are not separated"
 
   local environment manifest expected_runtime_remote expected_database_remote
@@ -252,8 +252,8 @@ case_secret_reload() {
     else
       manifest="$prod_stateful"
     fi
-    expected_runtime_remote="sample-app/$environment/sample-app-runtime"
-    expected_database_remote="sample-app/$environment/sample-app-db"
+    expected_runtime_remote="mini-commerce/$environment/mini-commerce-runtime"
+    expected_database_remote="mini-commerce/$environment/mini-commerce-db"
 
     yq eval-all -o=json -I=0 '[select(.kind == "ExternalSecret")]' \
       "$manifest" | EXPECTED_RUNTIME_REMOTE="$expected_runtime_remote" \
@@ -264,54 +264,54 @@ case_secret_reload() {
           .spec.target.creationPolicy == "Owner" and
           .spec.target.deletionPolicy == "Retain"
         ) and
-        (map(select(.spec.target.name == "sample-app-runtime")) | length) == 1 and
-        (map(select(.spec.target.name == "sample-app-db")) | length) == 1 and
-        (map(select(.spec.target.name == "sample-app-runtime"))[0].spec.data |
+        (map(select(.spec.target.name == "mini-commerce-runtime")) | length) == 1 and
+        (map(select(.spec.target.name == "mini-commerce-db")) | length) == 1 and
+        (map(select(.spec.target.name == "mini-commerce-runtime"))[0].spec.data |
           map(.secretKey)) == ["API_KEY"] and
-        (map(select(.spec.target.name == "sample-app-runtime"))[0].spec.data |
+        (map(select(.spec.target.name == "mini-commerce-runtime"))[0].spec.data |
           all(.[];
             .remoteRef.key == env.EXPECTED_RUNTIME_REMOTE and
             .remoteRef.property == .secretKey)) and
-        (map(select(.spec.target.name == "sample-app-db"))[0].spec.data |
+        (map(select(.spec.target.name == "mini-commerce-db"))[0].spec.data |
           map(.secretKey) | sort) ==
           ["DB_HOST", "DB_NAME", "DB_PASSWORD", "DB_PORT", "DB_USER"] and
-        (map(select(.spec.target.name == "sample-app-db"))[0].spec.data |
+        (map(select(.spec.target.name == "mini-commerce-db"))[0].spec.data |
           all(.[];
             .remoteRef.key == env.EXPECTED_DATABASE_REMOTE and
             .remoteRef.property == .secretKey))
       ' >/dev/null || fail "ExternalSecret key, ownership, retention, or wave contract is invalid"
 
     yq eval-all -o=json '
-      select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app")
+      select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "mini-commerce")
     ' "$manifest" | jq -e '
-      .metadata.annotations["secret.reloader.stakater.com/reload"] == "sample-app-runtime" and
-      ([.metadata.annotations[]] | index("sample-app-db")) == null and
+      .metadata.annotations["secret.reloader.stakater.com/reload"] == "mini-commerce-runtime" and
+      ([.metadata.annotations[]] | index("mini-commerce-db")) == null and
       .spec.template.spec.containers[0].envFrom ==
-        [{"secretRef":{"name":"sample-app-runtime"}}] and
+        [{"secretRef":{"name":"mini-commerce-runtime"}}] and
       (.spec.template.spec.containers[0].env |
         map(select(.name == "DB_HOST" or .name == "DB_PORT" or .name == "DB_NAME" or
           .name == "DB_USER" or .name == "DB_PASSWORD"))) as $db_env |
       ($db_env | length) == 5 and
-      all($db_env[]; .valueFrom.secretKeyRef.name == "sample-app-db")
+      all($db_env[]; .valueFrom.secretKeyRef.name == "mini-commerce-db")
     ' >/dev/null || fail "application Secret consumption or Reloader target is invalid"
 
     yq eval-all -o=json '
-      select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql") |
+      select(.kind == "StatefulSet" and .metadata.name == "mini-commerce-postgresql") |
       .spec.template.spec.containers[0].env
     ' "$manifest" | jq -e '
       map(select(.name == "POSTGRES_DB" or .name == "POSTGRES_USER" or .name == "POSTGRES_PASSWORD")) as $postgres_env |
       ($postgres_env | length) == 3 and
-      all($postgres_env[]; .valueFrom.secretKeyRef.name == "sample-app-db")
+      all($postgres_env[]; .valueFrom.secretKeyRef.name == "mini-commerce-db")
     ' >/dev/null || fail "PostgreSQL must consume only the database Secret"
 
     yq eval-all -o=json '
-      select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+      select(.kind == "Job" and .metadata.name == "mini-commerce-migration") |
       .spec.template.spec.containers[0].env
     ' "$manifest" | jq -e '
       (map(select(.name == "DB_HOST" or .name == "DB_PORT" or .name == "DB_NAME" or
         .name == "DB_USER" or .name == "DB_PASSWORD"))) as $db_env |
       (($db_env | length) == 5 and
-        all($db_env[]; .valueFrom.secretKeyRef.name == "sample-app-db")) and
+        all($db_env[]; .valueFrom.secretKeyRef.name == "mini-commerce-db")) and
       (map(select(.name == "DB_SSL"))) == [{"name":"DB_SSL","value":"false"}]
     ' >/dev/null || fail "migration must consume only the database Secret"
 
@@ -325,26 +325,26 @@ case_secret_reload() {
   done
 
   yq eval-all -o=json '
-    select(.kind == "Rollout" and .metadata.name == "sample-app")
+    select(.kind == "Rollout" and .metadata.name == "mini-commerce")
   ' "$prod_stateful" | jq -e '
     .metadata.annotations["reloader.stakater.com/rollout-strategy"] == "rollout" and
-    .metadata.annotations["secret.reloader.stakater.com/reload"] == "sample-app-runtime"
+    .metadata.annotations["secret.reloader.stakater.com/reload"] == "mini-commerce-runtime"
   ' >/dev/null || fail "Rollout lacks the runtime-only Reloader strategy"
 
   yq eval-all -o=json '
-    select(.kind == "Deployment" and .metadata.name == "sample-app") |
+    select(.kind == "Deployment" and .metadata.name == "mini-commerce") |
     .spec.template.spec.containers[0]
   ' "$dev_stateless" | jq -e '
     (.env | map(select(.name == "DATABASE_ENABLED"))) ==
       [{"name":"DATABASE_ENABLED","value":"false"}] and
-    .envFrom == [{"secretRef":{"name":"sample-app-runtime"}}] and
+    .envFrom == [{"secretRef":{"name":"mini-commerce-runtime"}}] and
     ([.env[].name] | any(startswith("DB_"))) == false
   ' >/dev/null || fail "stateless app must consume only runtime Secret and disable database"
 
   yq eval-all -o=json -I=0 '[select(.kind == "ExternalSecret")]' \
     "$dev_stateless" | jq -e '
       length == 1 and
-      .[0].spec.target.name == "sample-app-runtime" and
+      .[0].spec.target.name == "mini-commerce-runtime" and
       (.[0].spec.data | map(.secretKey)) == ["API_KEY"]
     ' >/dev/null || fail "stateless render must not reconcile the unused database Secret"
 

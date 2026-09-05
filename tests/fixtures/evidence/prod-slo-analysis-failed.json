@@ -1,6 +1,6 @@
 {
   "schemaVersion":"course.prod-slo/v1","evidenceGrade":"CLOUD_RUNTIME","status":"PASS",
   "source":{"repository":"OWNER/cicd-course-sample-app","sha":"0123456789abcdef0123456789abcdef01234567"},
-  "image":{"repository":"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app","indexDigest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
-  "gitopsRevision":"fedcba9876543210fedcba9876543210fedcba98","clusterArn":"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod","region":"ap-northeast-2","evidenceId":"failed","rollout":{"name":"sample-app","uid":"22222222-2222-2222-2222-222222222222","revision":2,"stableHash":"stable-hash","currentPodHash":"stable-hash","trafficWeight":100,"phase":"Healthy"},"analysisRun":{"name":"failed","uid":"33333333-3333-3333-3333-333333333333","phase":"Failed","templateName":"sample-app-success-rate"},"metricResults":[],"observedAt":"2026-09-03T01:22:00Z"
+  "image":{"repository":"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce","indexDigest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+  "gitopsRevision":"fedcba9876543210fedcba9876543210fedcba98","clusterArn":"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod","region":"ap-northeast-2","evidenceId":"failed","rollout":{"name":"mini-commerce","uid":"22222222-2222-2222-2222-222222222222","revision":2,"stableHash":"stable-hash","currentPodHash":"stable-hash","trafficWeight":100,"phase":"Healthy"},"analysisRun":{"name":"failed","uid":"33333333-3333-3333-3333-333333333333","phase":"Failed","templateName":"mini-commerce-success-rate"},"metricResults":[],"observedAt":"2026-09-03T01:22:00Z"
 }

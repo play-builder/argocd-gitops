@@ -1,5 +1,14 @@
 schemaVersion: course.platform-requirements/v1
 ownerRepository: EKS-infra
+applicationAttestation:
+  repositoryId: 1352247019
+  issuer: https://token.actions.githubusercontent.com
+  predicates:
+    - https://slsa.dev/provenance/v1
+    - https://spdx.dev/Document/v2.3
+  preCutoverWorkflows:
+    - play-builder/cicd-course-sample-app/.github/workflows/ci.yml@refs/heads/main
+    - play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main
 argoConfigMap: argocd-cm
 argoHealthCustomizations:
   - id: external-secret-ready-health/v1

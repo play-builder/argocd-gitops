@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: sample-app-prod
+  name: mini-commerce-prod
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
@@ -18,7 +18,7 @@ spec:
             statefulValuesFile: envs/prod/stateful-values.yaml
   template:
     metadata:
-      name: "sample-app-{{ .environment }}"
+      name: "mini-commerce-{{ .environment }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
@@ -26,9 +26,9 @@ spec:
       source:
         repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
         targetRevision: main
-        path: charts/sample-app
+        path: charts/mini-commerce
         helm:
-          releaseName: sample-app
+          releaseName: mini-commerce
           valueFiles:
             - "../../{{ .valuesFile }}"
             - "../../{{ .statefulValuesFile }}"

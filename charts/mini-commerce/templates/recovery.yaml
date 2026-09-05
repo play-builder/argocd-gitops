@@ -91,7 +91,7 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: sample-app-recovery-secret-reader
+  name: mini-commerce-recovery-secret-reader
   namespace: {{ .Values.recovery.namespace }}
   annotations:
     eks.amazonaws.com/role-arn: {{ $roleArn | quote }}
@@ -113,12 +113,12 @@ spec:
       auth:
         jwt:
           serviceAccountRef:
-            name: sample-app-recovery-secret-reader
+            name: mini-commerce-recovery-secret-reader
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: sample-app-db-recovery
+  name: mini-commerce-db-recovery
   namespace: {{ .Values.recovery.namespace }}
   labels:
     course.playbuilder.io/cleanup-scope: {{ .Values.recovery.cleanupLabel | quote }}
@@ -130,7 +130,7 @@ spec:
     kind: SecretStore
     name: aws-secrets-manager-recovery
   target:
-    name: {{ include "sample-app.recoveryDatabaseSecretName" . }}
+    name: {{ include "mini-commerce.recoveryDatabaseSecretName" . }}
     creationPolicy: Owner
     deletionPolicy: Retain
   data:
@@ -148,7 +148,7 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "sample-app.databaseFullname" . }}-recovery
+  name: {{ include "mini-commerce.databaseFullname" . }}-recovery
   namespace: {{ .Values.recovery.namespace }}
   labels:
     course.playbuilder.io/cleanup-scope: {{ .Values.recovery.cleanupLabel | quote }}
@@ -158,7 +158,7 @@ metadata:
     course.playbuilder.io/source-pvc: {{ .Values.recovery.source.pvcName | quote }}
     course.playbuilder.io/snapshot-handle: {{ .Values.recovery.snapshotHandle | quote }}
 spec:
-  serviceName: {{ include "sample-app.databaseFullname" . }}-recovery
+  serviceName: {{ include "mini-commerce.databaseFullname" . }}-recovery
   replicas: 1
   selector:
     matchLabels: {app.kubernetes.io/name: postgresql, app.kubernetes.io/component: recovery}
@@ -166,7 +166,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: postgresql, app.kubernetes.io/component: recovery}
     spec:
-      serviceAccountName: sample-app-recovery-secret-reader
+      serviceAccountName: mini-commerce-recovery-secret-reader
       securityContext:
         runAsNonRoot: true
         runAsUser: 70
@@ -175,14 +175,14 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: postgresql
-          image: {{ include "sample-app.databaseImage" . }}
+          image: {{ include "mini-commerce.databaseImage" . }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
           env:
-            - {name: POSTGRES_DB, valueFrom: {secretKeyRef: {name: sample-app-db-recovery, key: DB_NAME}}}
-            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: sample-app-db-recovery, key: DB_USER}}}
-            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: sample-app-db-recovery, key: DB_PASSWORD}}}
+            - {name: POSTGRES_DB, valueFrom: {secretKeyRef: {name: mini-commerce-db-recovery, key: DB_NAME}}}
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: mini-commerce-db-recovery, key: DB_USER}}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: mini-commerce-db-recovery, key: DB_PASSWORD}}}
           ports: [{name: postgresql, containerPort: 5432, protocol: TCP}]
           volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
       volumes: [{name: data, persistentVolumeClaim: {claimName: {{ .Values.recovery.pvcName }}}}]

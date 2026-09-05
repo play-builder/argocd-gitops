@@ -8,14 +8,14 @@ recovery:
   namespace: app-recovery
   snapshotClassName: ebs.csi.aws.com
   snapshotDriver: ebs.csi.aws.com
-  snapshotContentName: sample-app-postgresql-recovery-content
-  snapshotName: sample-app-postgresql-recovery-snapshot
-  pvcName: sample-app-postgresql-recovery
+  snapshotContentName: mini-commerce-postgresql-recovery-content
+  snapshotName: mini-commerce-postgresql-recovery-snapshot
+  pvcName: mini-commerce-postgresql-recovery
   snapshotHandle: snap-0123456789abcdef
   cleanupLabel: recovery
   source:
     namespace: app-dev
-    pvcName: data-sample-app-postgresql-0
-    snapshotName: sample-app-postgresql-snapshot
+    pvcName: data-mini-commerce-postgresql-0
+    snapshotName: mini-commerce-postgresql-snapshot
 snapshot:
   captureEnabled: false

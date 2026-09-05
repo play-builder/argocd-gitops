@@ -4,17 +4,17 @@ kind: GatewayClass
 metadata:
   name: {{ .Values.gateway.className }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   controllerName: {{ .Values.gateway.controllerName }}
 ---
 apiVersion: gateway.k8s.aws/v1
 kind: LoadBalancerConfiguration
 metadata:
-  name: {{ include "sample-app.fullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   scheme: {{ .Values.gateway.scheme }}
   {{- with .Values.gateway.sourceRanges }}
@@ -34,16 +34,16 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: {{ .Values.gateway.name }}
-  namespace: {{ include "sample-app.namespace" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   gatewayClassName: {{ .Values.gateway.className }}
   infrastructure:
     parametersRef:
       group: gateway.k8s.aws
       kind: LoadBalancerConfiguration
-      name: {{ include "sample-app.fullname" . }}
+      name: {{ include "mini-commerce.fullname" . }}
   listeners:
     {{- if .Values.gateway.httpEnabled }}
     - name: http
@@ -65,13 +65,13 @@ spec:
 apiVersion: gateway.k8s.aws/v1
 kind: TargetGroupConfiguration
 metadata:
-  name: {{ include "sample-app.fullname" . }}-stable
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}-stable
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   targetReference:
-    name: {{ include "sample-app.fullname" . }}-stable
+    name: {{ include "mini-commerce.fullname" . }}-stable
   defaultConfiguration:
     targetType: ip
     healthCheckConfig:
@@ -84,13 +84,13 @@ spec:
 apiVersion: gateway.k8s.aws/v1
 kind: TargetGroupConfiguration
 metadata:
-  name: {{ include "sample-app.fullname" . }}-canary
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}-canary
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   targetReference:
-    name: {{ include "sample-app.fullname" . }}-canary
+    name: {{ include "mini-commerce.fullname" . }}-canary
   defaultConfiguration:
     targetType: ip
     healthCheckConfig:
@@ -103,10 +103,10 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ include "sample-app.fullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
   {{- if .Values.gateway.hostname }}
   annotations:
     external-dns.alpha.kubernetes.io/hostname: {{ .Values.gateway.hostname | quote }}
@@ -131,11 +131,11 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ include "sample-app.fullname" . }}-stable
+        - name: {{ include "mini-commerce.fullname" . }}-stable
           port: {{ .Values.service.port }}
           weight: 100
         {{- if eq .Values.workload.kind "Rollout" }}
-        - name: {{ include "sample-app.fullname" . }}-canary
+        - name: {{ include "mini-commerce.fullname" . }}-canary
           port: {{ .Values.service.port }}
           weight: 0
         {{- end }}

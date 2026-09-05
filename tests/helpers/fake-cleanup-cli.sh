@@ -53,14 +53,14 @@ esac
 case "$*" in
   'config view --minify -o json') emit "$FAKE_CLEANUP_DIR/$environment-kubeconfig.json" ;;
   'api-resources -o name') emit "$FAKE_CLEANUP_DIR/$environment-api-resources.txt" ;;
-  "-n argocd get application sample-app-$environment -o json") emit "$FAKE_CLEANUP_DIR/$environment-application.json" ;;
-  "-n argocd get application sample-app-$environment -o name --ignore-not-found") emit "$FAKE_CLEANUP_DIR/$environment-application-name.txt" ;;
+  "-n argocd get application mini-commerce-$environment -o json") emit "$FAKE_CLEANUP_DIR/$environment-application.json" ;;
+  "-n argocd get application mini-commerce-$environment -o name --ignore-not-found") emit "$FAKE_CLEANUP_DIR/$environment-application-name.txt" ;;
   'get jobs.batch -A -o json') emit "$FAKE_CLEANUP_DIR/$environment-jobs.json" ;;
   'get statefulsets.apps -A -o json') emit "$FAKE_CLEANUP_DIR/$environment-statefulsets.json" ;;
   'get testruns.k6.io -A -o json') emit "$FAKE_CLEANUP_DIR/$environment-load.json" ;;
   'get podchaos.chaos-mesh.org,networkchaos.chaos-mesh.org -A -o json') emit "$FAKE_CLEANUP_DIR/$environment-chaos.json" ;;
   'get volumesnapshotcontents.snapshot.storage.k8s.io -o json') emit "$FAKE_CLEANUP_DIR/$environment-snapshotcontents.json" ;;
-  '-n app-prod get configmap sample-app-rollback-candidates -o name --ignore-not-found') emit "$FAKE_CLEANUP_DIR/prod-rollback-configmap-name.txt" ;;
+  '-n app-prod get configmap mini-commerce-rollback-candidates -o name --ignore-not-found') emit "$FAKE_CLEANUP_DIR/prod-rollback-configmap-name.txt" ;;
   'get namespace '*'-o json --ignore-not-found')
     namespace=$3
     emit "$FAKE_CLEANUP_DIR/$environment-$namespace-namespace.json"

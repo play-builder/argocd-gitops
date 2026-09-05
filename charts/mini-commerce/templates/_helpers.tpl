@@ -1,8 +1,8 @@
-{{- define "sample-app.name" -}}
+{{- define "mini-commerce.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "sample-app.fullname" -}}
+{{- define "mini-commerce.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -10,26 +10,26 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "sample-app.namespace" -}}
+{{- define "mini-commerce.namespace" -}}
 {{- required "namespace.name is required" .Values.namespace.name -}}
 {{- end -}}
 
-{{- define "sample-app.labels" -}}
-app.kubernetes.io/name: {{ include "sample-app.name" . }}
+{{- define "mini-commerce.labels" -}}
+app.kubernetes.io/name: {{ include "mini-commerce.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: sample-app
+app.kubernetes.io/part-of: mini-commerce
 app.kubernetes.io/environment: {{ .Values.environment | quote }}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- end -}}
 
-{{- define "sample-app.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "sample-app.name" . }}
+{{- define "mini-commerce.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "mini-commerce.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: application
 {{- end -}}
 
-{{- define "sample-app.image" -}}
+{{- define "mini-commerce.image" -}}
 {{- $repository := required "image.repository is required" .Values.image.repository -}}
 {{- $digest := required "image.digest is required; mutable tags are not accepted" .Values.image.digest -}}
 {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
@@ -38,31 +38,31 @@ app.kubernetes.io/component: application
 {{- printf "%s@%s" $repository $digest -}}
 {{- end -}}
 
-{{- define "sample-app.version" -}}
+{{- define "mini-commerce.version" -}}
 {{- .Chart.AppVersion -}}
 {{- end -}}
 
-{{- define "sample-app.databaseFullname" -}}
-{{- printf "%s-postgresql" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "mini-commerce.databaseFullname" -}}
+{{- printf "%s-postgresql" (include "mini-commerce.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "sample-app.runtimeSecretName" -}}
+{{- define "mini-commerce.runtimeSecretName" -}}
 {{- required "externalSecrets.runtime.targetSecretName is required when External Secrets is enabled" .Values.externalSecrets.runtime.targetSecretName -}}
 {{- end -}}
 
-{{- define "sample-app.databaseSecretName" -}}
+{{- define "mini-commerce.databaseSecretName" -}}
 {{- required "externalSecrets.database.targetSecretName is required when database is enabled" .Values.externalSecrets.database.targetSecretName -}}
 {{- end -}}
 
-{{- define "sample-app.recoveryDatabaseSecretName" -}}
-{{- printf "%s-db-recovery" (include "sample-app.fullname" .) -}}
+{{- define "mini-commerce.recoveryDatabaseSecretName" -}}
+{{- printf "%s-db-recovery" (include "mini-commerce.fullname" .) -}}
 {{- end -}}
 
-{{- define "sample-app.telemetryConfigName" -}}
-{{- printf "%s-telemetry" (include "sample-app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "mini-commerce.telemetryConfigName" -}}
+{{- printf "%s-telemetry" (include "mini-commerce.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "sample-app.validateNetworkPolicy" -}}
+{{- define "mini-commerce.validateNetworkPolicy" -}}
 {{- if .Values.networkPolicy.enabled -}}
 {{- if eq (len .Values.networkPolicy.gateway.sourceCidrs) 0 -}}
 {{- fail "networkPolicy.gateway.sourceCidrs must contain platform-validated CIDRs when NetworkPolicy is enabled" -}}
@@ -85,7 +85,7 @@ app.kubernetes.io/component: application
 {{- end -}}
 {{- end -}}
 
-{{- define "sample-app.databaseImage" -}}
+{{- define "mini-commerce.databaseImage" -}}
 {{- $repository := required "database.image.repository is required" .Values.database.image.repository -}}
 {{- $digest := required "database.image.digest is required; mutable tags are not accepted" .Values.database.image.digest -}}
 {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
@@ -94,7 +94,7 @@ app.kubernetes.io/component: application
 {{- printf "%s@%s" $repository $digest -}}
 {{- end -}}
 
-{{- define "sample-app.migrationImage" -}}
+{{- define "mini-commerce.migrationImage" -}}
 {{- $repository := required "database.migrationImage.repository is required" .Values.database.migrationImage.repository -}}
 {{- $digest := required "database.migrationImage.digest is required; mutable tags are not accepted" .Values.database.migrationImage.digest -}}
 {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
@@ -103,21 +103,21 @@ app.kubernetes.io/component: application
 {{- printf "%s@%s" $repository $digest -}}
 {{- end -}}
 
-{{- define "sample-app.validateKind" -}}
+{{- define "mini-commerce.validateKind" -}}
 {{- if not (or (eq .Values.workload.kind "Deployment") (eq .Values.workload.kind "Rollout")) -}}
 {{- fail "workload.kind must be Deployment or Rollout" -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "sample-app.podTemplate" -}}
+{{- define "mini-commerce.podTemplate" -}}
 metadata:
   labels:
-    {{- include "sample-app.selectorLabels" . | nindent 4 }}
+    {{- include "mini-commerce.selectorLabels" . | nindent 4 }}
   annotations:
     {{- if .Values.telemetry.enabled }}
     prometheus.io/scrape: "true"
     prometheus.io/path: /metrics
-    prometheus.io/port: {{ .Values.containerPort | quote }}
+    prometheus.io/port: {{ .Values.service.managementPort | quote }}
     {{- end }}
 spec:
   serviceAccountName: {{ .Values.serviceAccount.name }}
@@ -137,11 +137,11 @@ spec:
       whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
       labelSelector:
         matchLabels:
-          {{- include "sample-app.selectorLabels" . | nindent 10 }}
+          {{- include "mini-commerce.selectorLabels" . | nindent 10 }}
   {{- end }}
   containers:
-    - name: sample-app
-      image: {{ include "sample-app.image" . }}
+    - name: mini-commerce
+      image: {{ include "mini-commerce.image" . }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       securityContext:
         allowPrivilegeEscalation: false
@@ -149,14 +149,19 @@ spec:
         capabilities:
           drop: ["ALL"]
       ports:
-        - name: http
-          containerPort: {{ .Values.containerPort }}
+        - name: public
+          containerPort: {{ .Values.service.publicPort }}
+          protocol: TCP
+        - name: management
+          containerPort: {{ .Values.service.managementPort }}
           protocol: TCP
       env:
         - name: PORT
-          value: {{ .Values.containerPort | quote }}
+          value: {{ .Values.service.publicPort | quote }}
+        - name: MANAGEMENT_PORT
+          value: {{ .Values.service.managementPort | quote }}
         - name: APP_VERSION
-          value: {{ include "sample-app.version" . | quote }}
+          value: {{ include "mini-commerce.version" . | quote }}
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -181,49 +186,49 @@ spec:
         - name: OTEL_SERVICE_NAME
           valueFrom:
             configMapKeyRef:
-              name: {{ include "sample-app.telemetryConfigName" . }}
+              name: {{ include "mini-commerce.telemetryConfigName" . }}
               key: OTEL_SERVICE_NAME
         - name: OTEL_RESOURCE_ATTRIBUTES
           valueFrom:
             configMapKeyRef:
-              name: {{ include "sample-app.telemetryConfigName" . }}
+              name: {{ include "mini-commerce.telemetryConfigName" . }}
               key: OTEL_RESOURCE_ATTRIBUTES
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           valueFrom:
             configMapKeyRef:
-              name: {{ include "sample-app.telemetryConfigName" . }}
+              name: {{ include "mini-commerce.telemetryConfigName" . }}
               key: OTEL_EXPORTER_OTLP_ENDPOINT
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
           valueFrom:
             configMapKeyRef:
-              name: {{ include "sample-app.telemetryConfigName" . }}
+              name: {{ include "mini-commerce.telemetryConfigName" . }}
               key: OTEL_EXPORTER_OTLP_PROTOCOL
         {{- end }}
         {{- if .Values.database.enabled }}
         - name: DB_HOST
           valueFrom:
             secretKeyRef:
-              name: {{ include "sample-app.databaseSecretName" . }}
+              name: {{ include "mini-commerce.databaseSecretName" . }}
               key: DB_HOST
         - name: DB_PORT
           valueFrom:
             secretKeyRef:
-              name: {{ include "sample-app.databaseSecretName" . }}
+              name: {{ include "mini-commerce.databaseSecretName" . }}
               key: DB_PORT
         - name: DB_NAME
           valueFrom:
             secretKeyRef:
-              name: {{ include "sample-app.databaseSecretName" . }}
+              name: {{ include "mini-commerce.databaseSecretName" . }}
               key: DB_NAME
         - name: DB_USER
           valueFrom:
             secretKeyRef:
-              name: {{ include "sample-app.databaseSecretName" . }}
+              name: {{ include "mini-commerce.databaseSecretName" . }}
               key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "sample-app.databaseSecretName" . }}
+              name: {{ include "mini-commerce.databaseSecretName" . }}
               key: DB_PASSWORD
         - name: DB_SSL
           value: "false"
@@ -231,19 +236,19 @@ spec:
       {{- if .Values.externalSecrets.enabled }}
       envFrom:
         - secretRef:
-            name: {{ include "sample-app.runtimeSecretName" . }}
+            name: {{ include "mini-commerce.runtimeSecretName" . }}
       {{- end }}
       livenessProbe:
         httpGet:
           path: {{ .Values.probes.liveness.path }}
-          port: http
+          port: management
         initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
         periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
         failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
       readinessProbe:
         httpGet:
           path: {{ .Values.probes.readiness.path }}
-          port: http
+          port: management
         initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
         periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
         failureThreshold: {{ .Values.probes.readiness.failureThreshold }}

@@ -15,14 +15,14 @@
 {{- if or (and (eq $unit "m") (gt $number 5)) (and (eq $unit "s") (gt $number 300)) }}
 {{- fail "chaos.maximumDuration must not exceed 300 seconds" }}
 {{- end }}
-{{- $namespace := include "sample-app.namespace" . }}
+{{- $namespace := include "mini-commerce.namespace" . }}
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
-  name: {{ include "sample-app.fullname" . }}-pod-fault
+  name: {{ include "mini-commerce.fullname" . }}-pod-fault
   namespace: {{ $namespace }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
     course.playbuilder.io/incident: INC-RES-01
 spec:
   action: pod-kill
@@ -36,10 +36,10 @@ spec:
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
-  name: {{ include "sample-app.fullname" . }}-network-fault
+  name: {{ include "mini-commerce.fullname" . }}-network-fault
   namespace: {{ $namespace }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
     course.playbuilder.io/incident: INC-RES-02
 spec:
   action: delay

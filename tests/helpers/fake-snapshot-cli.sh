@@ -28,7 +28,7 @@ case "$tool" in
     esac
     ;;
   argocd)
-    [[ "$*" == "app get sample-app-dev -o json" ]] || { echo "FAIL: unexpected fake argocd invocation: $*" >&2; exit 64; }
+    [[ "$*" == "app get mini-commerce-dev -o json" ]] || { echo "FAIL: unexpected fake argocd invocation: $*" >&2; exit 64; }
     cat "$phase_root/application.json"
     ;;
   aws)
@@ -38,18 +38,18 @@ case "$tool" in
   kubectl)
     case "$*" in
       "config view --minify -o json") cat "$root/kubeconfig.json" ;;
-      "-n app-dev get deployment sample-app -o json") cat "$(phase_file deployment.json)" ;;
-      "-n app-dev get jobs -l app.kubernetes.io/part-of=sample-app,app.kubernetes.io/component=migration -o json") cat "$(phase_file jobs.json)" ;;
-      "-n app-dev get statefulset sample-app-postgresql -o json") cat "$(phase_file statefulset.json)" ;;
-      "-n app-dev get pods -l app.kubernetes.io/name=postgresql,app.kubernetes.io/instance=sample-app -o json") cat "$(phase_file pods.json)" ;;
+      "-n app-dev get deployment mini-commerce -o json") cat "$(phase_file deployment.json)" ;;
+      "-n app-dev get jobs -l app.kubernetes.io/part-of=mini-commerce,app.kubernetes.io/component=migration -o json") cat "$(phase_file jobs.json)" ;;
+      "-n app-dev get statefulset mini-commerce-postgresql -o json") cat "$(phase_file statefulset.json)" ;;
+      "-n app-dev get pods -l app.kubernetes.io/name=postgresql,app.kubernetes.io/instance=mini-commerce -o json") cat "$(phase_file pods.json)" ;;
       "-n app-dev get pods -o json") cat "$(phase_file all-pods.json)" ;;
-      "-n app-dev get pod sample-app-postgresql-0 -o json --ignore-not-found") cat "$(phase_file start-pod.json)" ;;
-      "-n app-dev get pvc data-sample-app-postgresql-0 -o json") cat "$(phase_file pvc.json)" ;;
+      "-n app-dev get pod mini-commerce-postgresql-0 -o json --ignore-not-found") cat "$(phase_file start-pod.json)" ;;
+      "-n app-dev get pvc data-mini-commerce-postgresql-0 -o json") cat "$(phase_file pvc.json)" ;;
       "get pv pvc-11111111-1111-1111-1111-111111111111 -o json") cat "$(phase_file pv.json)" ;;
       "get volumeattachment -o json") cat "$(phase_file volumeattachments.json)" ;;
       "-n app-dev get volumesnapshot -o json --ignore-not-found") cat "$(phase_file volumesnapshots.json)" ;;
-      "-n app-dev exec sample-app-postgresql-0 -c postgresql --"*) cat "$phase_root/checksum.json" ;;
-      "-n app-dev logs -f sample-app-postgresql-0 -c postgresql --timestamps") cat "$phase_root/shutdown.log" ;;
+      "-n app-dev exec mini-commerce-postgresql-0 -c postgresql --"*) cat "$phase_root/checksum.json" ;;
+      "-n app-dev logs -f mini-commerce-postgresql-0 -c postgresql --timestamps") cat "$phase_root/shutdown.log" ;;
       *) echo "FAIL: unexpected fake kubectl invocation: $*" >&2; exit 64 ;;
     esac
     ;;

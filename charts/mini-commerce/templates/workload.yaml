@@ -1,17 +1,17 @@
-{{- include "sample-app.validateKind" . -}}
+{{- include "mini-commerce.validateKind" . -}}
 {{- if eq .Values.workload.kind "Deployment" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "sample-app.fullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
     {{- if .Values.externalSecrets.enabled }}
-    secret.reloader.stakater.com/reload: {{ include "sample-app.runtimeSecretName" . | quote }}
+    secret.reloader.stakater.com/reload: {{ include "mini-commerce.runtimeSecretName" . | quote }}
     {{- end }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   {{- if .Values.maintenance.writersStopped }}
   replicas: 0
@@ -26,23 +26,23 @@ spec:
       maxUnavailable: {{ .Values.deployment.maxUnavailable }}
   selector:
     matchLabels:
-      {{- include "sample-app.selectorLabels" . | nindent 6 }}
+      {{- include "mini-commerce.selectorLabels" . | nindent 6 }}
   template:
-    {{- include "sample-app.podTemplate" . | nindent 4 }}
+    {{- include "mini-commerce.podTemplate" . | nindent 4 }}
 {{- else }}
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
-  name: {{ include "sample-app.fullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
     {{- if .Values.externalSecrets.enabled }}
-    secret.reloader.stakater.com/reload: {{ include "sample-app.runtimeSecretName" . | quote }}
+    secret.reloader.stakater.com/reload: {{ include "mini-commerce.runtimeSecretName" . | quote }}
     reloader.stakater.com/rollout-strategy: rollout
     {{- end }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   {{- if .Values.maintenance.writersStopped }}
   replicas: 0
@@ -56,18 +56,18 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "sample-app.selectorLabels" . | nindent 6 }}
+      {{- include "mini-commerce.selectorLabels" . | nindent 6 }}
   strategy:
     canary:
-      stableService: {{ include "sample-app.fullname" . }}-stable
-      canaryService: {{ include "sample-app.fullname" . }}-canary
+      stableService: {{ include "mini-commerce.fullname" . }}-stable
+      canaryService: {{ include "mini-commerce.fullname" . }}-canary
       trafficRouting:
         plugins:
           argoproj-labs/gatewayAPI:
-            httpRoute: {{ include "sample-app.fullname" . }}
-            namespace: {{ include "sample-app.namespace" . }}
+            httpRoute: {{ include "mini-commerce.fullname" . }}
+            namespace: {{ include "mini-commerce.namespace" . }}
       steps:
         {{- toYaml .Values.rollout.canary.steps | nindent 8 }}
   template:
-    {{- include "sample-app.podTemplate" . | nindent 4 }}
+    {{- include "mini-commerce.podTemplate" . | nindent 4 }}
 {{- end }}

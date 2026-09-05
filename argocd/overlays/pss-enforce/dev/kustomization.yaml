@@ -9,7 +9,7 @@ patches:
       group: argoproj.io
       version: v1alpha1
       kind: ApplicationSet
-      name: sample-app-dev
+      name: mini-commerce-dev
     patch: |-
       - op: add
         path: /spec/template/spec/syncPolicy/managedNamespaceMetadata/labels/pod-security.kubernetes.io~1enforce

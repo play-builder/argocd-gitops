@@ -2,21 +2,21 @@
 {{- if not .Values.externalSecrets.enabled }}
 {{- fail "externalSecrets.enabled must be true when database is enabled" }}
 {{- end }}
-{{- $secretName := include "sample-app.databaseSecretName" . }}
+{{- $secretName := include "mini-commerce.databaseSecretName" . }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "sample-app.databaseFullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.databaseFullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
   labels:
     app.kubernetes.io/name: postgresql
     app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/part-of: sample-app
+    app.kubernetes.io/part-of: mini-commerce
     app.kubernetes.io/component: database
 spec:
-  serviceName: {{ include "sample-app.databaseFullname" . }}
+  serviceName: {{ include "mini-commerce.databaseFullname" . }}
   replicas: {{ if hasKey .Values.database "replicaCount" }}{{ int .Values.database.replicaCount }}{{ else }}1{{ end }}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
@@ -30,7 +30,7 @@ spec:
       labels:
         app.kubernetes.io/name: postgresql
         app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/part-of: sample-app
+        app.kubernetes.io/part-of: mini-commerce
         app.kubernetes.io/component: database
     spec:
       terminationGracePeriodSeconds: {{ .Values.database.terminationGracePeriodSeconds }}
@@ -44,7 +44,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgresql
-          image: {{ include "sample-app.databaseImage" . }}
+          image: {{ include "mini-commerce.databaseImage" . }}
           imagePullPolicy: {{ .Values.database.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -100,7 +100,7 @@ spec:
     - metadata:
         name: data
         labels:
-          app.kubernetes.io/part-of: sample-app
+          app.kubernetes.io/part-of: mini-commerce
           app.kubernetes.io/component: database
       spec:
         accessModes: ["ReadWriteOnce"]

@@ -42,11 +42,11 @@ yq eval -e '.database.enabled == false' "$repository_root/envs/prod/stateful-val
 yq eval -e '
   .database.migration.rollbackCandidates.enabled == false and
   .database.migration.rollbackCandidates.configMapName == ""
-' "$repository_root/charts/sample-app/values.yaml" >/dev/null || \
+' "$repository_root/charts/mini-commerce/values.yaml" >/dev/null || \
   fail "Rollback candidate handoff must default to disabled"
 yq eval -e '
   .database.migration.rollbackCandidates.enabled == true and
-  .database.migration.rollbackCandidates.configMapName == "sample-app-rollback-candidates"
+  .database.migration.rollbackCandidates.configMapName == "mini-commerce-rollback-candidates"
 ' "$repository_root/envs/prod/values.yaml" >/dev/null || \
   fail "Prod must opt into the fixed rollback candidate handoff"
 
@@ -54,13 +54,13 @@ yq eval -e '
   .spec.generators[].list.elements[] |
   select(.environment == "dev") |
   .statefulValuesFile == "envs/dev/stateful-values.yaml"
-' "$repository_root/argocd/bootstrap/dev/sample-app.yaml" >/dev/null || \
+' "$repository_root/argocd/bootstrap/dev/mini-commerce.yaml" >/dev/null || \
   fail "Dev ApplicationSet must consume the Dev Stateful opt-in file"
 yq eval -e '
   .spec.generators[].list.elements[] |
   select(.environment == "prod") |
   .statefulValuesFile == "envs/prod/stateful-values.yaml"
-' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" >/dev/null || \
+' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" >/dev/null || \
   fail "Prod ApplicationSet must consume the Prod Stateful opt-in file"
 
 render_environment dev "$render_root/dev-stateless.yaml"
@@ -80,7 +80,7 @@ render_environment prod "$render_root/prod-stateful.yaml" \
   "$fixture_root/stateful-policy-on.yaml"
 
 database_image='docker.io/library/postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94'
-application_image='example.invalid/sample-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+application_image='example.invalid/mini-commerce@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
 for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yaml"; do
   assert_document_count "$manifest" StatefulSet 1
@@ -88,36 +88,36 @@ for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yam
   assert_document_count "$manifest" NetworkPolicy 3
 
   assert_manifest "$manifest" '
-    select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql") |
+    select(.kind == "StatefulSet" and .metadata.name == "mini-commerce-postgresql") |
     .metadata.annotations["argocd.argoproj.io/sync-wave"] == "-2" and
     .spec.volumeClaimTemplates[0].spec.storageClassName == "course-gp3"
   ' "PostgreSQL StatefulSet must use sync wave -2 and course-gp3 storage"
 
   DATABASE_IMAGE="$database_image" assert_manifest "$manifest" '
-    select(.kind == "StatefulSet" and .metadata.name == "sample-app-postgresql") |
+    select(.kind == "StatefulSet" and .metadata.name == "mini-commerce-postgresql") |
     .spec.template.spec.containers[] |
     select(.name == "postgresql") |
     .image == strenv(DATABASE_IMAGE)
   ' "PostgreSQL image must be pinned by digest"
 
   assert_manifest "$manifest" '
-    select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+    select(.kind == "Job" and .metadata.name == "mini-commerce-migration") |
     .metadata.annotations["argocd.argoproj.io/sync-wave"] == "-1" and
     .metadata.annotations["argocd.argoproj.io/hook"] == "Sync" and
     .metadata.annotations["argocd.argoproj.io/hook-delete-policy"] == "BeforeHookCreation"
   ' "Migration Job must be a replaceable sync hook at wave -1"
 
   APPLICATION_IMAGE="$application_image" assert_manifest "$manifest" '
-    select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app") |
+    select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "mini-commerce") |
     .spec.template.spec.containers[] |
-    select(.name == "sample-app") |
+    select(.name == "mini-commerce") |
     .image == strenv(APPLICATION_IMAGE)
   ' "Application workload image must be pinned by digest"
 
   yq eval-all -o=json '
-    select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "sample-app") |
+    select((.kind == "Deployment" or .kind == "Rollout") and .metadata.name == "mini-commerce") |
     .spec.template.spec.containers[] |
-    select(.name == "sample-app") |
+    select(.name == "mini-commerce") |
     .env
   ' "$manifest" | jq -e '
     map(.name) as $names |
@@ -126,7 +126,7 @@ for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yam
   ' >/dev/null || fail "Application workload must receive the Stateful database contract"
 
   yq eval-all -o=json '
-    select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+    select(.kind == "Job" and .metadata.name == "mini-commerce-migration") |
     .spec.template.spec.containers[] |
     select(.name == "migrate") |
     .env
@@ -135,21 +135,21 @@ for manifest in "$render_root/dev-stateful.yaml" "$render_root/prod-stateful.yam
   ' >/dev/null || fail "Migration Job must receive DB_PASSWORD from the Secret"
 
   assert_manifest "$manifest" '
-    select(.kind == "NetworkPolicy" and .metadata.name == "sample-app-postgresql") |
+    select(.kind == "NetworkPolicy" and .metadata.name == "mini-commerce-postgresql") |
     .spec.podSelector.matchLabels["app.kubernetes.io/name"] == "postgresql" and
-    .spec.podSelector.matchLabels["app.kubernetes.io/instance"] == "sample-app" and
+    .spec.podSelector.matchLabels["app.kubernetes.io/instance"] == "mini-commerce" and
     .spec.ingress[0].ports[0].port == 5432
   ' "Database NetworkPolicy must select PostgreSQL and allow its configured port"
 done
 
 assert_document_count "$render_root/prod-stateful.yaml" ConfigMap 1
 yq eval-all -e '
-  [select(.kind == "ConfigMap" and .metadata.name == "sample-app-rollback-candidates")] | length == 0
+  [select(.kind == "ConfigMap" and .metadata.name == "mini-commerce-rollback-candidates")] | length == 0
 ' "$render_root/prod-stateful.yaml" >/dev/null ||
   fail "Helm must reference, not render, the out-of-band rollback candidate ConfigMap"
 
 yq eval-all -o=json '
-  select(.kind == "Job" and .metadata.name == "sample-app-migration") |
+  select(.kind == "Job" and .metadata.name == "mini-commerce-migration") |
   .spec.template.spec.containers[] | select(.name == "migrate")
 ' "$render_root/dev-stateful.yaml" | jq -e '
   ([.env[].name | select(startswith("ROLLBACK_"))] | length) == 0 and
@@ -157,25 +157,25 @@ yq eval-all -o=json '
 ' >/dev/null || fail "Dev migration Job must not consume Prod rollback evidence"
 
 yq eval-all -o=json '
-  select(.kind == "Job" and .metadata.name == "sample-app-migration")
+  select(.kind == "Job" and .metadata.name == "mini-commerce-migration")
 ' "$render_root/prod-stateful.yaml" | jq -e '
   .spec.template.spec as $pod |
   ($pod.containers[] | select(.name == "migrate")) as $container |
   ([ $container.env[] | select(.name | startswith("ROLLBACK_")) ] | sort_by(.name)) ==
     ([
       {name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"},
-      {name:"ROLLBACK_EXPECTED_CLUSTER_ARN",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"clusterArn"}}},
-      {name:"ROLLBACK_EXPECTED_ENVIRONMENT",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"environment"}}},
-      {name:"ROLLBACK_EXPECTED_GITOPS_REVISION",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"gitopsRevision"}}},
-      {name:"ROLLBACK_EXPECTED_REGION",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"region"}}},
-      {name:"ROLLBACK_EXPECTED_ROLLOUT_NAME",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"rolloutName"}}},
-      {name:"ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST",valueFrom:{configMapKeyRef:{name:"sample-app-rollback-candidates",key:"sourceEvidenceDigest"}}}
+      {name:"ROLLBACK_EXPECTED_CLUSTER_ARN",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"clusterArn"}}},
+      {name:"ROLLBACK_EXPECTED_ENVIRONMENT",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"environment"}}},
+      {name:"ROLLBACK_EXPECTED_GITOPS_REVISION",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"gitopsRevision"}}},
+      {name:"ROLLBACK_EXPECTED_REGION",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"region"}}},
+      {name:"ROLLBACK_EXPECTED_ROLLOUT_NAME",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"rolloutName"}}},
+      {name:"ROLLBACK_EXPECTED_SOURCE_EVIDENCE_DIGEST",valueFrom:{configMapKeyRef:{name:"mini-commerce-rollback-candidates",key:"sourceEvidenceDigest"}}}
     ] | sort_by(.name)) and
   ([ $container.volumeMounts[] | select(.name == "rollback-candidates") ] ==
     [{name:"rollback-candidates",mountPath:"/var/run/course-evidence",readOnly:true}]) and
   ([ $pod.volumes[] | select(.name == "rollback-candidates") ] == [{
     name:"rollback-candidates",
-    configMap:{name:"sample-app-rollback-candidates",defaultMode:444,
+    configMap:{name:"mini-commerce-rollback-candidates",defaultMode:444,
       items:[{key:"rollback-candidates.json",path:"rollback-candidates.json"}]}
   }])
 ' >/dev/null || fail "Prod migration Job must receive the exact read-only rollback candidate handoff"
@@ -198,7 +198,7 @@ grep -Fq 'database.migration.rollbackCandidates.configMapName is required when r
   fail "Rollback candidate ConfigMap name failed for an unexpected reason"
 
 yq eval-all -o=json '
-  select(.kind == "Rollout" and .metadata.name == "sample-app") |
+  select(.kind == "Rollout" and .metadata.name == "mini-commerce") |
   .spec.strategy.canary.steps
 ' "$render_root/prod-stateful.yaml" | jq -e '
   (to_entries | map(select(.value.pause == {})) | last | .key) as $pause |

@@ -26,9 +26,7 @@ deployment:
 
 serviceAccount:
   create: true
-  name: sample-app
-
-containerPort: 3000
+  name: mini-commerce
 
 app:
   failureRate: "0"
@@ -61,6 +59,8 @@ probes:
 
 service:
   port: 80
+  publicPort: 3000
+  managementPort: 3001
 
 autoscaling:
   enabled: false
@@ -85,10 +85,10 @@ externalSecrets:
   refreshInterval: 1h
   runtime:
     remoteSecretName: ""
-    targetSecretName: sample-app-runtime
+    targetSecretName: mini-commerce-runtime
   database:
     remoteSecretName: ""
-    targetSecretName: sample-app-db
+    targetSecretName: mini-commerce-db
 
 # PostgreSQL stays opt-in so the default deployment remains stateless.
 database:
@@ -127,7 +127,7 @@ gateway:
   enabled: true
   className: aws-alb
   controllerName: gateway.k8s.aws/alb
-  name: sample-app
+  name: mini-commerce
   scheme: internet-facing
   sourceRanges: []
   hostname: ""
@@ -156,7 +156,7 @@ rollout:
           duration: 1m
       - analysis:
           templates:
-            - templateName: sample-app-success-rate
+            - templateName: mini-commerce-success-rate
           args:
             - name: latest-hash
               valueFrom:
@@ -171,7 +171,7 @@ rollout:
 
 telemetry:
   enabled: false
-  serviceName: sample-app
+  serviceName: mini-commerce
   otlpEndpoint: ""
   otlpProtocol: http/protobuf
 
@@ -194,15 +194,15 @@ recovery:
   namespace: app-recovery
   snapshotClassName: ebs.csi.aws.com
   snapshotDriver: ebs.csi.aws.com
-  snapshotContentName: sample-app-postgresql-recovery-content
-  snapshotName: sample-app-postgresql-recovery-snapshot
-  pvcName: sample-app-postgresql-recovery
+  snapshotContentName: mini-commerce-postgresql-recovery-content
+  snapshotName: mini-commerce-postgresql-recovery-snapshot
+  pvcName: mini-commerce-postgresql-recovery
   snapshotHandle: ""
   cleanupLabel: recovery
   source:
     namespace: app-dev
-    pvcName: data-sample-app-postgresql-0
-    snapshotName: sample-app-postgresql-snapshot
+    pvcName: data-mini-commerce-postgresql-0
+    snapshotName: mini-commerce-postgresql-snapshot
 snapshot:
   captureEnabled: false
 maintenance:
@@ -213,7 +213,7 @@ chaos:
   environment: dev
   maximumDuration: 5m
   targetLabels:
-    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/name: mini-commerce
     app.kubernetes.io/component: application
 
 courseCleanup:

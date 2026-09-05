@@ -2,14 +2,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "sample-app.databaseFullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.databaseFullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
   labels:
     app.kubernetes.io/name: postgresql
     app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/part-of: sample-app
+    app.kubernetes.io/part-of: mini-commerce
     app.kubernetes.io/component: database
 spec:
   clusterIP: None

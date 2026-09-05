@@ -3,10 +3,10 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: sample-app-success-rate
-  namespace: {{ include "sample-app.namespace" . }}
+  name: mini-commerce-success-rate
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   args:
     - name: latest-hash
@@ -26,8 +26,8 @@ spec:
               region: {{ .Values.rollout.analysis.awsRegion | quote }}
           query: |
             sum(rate(http_requests_total{
-              app="sample-app",
-              namespace="{{ include "sample-app.namespace" . }}",
+              app="mini-commerce",
+              namespace="{{ include "mini-commerce.namespace" . }}",
               rollouts_pod_template_hash="{{`{{args.latest-hash}}`}}"
             }[2m])) or vector(0)
     - name: success-rate
@@ -46,15 +46,15 @@ spec:
           query: |
             (1 - (
               (sum(rate(http_requests_total{
-                app="sample-app",
-                namespace="{{ include "sample-app.namespace" . }}",
+                app="mini-commerce",
+                namespace="{{ include "mini-commerce.namespace" . }}",
                 rollouts_pod_template_hash="{{`{{args.latest-hash}}`}}",
                 status=~"5.."
               }[2m])) or vector(0))
               /
               clamp_min((sum(rate(http_requests_total{
-                app="sample-app",
-                namespace="{{ include "sample-app.namespace" . }}",
+                app="mini-commerce",
+                namespace="{{ include "mini-commerce.namespace" . }}",
                 rollouts_pod_template_hash="{{`{{args.latest-hash}}`}}"
               }[2m])) or vector(0)), 0.001)
             )) * 100

@@ -19,9 +19,9 @@ render_environment() {
 
   local -a helm_arguments=(
     --values "$repository_root/envs/$environment/values.yaml"
-    --set-string image.repository=example.invalid/sample-app
+    --set-string image.repository=example.invalid/mini-commerce
     --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    --set-string database.migrationImage.repository=example.invalid/sample-app
+    --set-string database.migrationImage.repository=example.invalid/mini-commerce
     --set-string database.migrationImage.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   )
 
@@ -33,6 +33,6 @@ render_environment() {
     helm_arguments+=(--values "$overlay")
   done
 
-  helm template sample-app "$repository_root/charts/sample-app" \
+  helm template mini-commerce "$repository_root/charts/mini-commerce" \
     "${helm_arguments[@]}" >"$output"
 }

@@ -90,7 +90,7 @@ grep -Fq 'rollout.argoproj.io/revision' "$repository_root/scripts/capture-prod-b
 if grep -Fq 'rollouts.argoproj.io/revision' "$repository_root/scripts/capture-prod-baseline-evidence.sh"; then
   fail 'baseline producer still uses the non-canonical plural revision annotation'
 fi
-grep -Fq 'get httproute sample-app' "$repository_root/scripts/capture-prod-baseline-evidence.sh" ||
+grep -Fq 'get httproute mini-commerce' "$repository_root/scripts/capture-prod-baseline-evidence.sh" ||
   fail 'baseline producer does not inspect live 100/0 traffic routing'
 grep -Fq 'status --porcelain --untracked-files=all' "$repository_root/scripts/capture-prod-baseline-evidence.sh" ||
   fail 'baseline producer does not enforce a clean GitOps source tree'
@@ -105,7 +105,7 @@ grep -Fq 'get podchaos.chaos-mesh.org,networkchaos.chaos-mesh.org' "$repository_
   fail 'freeze producer does not inspect live Chaos writers'
 grep -Fq 'aws eks describe-cluster' "$repository_root/scripts/capture-cleanup-evidence.sh" ||
   fail 'cleanup producer does not bind Kubernetes contexts to EKS identity'
-grep -Fq 'get application "sample-app-$environment"' "$repository_root/scripts/capture-cleanup-evidence.sh" ||
+grep -Fq 'get application "mini-commerce-$environment"' "$repository_root/scripts/capture-cleanup-evidence.sh" ||
   fail 'freeze producer does not read each Application through its bound Kubernetes context'
 if grep -Fq 'argocd app' "$repository_root/scripts/capture-cleanup-evidence.sh"; then
   fail 'cleanup producer queries one global Argo CD endpoint instead of each cluster context'
@@ -128,7 +128,7 @@ for environment in dev prod; do
     >"$runtime/$environment-cluster.json"
   jq -n --arg endpoint "https://$environment.eks.example" '{clusters:[{cluster:{server:$endpoint}}]}' \
     >"$runtime/$environment-kubeconfig.json"
-  jq -n --arg environment "$environment" '{metadata:{name:("sample-app-"+$environment)},spec:{syncPolicy:{}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' \
+  jq -n --arg environment "$environment" '{metadata:{name:("mini-commerce-"+$environment)},spec:{syncPolicy:{}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' \
     >"$runtime/$environment-application.json"
   : >"$runtime/$environment-application-name.txt"
   printf '%s\n' testruns.k6.io podchaos.chaos-mesh.org networkchaos.chaos-mesh.org \
@@ -271,7 +271,7 @@ done
 
 existing_runtime="$tmp_root/cleanup-runtime-existing-app"
 cp -R "$runtime" "$existing_runtime"
-printf '%s\n' 'application.argoproj.io/sample-app-dev' >"$existing_runtime/dev-application-name.txt"
+printf '%s\n' 'application.argoproj.io/mini-commerce-dev' >"$existing_runtime/dev-application-name.txt"
 if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$existing_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
@@ -281,7 +281,7 @@ fi
 
 workload_runtime="$tmp_root/cleanup-runtime-existing-workload"
 cp -R "$runtime" "$workload_runtime"
-jq -n '{items:[{kind:"Deployment",metadata:{namespace:"app-dev",name:"sample-app"}}]}' \
+jq -n '{items:[{kind:"Deployment",metadata:{namespace:"app-dev",name:"mini-commerce"}}]}' \
   >"$workload_runtime/dev-app-dev-workloads.json"
 if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$workload_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
@@ -294,7 +294,7 @@ rollback_configmap_runtime="$tmp_root/cleanup-runtime-existing-rollback-configma
 cp -R "$runtime" "$rollback_configmap_runtime"
 jq -n '{apiVersion:"v1",kind:"Namespace",metadata:{name:"app-prod",uid:"namespace-prod-u-1"}}' \
   >"$rollback_configmap_runtime/prod-app-prod-namespace.json"
-printf '%s\n' 'configmap/sample-app-rollback-candidates' \
+printf '%s\n' 'configmap/mini-commerce-rollback-candidates' \
   >"$rollback_configmap_runtime/prod-rollback-configmap-name.txt"
 if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$rollback_configmap_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \

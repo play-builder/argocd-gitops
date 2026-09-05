@@ -7,18 +7,18 @@ namespace:
     environment: prod
 
 image:
-  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
+  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
   digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 database:
   enabled: false
   migrationImage:
-    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/sample-app"
+    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   migration:
     rollbackCandidates:
       enabled: true
-      configMapName: sample-app-rollback-candidates
+      configMapName: mini-commerce-rollback-candidates
 
 workload:
   kind: Rollout
@@ -40,15 +40,15 @@ externalSecrets:
   awsRegion: "REPLACE_ME_REGION"
   readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/prod-REPLACE_ME_PROJECT-external-secrets-reader-role"
   runtime:
-    remoteSecretName: "sample-app/prod/sample-app-runtime"
-    targetSecretName: sample-app-runtime
+    remoteSecretName: "mini-commerce/prod/mini-commerce-runtime"
+    targetSecretName: mini-commerce-runtime
   database:
-    remoteSecretName: "sample-app/prod/sample-app-db"
-    targetSecretName: sample-app-db
+    remoteSecretName: "mini-commerce/prod/mini-commerce-db"
+    targetSecretName: mini-commerce-db
 
 gateway:
   enabled: true
-  hostname: "sample-app.example.com"
+  hostname: "mini-commerce.example.com"
   httpEnabled: true
   httpsEnabled: false
 
@@ -73,7 +73,7 @@ rollout:
           duration: 1m
       - analysis:
           templates:
-            - templateName: sample-app-success-rate
+            - templateName: mini-commerce-success-rate
           args:
             - name: latest-hash
               valueFrom:

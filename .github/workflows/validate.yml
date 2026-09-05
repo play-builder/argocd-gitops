@@ -38,7 +38,7 @@ jobs:
 
       - name: Assert compatibility pins
         run: |
-          yq -e '.tooling.yq == "4.53.6" and .tooling.kubectl == "1.36.0" and .delivery.helmCli == "4.2.4" and .delivery.argoCdController == "3.5.2" and .delivery.argoRolloutsController == "1.9.1" and .delivery.externalSecretsChart == "2.10.0" and .delivery.gatewayApi == "1.6.0"' versions.lock.yaml
+          yq -e '.tooling.yq == "4.53.6" and .tooling.kubectl == "1.36.0" and .delivery.runtime.name == "mini-commerce" and .delivery.runtime.repositoryId == 1352247019 and .delivery.helmCli == "4.2.4" and .delivery.argoCdController == "3.5.2" and .delivery.argoRolloutsController == "1.9.1" and .delivery.externalSecretsChart == "2.10.0" and .delivery.gatewayApi == "1.6.0"' versions.lock.yaml
 
       - name: Bind changed Prod values to current DEV_READY
         if: github.event_name == 'pull_request'
@@ -48,27 +48,27 @@ jobs:
 
       - name: Lint Helm chart
         run: |
-          helm lint charts/sample-app \
+          helm lint charts/mini-commerce \
             --values envs/dev/values.yaml \
-            --set-string image.repository=example.invalid/sample-app \
+            --set-string image.repository=example.invalid/mini-commerce \
             --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          helm lint charts/sample-app \
+          helm lint charts/mini-commerce \
             --values envs/prod/values.yaml \
-            --set-string image.repository=example.invalid/sample-app \
+            --set-string image.repository=example.invalid/mini-commerce \
             --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
       - name: Render Dev and Prod Helm releases
         run: |
-          helm template sample-app charts/sample-app \
+          helm template mini-commerce charts/mini-commerce \
             --values envs/dev/values.yaml \
-            --set-string image.repository=example.invalid/sample-app \
+            --set-string image.repository=example.invalid/mini-commerce \
             --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-            > /tmp/sample-app-dev.yaml
-          helm template sample-app charts/sample-app \
+            > /tmp/mini-commerce-dev.yaml
+          helm template mini-commerce charts/mini-commerce \
             --values envs/prod/values.yaml \
-            --set-string image.repository=example.invalid/sample-app \
+            --set-string image.repository=example.invalid/mini-commerce \
             --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-            > /tmp/sample-app-prod.yaml
+            > /tmp/mini-commerce-prod.yaml
 
       - name: Render Argo CD bootstrap resources
         run: |
@@ -86,7 +86,7 @@ jobs:
                 exit 1
               }
             }
-          ' /tmp/sample-app-prod.yaml
+          ' /tmp/mini-commerce-prod.yaml
 
       - name: Verify Stateful application contract
         run: bash tests/stateful-contract.sh

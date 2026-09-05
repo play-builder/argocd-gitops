@@ -1,0 +1,4 @@
+mode: fresh-sandbox
+runtimeName: mini-commerce
+repositoryId: 1352247019
+allowedActions: [create]

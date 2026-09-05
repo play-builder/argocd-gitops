@@ -6,7 +6,7 @@ resources:
   - external-secrets.yaml
   - admission-policy.yaml
   - recovery-namespace.yaml
-  - sample-app.yaml
+  - mini-commerce.yaml
 
 patches:
   - path: rbac.yaml

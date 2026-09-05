@@ -3,5 +3,5 @@ chaos:
   environment: dev
   maximumDuration: 5m
   targetLabels:
-    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/name: mini-commerce
     app.kubernetes.io/component: application

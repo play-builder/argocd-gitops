@@ -2,15 +2,15 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "sample-app.fullname" . }}
-  namespace: {{ include "sample-app.namespace" . }}
+  name: {{ include "mini-commerce.fullname" . }}
+  namespace: {{ include "mini-commerce.namespace" . }}
   labels:
-    {{- include "sample-app.labels" . | nindent 4 }}
+    {{- include "mini-commerce.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: {{ if eq .Values.workload.kind "Rollout" }}argoproj.io/v1alpha1{{ else }}apps/v1{{ end }}
     kind: {{ .Values.workload.kind }}
-    name: {{ include "sample-app.fullname" . }}
+    name: {{ include "mini-commerce.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

@@ -43,9 +43,9 @@ case "$case_name" in
     echo "PASS: Prod Chaos request is rejected."
     ;;
   namespace-injection)
-    yq -e '.spec.generators[0].list.elements[0].chaosInjectionEnabled == false' "$repository_root/argocd/bootstrap/dev/sample-app.yaml" >/dev/null || fail "Dev Chaos stage must default off"
-    grep -Fq 'chaos-mesh.org/inject: enabled' "$repository_root/argocd/bootstrap/dev/sample-app.yaml" || fail "Dev ApplicationSet lacks staged Chaos annotation"
-    ! grep -Fq 'chaos-values.yaml' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" || fail "Prod must not reference Chaos values"
+    yq -e '.spec.generators[0].list.elements[0].chaosInjectionEnabled == false' "$repository_root/argocd/bootstrap/dev/mini-commerce.yaml" >/dev/null || fail "Dev Chaos stage must default off"
+    grep -Fq 'chaos-mesh.org/inject: enabled' "$repository_root/argocd/bootstrap/dev/mini-commerce.yaml" || fail "Dev ApplicationSet lacks staged Chaos annotation"
+    ! grep -Fq 'chaos-values.yaml' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" || fail "Prod must not reference Chaos values"
     echo "PASS: Chaos Namespace injection is explicitly staged for Dev."
     ;;
   *) echo "Usage: $0 --case dev|prod-deny|namespace-injection" >&2; exit 2 ;;

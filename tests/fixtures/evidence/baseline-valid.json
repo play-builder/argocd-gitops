@@ -1,7 +1,7 @@
 {
   "schemaVersion": "course.prod-baseline/v1",
   "evidenceGrade": "CLOUD_RUNTIME",
-  "image": {"repository": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/sample-app", "indexDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+  "image": {"repository": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce", "indexDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
   "gitopsRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "rollout": {"stableHash": "stable-hash", "revision": 1, "trafficWeight": 100},
   "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",

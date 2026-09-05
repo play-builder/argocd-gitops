@@ -50,7 +50,7 @@ case_namespace_pss() {
   render_environment dev "$helm_dev"
 
   assert_manifest "$bootstrap_dev" '
-    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev") |
+    select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-dev") |
     .spec.generators[0].list.elements[0].podSecurityVersion as $version |
     $version == "v1.36" and
     .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
@@ -62,7 +62,7 @@ case_namespace_pss() {
   ' "dev ApplicationSet lacks version-pinned PSS warn/audit labels"
 
   assert_manifest "$bootstrap_prod" '
-    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-prod") |
+    select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-prod") |
     .spec.generators[0].list.elements[0].podSecurityVersion as $version |
     $version == "v1.36" and
     .spec.template.spec.syncPolicy.managedNamespaceMetadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
@@ -74,7 +74,7 @@ case_namespace_pss() {
   ' "prod ApplicationSet lacks version-pinned PSS warn/audit labels"
 
   yq eval-all -o=json '
-    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev")
+    select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-dev")
   ' "$bootstrap_dev" | jq -e '
     .spec.template.spec.syncPolicy.automated.prune == true and
     .spec.template.spec.syncPolicy.automated.selfHeal == true and
@@ -83,7 +83,7 @@ case_namespace_pss() {
   ' >/dev/null || fail "Dev must retain auto-sync/prune/self-heal without Replace=true"
 
   yq eval-all -o=json '
-    select(.kind == "ApplicationSet" and .metadata.name == "sample-app-prod")
+    select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-prod")
   ' "$bootstrap_prod" | jq -e '
     .spec.template.spec.syncPolicy.automated == null and
     (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) != null and
@@ -215,7 +215,7 @@ case_pss_enforce() {
 
   for environment in dev prod; do
     manifest="$render_root/bootstrap-$environment-enforce.yaml"
-    appset="sample-app-$environment"
+    appset="mini-commerce-$environment"
     kubectl kustomize "$repository_root/argocd/overlays/pss-enforce/$environment" >"$manifest"
 
     assert_manifest "$manifest" "
@@ -245,7 +245,7 @@ case_reloader_diff() {
 
   for environment in dev prod; do
     manifest="$render_root/bootstrap-$environment-reloader.yaml"
-    appset="sample-app-$environment"
+    appset="mini-commerce-$environment"
     render_bootstrap "$environment" "$manifest"
 
     APPSET="$appset" yq eval-all -o=json '
@@ -303,10 +303,10 @@ case_platform_health_interface() {
 
 case_recovery_wiring() {
   local dev="$render_root/bootstrap-dev-recovery.yaml" prod="$render_root/bootstrap-prod-recovery.yaml"
-  local appset="$repository_root/argocd/bootstrap/dev/sample-app.yaml" default_manifest="$render_root/default-dev-application.yaml"
+  local appset="$repository_root/argocd/bootstrap/dev/mini-commerce.yaml" default_manifest="$render_root/default-dev-application.yaml"
   render_bootstrap dev "$dev"; render_bootstrap prod "$prod"
   yq eval-all -o=json -I=0 '[.]' "$dev" | jq -s -e 'add | . as $all |
-    ([ $all[] | select(.kind == "ApplicationSet" and .metadata.name == "sample-app-dev") ] | length) == 1 and
+    ([ $all[] | select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-dev") ] | length) == 1 and
     ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.destinations[].namespace] | sort) == ["app-dev","app-recovery"] and
     ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.clusterResourceWhitelist[] | select(.group == "snapshot.storage.k8s.io" and .kind == "VolumeSnapshotContent")] | length) == 1
   ' >/dev/null || fail "Dev bootstrap must explicitly wire app-recovery and VolumeSnapshotContent"
@@ -314,12 +314,12 @@ case_recovery_wiring() {
     .spec.generators[0].list.elements[0].phaseValuesFile == "envs/dev/phase-default-values.yaml" and
     .spec.template.spec.source.helm.valueFiles == ["../../{{ .valuesFile }}","../../{{ .statefulValuesFile }}","../../{{ .phaseValuesFile }}"]
   ' >/dev/null || fail "Dev must select exactly one explicit safe-default lifecycle phase values file"
-  helm template sample-app "$repository_root/charts/sample-app" \
+  helm template mini-commerce "$repository_root/charts/mini-commerce" \
     --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].valuesFile' "$appset")" \
     --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].statefulValuesFile' "$appset")" \
     --values "$repository_root/$(yq -r '.spec.generators[0].list.elements[0].phaseValuesFile' "$appset")" >"$default_manifest"
   yq eval-all -o=json -I=0 '[select(.kind == "StatefulSet" or .kind == "Job" or .kind == "VolumeSnapshot" or .kind == "VolumeSnapshotContent" or .kind == "PodChaos" or .kind == "NetworkChaos")]' "$default_manifest" | jq -e 'length == 0' >/dev/null || fail "default Dev ApplicationSet values rendered stateful, recovery, or Chaos resources"
-  if yq -o=json '.' "$repository_root/argocd/bootstrap/prod/sample-app.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles[] | select(contains("recovery-values.yaml"))' >/dev/null; then fail "Prod ApplicationSet must not consume recovery values"; fi
+  if yq -o=json '.' "$repository_root/argocd/bootstrap/prod/mini-commerce.yaml" | jq -e '.spec.template.spec.source.helm.valueFiles[] | select(contains("recovery-values.yaml"))' >/dev/null; then fail "Prod ApplicationSet must not consume recovery values"; fi
   yq -o=json '.' "$repository_root/contracts/platform-requirements.yaml" | jq -e '.argoHealthCustomizations | any(.[]; .id == "volume-snapshot-ready-health/v1" and .implementationOwner == "EKS-infra" and .healthyWhen == "readyToUse=true with a bound content name")' >/dev/null || fail "VolumeSnapshot health must remain EKS-infra owned"
   echo "PASS: Dev recovery destination, snapshot allowlist, and platform health wiring are explicit."
 }
