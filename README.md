@@ -26,13 +26,14 @@ review `database.allowedCidrs`, bootstrap users/schema, and verify the trusted C
 The vendored public AWS CA is mounted with NODE_EXTRA_CA_CERTS; DB_SSL enables hostname and chain validation.
 Follow [data and telemetry cutover](docs/runbooks/data-and-telemetry-cutover.md).
 
-The new runtime keeps repository ID `1352247019`. Old/new workflow names remain migration-aware until
-fresh `playbuilder.rename-cutover/v1` evidence. Remote rename and push are user actions.
+The runtime keeps repository ID `1352247019`. The trusted workflow is the exact current Mini Commerce CI
+identity; post-cutover evidence must also match the reviewed cutover source SHA. Remote rename and push are user actions.
 Preserve legacy Applications, PVCs, PVs and snapshots until the documented non-cascading ownership handoff.
 
 ## Local verification
 
 Use Helm4.2.4, kubectl1.36.0, yq4.53.6, kubeconform0.7.0, CUE0.12.1, istioctl1.31.0 and promtool3.14.0.
+Set `CHART_CACHE_DIR` to the verified chart cache prepared from `versions.lock.yaml`.
 
 ```bash
 bash tests/test-all.sh
@@ -41,6 +42,13 @@ bash tests/test-all.sh
 This runs rendered routing/security/tenancy, real PromQL evaluation, strict upstream schemas, image/source
 integrity and local evidence parser/CLI-double contracts. It never applies cloud or Kubernetes resources.
 Optional `EKS_REPO_ROOT` and `APPLICATION_REPO_ROOT` enable read-only producer interface inspection.
+The runner invokes each Ruby owner directly once. For exact application verifier binding, set
+`CROSS_REPO_CONTRACT_MODE=exact-sha`, `SAMPLE_APP_REPO_ROOT` and `SAMPLE_APP_EXPECTED_SHA`
+to a clean reviewed application checkout and its full commit SHA.
+
+The educational incident catalog, named render cases and incident index builder live in the course
+workspace under `course/tooling/argocd-gitops`. They are independent of this repository's CI.
+Operational incident/DR binding, write-once publication and cleanup ownership checks remain here.
 
 ```bash
 bash scripts/package-chart.sh /tmp/mini-commerce-package

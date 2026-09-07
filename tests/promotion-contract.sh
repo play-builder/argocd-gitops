@@ -358,7 +358,7 @@ workflow-runurl-id|.workflow.runUrl = "https://github.com/OWNER/mini-commerce/ac
 workflow-runurl-repository|.workflow.runUrl = "https://github.com/OWNER/other-app/actions/runs/1001"
 workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /mini-commerce/actions/runs/1001" | .attestation.githubUrl = "https://github.com/OWNER /mini-commerce/attestations/1001"
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
-ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"
+ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce//app"
 ecr-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 slo-evidence-id-whitespace|.slo.evidenceId = "   "
 attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/mini-commerce/attestations/alpha"

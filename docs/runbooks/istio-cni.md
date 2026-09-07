@@ -93,7 +93,7 @@ Kubernetes API server의 PodSecurity admission을 실행한 결과는 아니므�
 ```bash
 CHART_CACHE_DIR=/path/to/verified/charts ruby tests/istio-cni-contract.rb
 ruby tests/istio-cni-readiness-contract.rb
-bash tests/istio-platform-contract.sh
+ruby tests/istio-platform-contract.rb
 ```
 
 첫 검사는 Dev/Prod × 1.30.4/1.31.0 실제 kube-inject 결과의 host namespace/hostPath,

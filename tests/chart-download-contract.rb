@@ -69,6 +69,14 @@ Dir.mktmpdir('chart-download-contract-') do |dir|
   raise 'loader did not cache the verified chart' unless File.file?(archive) && Digest::SHA256.file(archive).hexdigest == external['sha256']
   puts 'PASS: cold-cache loader fetches the published External Secrets archive'
 
+  original_sha = external.fetch('sha256')
+  external['sha256'] = '0' * 64
+  output, status = run_loader.call('tampered-cache')
+  raise 'modified archive checksum was accepted' if status.success?
+  raise 'checksum failure lost asset context' unless output.include?('external-secrets') && output.match?(/checksum|sha256/i)
+  external['sha256'] = original_sha
+  puts 'PASS: loader rejects archive bytes that do not match the reviewed lock'
+
   external['url'] = 'https://user:fixture-password@downloads.example.invalid/missing.tgz?token=fixture-query-token#fixture-fragment'
   output, status = run_loader.call('failed-cache')
   raise 'missing chart download was accepted' if status.success?

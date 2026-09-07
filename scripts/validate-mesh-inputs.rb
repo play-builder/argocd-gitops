@@ -16,7 +16,8 @@ begin
   raise 'management port or wrong backend exposed' unless r['spec']['rules'].flat_map{|x|x['backendRefs']}.all?{|x|x['name']=='istio-ingress-stable' && x['port']==80}
  end
  raise 'NetworkPolicy required' unless docs.any?{|d|d['kind']=='NetworkPolicy'}
- raise 'final STRICT mTLS required' unless docs.any?{|d|d['kind']=='PeerAuthentication' && d.dig('spec','mtls','mode')=='STRICT'}
+ peer_authentication=docs.select{|d|d['kind']=='PeerAuthentication'}
+ raise 'final STRICT mTLS required' unless !peer_authentication.empty? && peer_authentication.all?{|d|d.dig('spec','mtls','mode')=='STRICT'}
  raise 'default deny required' unless docs.any?{|d|d['kind']=='AuthorizationPolicy' && d['spec']=={}}
  docs.select{|d|d['kind']=='AuthorizationPolicy'}.each do |d|
   (d.dig('spec','rules')||[]).each do |r|
