@@ -36,8 +36,21 @@ case_all() {
     set -e
     [[ $cleanup_status -ne 0 ]] || fail "invalid cleanup fixture was accepted: $(basename "$cleanup_fixture")"
   done
-  jq -e '.platformCleanup.workloadsDisabled == true' "$repository_root/envs/dev/cleanup-values.yaml" >/dev/null 2>&1 || yq -e '.platformCleanup.workloadsDisabled == true' "$repository_root/envs/dev/cleanup-values.yaml" >/dev/null || fail "Dev cleanup values must disable workloads"
-  yq -e '.platformCleanup.workloadsDisabled == true' "$repository_root/envs/prod/cleanup-values.yaml" >/dev/null || fail "Prod cleanup values must disable workloads"
+  for environment in dev prod; do
+    helm template mini-commerce "$repository_root/charts/mini-commerce" \
+      -f "$repository_root/envs/$environment/values.yaml" \
+      -f "$repository_root/envs/$environment/cleanup-values.yaml" >"$tmp_root/cleanup-$environment.yaml"
+    yq eval-all -o=json -I=0 '[.]' "$tmp_root/cleanup-$environment.yaml" | jq -e \
+      'map(select(. != null)) | length == 1 and .[0].kind == "Namespace" and .[0].metadata.annotations["argocd.argoproj.io/sync-options"] == "Prune=false"' >/dev/null || fail "cleanup must remove app resources and retain namespace ownership"
+  done
+  if helm template mini-commerce "$repository_root/charts/mini-commerce" \
+    -f "$repository_root/envs/prod/values.yaml" --set-string platformCleanup.workloadsDisabled=false >/dev/null 2>&1; then
+    fail "string false must not activate destructive cleanup"
+  fi
+  if helm template mini-commerce "$repository_root/charts/mini-commerce" \
+    -f "$repository_root/envs/prod/values.yaml" --set networkPolicy.enabled=true >/dev/null 2>&1; then
+    fail "removed networkPolicy switch was silently accepted"
+  fi
   for file in "$fixture_root"/freeze-valid.json "$fixture_root"/removal-valid.json; do jq -e '.evidenceGrade == "CLOUD_RUNTIME"' "$file" >/dev/null || fail "$(basename "$file") is not CLOUD_RUNTIME"; done
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --fixture "$fixture_root/freeze-valid.json" >/dev/null || fail "valid freeze evidence fixture was rejected"
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --fixture "$fixture_root/removal-valid.json" --eks-repo-root "$fixture_root" >/dev/null || fail "provider Secret projection validation failed"

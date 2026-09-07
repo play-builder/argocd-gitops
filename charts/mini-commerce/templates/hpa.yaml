@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- if and .Values.autoscaling.enabled (not .Values.maintenance.writersStopped) }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -29,4 +30,5 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
 {{- end }}

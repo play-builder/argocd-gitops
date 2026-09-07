@@ -57,7 +57,7 @@ printf '%s\n' yes >"$runtime/configmap-create-permission.txt"
 printf '%s\n' yes >"$runtime/configmap-delete-permission.txt"
 : >"$runtime/existing-configmap.json"
 : >"$runtime/kubectl.log"
-jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"},syncPolicy:{}},status:{sync:{status:"OutOfSync",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$runtime/application.json"
+jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/play-builder/argocd-gitops.git"},syncPolicy:{}},status:{sync:{status:"OutOfSync",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$runtime/application.json"
 jq -n '{cluster:{name:"mini-commerce-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$runtime/kubeconfig.json"
 jq -n '
@@ -87,18 +87,21 @@ run_static() {
   local source_dir=$1 output=$2 now=${3:-2026-09-03T01:00:00Z}
   PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
     AWS_REGION="$(runtime_region "$source_dir")" EKS_CLUSTER_NAME="$(runtime_cluster "$source_dir")" \
+    EKS_CLUSTER_ARN="arn:aws:eks:$(runtime_region "$source_dir"):123456789012:cluster/$(runtime_cluster "$source_dir")" \
     bash "$script" --source "$source_dir/source.yaml" --output "$output" --now "$now"
 }
 run_publish_fixture() {
   local source_dir=$1 evidence=$2 now=${3:-2026-09-03T01:00:00Z}
   PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
     AWS_REGION="$(runtime_region "$source_dir")" EKS_CLUSTER_NAME="$(runtime_cluster "$source_dir")" \
+    EKS_CLUSTER_ARN="arn:aws:eks:$(runtime_region "$source_dir"):123456789012:cluster/$(runtime_cluster "$source_dir")" \
     bash "$script" --publish-fixture "$evidence" --now "$now"
 }
 run_cleanup_fixture() {
   local source_dir=$1 evidence=$2 now=${3:-2026-09-03T01:10:00Z}
   PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
     AWS_REGION="$(runtime_region "$source_dir")" EKS_CLUSTER_NAME="$(runtime_cluster "$source_dir")" \
+    EKS_CLUSTER_ARN="arn:aws:eks:$(runtime_region "$source_dir"):123456789012:cluster/$(runtime_cluster "$source_dir")" \
     bash "$script" cleanup --fixture "$evidence" --now "$now"
 }
 
@@ -154,6 +157,12 @@ NODE
 else
   echo '[STATIC] Sample Contract 003 verification skipped by explicit SAMPLE_APP_VERIFIER_OPTIONAL=1.'
 fi
+
+network_ecr="$tmp_root/runtime-network-ecr"
+cp -R "$runtime" "$network_ecr"
+jq '(.items[].spec.template.spec.containers[].image) |= sub("^123456789012"; "999999999999")' "$network_ecr/replicasets.json" >"$network_ecr/mutated"
+mv "$network_ecr/mutated" "$network_ecr/replicasets.json"
+run_static "$network_ecr" "$tmp_root/network-ecr.json" >/dev/null || fail 'shared Network ECR rejected by rollback capture'
 
 for label in dirty-git git-mismatch already-synced automated-sync running-operation cluster-account cluster-region cluster-name kube-endpoint rollout-name rollout-uid rollout-window rollout-unhealthy foreign-owner non-controller missing-candidate-rs extra-candidate-rs experiment-candidate wrong-candidate-image source-missing-candidate source-extra-candidate source-duplicate-candidate source-wrong-lineage source-wrong-revert source-window; do
   invalid="$tmp_root/runtime-$label"
@@ -314,7 +323,7 @@ jq -n '{
   metadata:{name:"mini-commerce-prod"},
   spec:{
     source:{
-      repoURL:"https://github.com/OWNER/argocd-gitops.git",
+      repoURL:"https://github.com/play-builder/argocd-gitops.git",
       helm:{valueFiles:[
         "../../envs/prod/values.yaml",
         "../../envs/prod/stateful-values.yaml",
@@ -333,7 +342,7 @@ jq -n '{
 helm template mini-commerce "$repository_root/charts/mini-commerce" \
   --values "$repository_root/envs/prod/values.yaml" \
   --values "$repository_root/envs/prod/stateful-values.yaml" \
-  --values "$test_root/fixtures/values/stateful-policy-on.yaml" \
+  --set database.enabled=true \
   --values "$repository_root/envs/prod/migration-finalize-values.yaml" \
   --set-string image.repository=example.invalid/mini-commerce \
   --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \

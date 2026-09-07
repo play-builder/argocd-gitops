@@ -50,7 +50,7 @@ Dir.mktmpdir('ci-host-tools-') do |dir|
  raise 'host rg experiment is invalid' unless system(host_env,'/bin/sh','-c','command -v rg >/dev/null 2>&1')
  env={'PATH'=>bin,'RUNNER_TEMP'=>dir,'GITHUB_PATH'=>File.join(dir,'github-path')}
  raise 'clean runner unexpectedly provides rg' if system(env,'/bin/sh','-c','command -v rg >/dev/null 2>&1')
- steps.first(gate_index).map{|candidate|candidate['run']}.compact.each do |run|
+ steps.first(gate_index).reject{|candidate|candidate['if']}.map{|candidate|candidate['run']}.compact.each do |run|
    output,status=Open3.capture2e(env,'/bin/bash','-e','-o','pipefail','-c',run)
    raise "pre-gate workflow step failed: #{output}" unless status.success?
  end

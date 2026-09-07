@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- if and .Values.database.enabled (eq .Values.environment "prod") }}
 apiVersion: v1
 kind: ConfigMap
@@ -9,4 +10,5 @@ metadata:
 data:
   global-bundle.pem: |
 {{ .Files.Get "files/global-bundle.pem" | indent 4 }}
+{{- end }}
 {{- end }}

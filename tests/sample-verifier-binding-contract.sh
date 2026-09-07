@@ -46,6 +46,13 @@ if CROSS_REPO_CONTRACT_MODE=exact-sha SAMPLE_APP_REPO_ROOT="$sample_root" \
 fi
 git -C "$sample_root" restore --source=HEAD --staged --worktree src/migration-ledger.js
 
+printf '%s\n' '// unreviewed import or package configuration' >"$sample_root/unreviewed.js"
+if CROSS_REPO_CONTRACT_MODE=exact-sha SAMPLE_APP_REPO_ROOT="$sample_root" \
+  SAMPLE_APP_EXPECTED_SHA="$sample_sha" "$resolver" >/dev/null 2>&1; then
+  fail 'exact-SHA mode accepted an unreviewed application dependency'
+fi
+rm "$sample_root/unreviewed.js"
+
 resolved=$(SAMPLE_APP_VERIFIER_PATH="$expected_path" "$resolver") ||
   fail 'explicit verifier path was rejected'
 [[ "$resolved" == "$expected_path" ]] || fail 'explicit verifier path was not resolved physically'

@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- if .Values.database.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -38,4 +39,5 @@ spec:
               app.kubernetes.io/component: database
       ports: [{protocol: TCP, port: 5432}]
     {{- end }}
+{{- end }}
 {{- end }}

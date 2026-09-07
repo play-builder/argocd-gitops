@@ -8,7 +8,7 @@ metadata:
 spec:
   project: mini-commerce-operations-dev
   source:
-    repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
+    repoURL: https://github.com/play-builder/argocd-gitops.git
     targetRevision: main
     path: charts/mini-commerce-db-dev
     helm:

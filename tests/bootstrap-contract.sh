@@ -236,7 +236,7 @@ case_least_privilege() {
     select(.kind == "AppProject" and .metadata.name == "mini-commerce-dev")
   ' "$bootstrap_dev" | jq -e '
     [.spec.destinations[].namespace] == ["app-dev", "app-recovery"] and
-    .spec.sourceRepos == ["https://github.com/REPLACE_ME/argocd-gitops.git"] and
+    .spec.sourceRepos == ["https://github.com/play-builder/argocd-gitops.git"] and
     (.spec.roles | map(.name)) == ["developer"] and
     .spec.roles[0].groups == ["playbuilder:dev-developers"] and
     (.spec.roles[0].policies | index("p, proj:mini-commerce-dev:developer, applications, sync, mini-commerce-dev/*, allow")) != null and
@@ -247,7 +247,7 @@ case_least_privilege() {
     select(.kind == "AppProject" and .metadata.name == "mini-commerce-prod")
   ' "$bootstrap_prod" | jq -e '
     [.spec.destinations[].namespace] == ["app-prod"] and
-    .spec.sourceRepos == ["https://github.com/REPLACE_ME/argocd-gitops.git"] and
+    .spec.sourceRepos == ["https://github.com/play-builder/argocd-gitops.git"] and
     ([.spec.roles[].name] | sort) == ["observer", "operator"] and
     (.spec.roles | map(select(.name == "observer"))[0].groups) == ["playbuilder:prod-observers"] and
     (.spec.roles | map(select(.name == "operator"))[0].groups) == ["playbuilder:prod-operators"] and

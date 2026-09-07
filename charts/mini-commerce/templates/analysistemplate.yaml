@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- if and (eq .Values.workload.kind "Rollout") .Values.rollout.analysis.enabled }}
 {{- $selector := printf "reporter=\"destination\",destination_canonical_service=\"mini-commerce\",destination_workload_namespace=\"%s\",destination_rollout_hash=\"{{args.latest-hash}}\"" (include "mini-commerce.namespace" .) }}
 {{- $rate := printf "sum(rate(istio_requests_total{%s}[2m])) or vector(0)" $selector }}
@@ -32,4 +33,5 @@ spec:
               region: {{ $.Values.rollout.analysis.awsRegion | quote }}
           query: {{ $metric.query | quote }}
     {{- end }}
+{{- end }}
 {{- end }}

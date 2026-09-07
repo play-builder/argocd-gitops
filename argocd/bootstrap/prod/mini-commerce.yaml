@@ -30,7 +30,7 @@ spec:
     spec:
       project: platform-prod
       source:
-        repoURL: https://github.com/REPLACE_ME/argocd-gitops.git
+        repoURL: https://github.com/play-builder/argocd-gitops.git
         targetRevision: main
         path: charts/mini-commerce
         helm:

@@ -11,7 +11,7 @@
   "spec": {
     "description": "Istio and edge resources only; no access to Argo namespace or EKS-owned controllers",
     "sourceRepos": [
-      "https://github.com/REPLACE_ME/argocd-gitops.git",
+      "https://github.com/play-builder/argocd-gitops.git",
       "https://blob.istio.io/istio-release/charts"
     ],
     "sourceIntegrity": {
@@ -20,7 +20,7 @@
           {
             "repos": [
               {
-                "url": "https://github.com/REPLACE_ME/argocd-gitops.git"
+                "url": "https://github.com/play-builder/argocd-gitops.git"
               }
             ],
             "gpg": {

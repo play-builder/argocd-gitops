@@ -97,17 +97,6 @@ externalSecrets:
 database:
   enabled: false
   allowedCidrs: []
-  terminationGracePeriodSeconds: 120
-  host: ""
-  port: 5432
-  name: commerce
-  user: commerce
-  storageClassName: mini-commerce-gp3
-  storageSize: 5Gi
-  image:
-    repository: docker.io/library/postgres
-    digest: sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
-    pullPolicy: IfNotPresent
   migrationImage:
     repository: ""
     digest: ""
@@ -121,13 +110,6 @@ database:
     rollbackCandidates:
       enabled: false
       configMapName: ""
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
 
 routing:
   hostname: mini-commerce.dev.example.com
@@ -147,7 +129,6 @@ rollout:
     successRateThreshold: 99
     latencyThresholdMs: 500
   canary:
-    manualPromotion: false
     steps:
       - setWeight: 5
       - pause:
@@ -175,21 +156,6 @@ telemetry:
   otlpProtocol: http/protobuf
   otlpPort: 4318
   otlpTracesPath: ""
-
-networkPolicy:
-  enabled: false
-  gateway:
-    sourceCidrs: []
-    healthCheckSourceCidrs: []
-  dns:
-    namespaceLabels:
-      kubernetes.io/metadata.name: kube-system
-    podLabels:
-      k8s-app: kube-dns
-  telemetry:
-    namespaceLabels: {}
-    podLabels: {}
-    port: 4318
 
 maintenance:
   writersStopped: false

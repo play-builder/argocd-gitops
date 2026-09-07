@@ -56,15 +56,3 @@ telemetry:
   otlpProtocol: http/protobuf
   otlpPort: 4318
   otlpTracesPath: ""
-
-networkPolicy:
-  enabled: false
-  gateway:
-    sourceCidrs:
-      - REPLACE_ME_PLATFORM_GATEWAY_SOURCE_CIDR
-  telemetry:
-    namespaceLabels:
-      kubernetes.io/metadata.name: opentelemetry-operator-system
-    podLabels:
-      app.kubernetes.io/name: adot-collector-prometheus-collector
-    port: 4318

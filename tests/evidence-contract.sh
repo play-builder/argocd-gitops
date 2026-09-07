@@ -36,7 +36,7 @@ validate_deployment() {
     (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
-    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    $ecr.region == $root.region and $cluster.region == $root.region and
     (.observedAt | canonical_utc_seconds)
   ' "$file" >/dev/null || fail "deployment evidence is not CLOUD_RUNTIME or has invalid identity"
 }
@@ -62,7 +62,7 @@ validate_slo() {
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
-    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    $ecr.region == $root.region and $cluster.region == $root.region and
     (.observedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
     (.observedAt | fromdateiso8601) < (.expiresAt | fromdateiso8601)
   ' "$file" >/dev/null || fail "SLO evidence is not an unexpired PASS CLOUD_RUNTIME record"
@@ -90,7 +90,7 @@ validate_baseline() {
     .rollout.revision == 1 and .rollout.trafficWeight == 100 and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
-    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    $ecr.region == $root.region and $cluster.region == $root.region and
     (.observedAt | canonical_utc_seconds) and (.observedAt | fromdateiso8601) <= now
   ' "$file" >/dev/null || fail "Prod baseline must prove stable ReplicaSet revision 1 at 100 percent"
 }

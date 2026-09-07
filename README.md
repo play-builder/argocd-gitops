@@ -1,89 +1,84 @@
-# Mini Commerce GitOps delivery
+# Mini Commerce GitOps
 
-Mini Commerce desired state uses Dev Deployment and Prod Rollout with native Istio routing.
-Local verification is STATIC_VERIFIED; it does not establish CLOUD_RUNTIME, RECOVERY_VERIFIED or RELEASE_READY.
+Mini Commerce의 Kubernetes 배포 상태와 운영 정책을 관리하는 저장소다. **Dev는 Deployment와 자동 동기화, Prod는 Rollout과 승인된 수동 동기화**를 사용한다. 애플리케이션 빌드와 AWS 인프라 상태는 각각 `mini-commerce`, `EKS-infra` 저장소가 소유한다.
 
-## Ownership and entry points
+GitHub 원본은 [play-builder/argocd-gitops](https://github.com/play-builder/argocd-gitops)다. AWS 계정·ARN·인증서·서비스 도메인은 운영자가 실제 환경 출력으로 등록해야 한다. 현재의 미설정 입력을 실제 서비스 설정으로 간주하면 안 된다. 배포 전 검사는 누락된 입력을 출력하고 실패한다.
 
-- `charts/mini-commerce`: app, migration, public3000 Service, management3001 probes, native VirtualService and analysis.
-- `charts/mini-commerce-db-dev`: manual Dev PostgreSQL; retained PVC identity.
-- `charts/mini-commerce-recovery`: manual Dev snapshot inspection, not RDS PITR or SQL recovery proof.
-- `experiments/chaos/dev`: manual five-minute bounded chaos.
-- `argocd/bootstrap/{dev,prod}`: scoped AppProjects and Applications, legacy ownership retained until reviewed cutover.
-- `platform/istio`: stable/candidate mesh, collector-only management paths and ALB GatewayAPI edge.
-- `platform/security/{dev,prod}`: restricted PSA, VAP, quota and LimitRange. Governance Application is manual until namespace ownership handoff.
-- EKS owns RDS, secret shells/readers, ADOT/AMP, Argo CD/Rollouts controllers and encrypted Argo DR payload producers.
+- [아키텍처·소유권·디렉터리·발표용 코드 경로](docs/architecture.md)
+- [운영 활성화와 검증 절차](docs/operations.md)
+- [플랫폼 소유권 인계](argocd/bootstrap/PLATFORM-OWNERSHIP-HANDOFF.md)
 
-## Environment injection and cutover
+## 요청과 배포 흐름
 
-Use `scripts/render-application-secrets.rb OUTPUT_JSON prod` with the actual EKS `mini_commerce_secrets` output.
-The result contains SecretStore/reader manifests and Helm reference values only. Review and apply these to
-`application-secret-stores.yaml` and the environment values; plaintext secret values never enter Git.
-Runtime DML uses `mini-commerce-database`; migration DDL uses `mini-commerce-migration`.
+Network 계정의 ECR에서 동일한 image digest를 Dev·Prod 계정의 클러스터가 사용한다. GitOps 변경은 Argo CD가 가져오며, Prod에서는 운영자가 승인된 Git SHA를 선택해 sync한다. 이 저장소의 CI에는 AWS 배포 권한이 없다.
 
-Before enabling production database clients, inject the private RDS endpoint through Secrets Manager,
-review `database.allowedCidrs`, bootstrap users/schema, and verify the trusted CA. Empty CIDRs intentionally grant no RDS egress.
-The vendored public AWS CA is mounted with NODE_EXTRA_CA_CERTS; DB_SSL enables hostname and chain validation.
-Follow [data and telemetry cutover](docs/runbooks/data-and-telemetry-cutover.md).
+```mermaid
+flowchart LR
+    CI[mini-commerce GitHub Actions] -->|OIDC| ECR[Network 계정 ECR]
+    CI -->|digest 변경 PR| GIT[이 저장소의 main]
+    GIT --> DEV[Dev Argo CD → Deployment]
+    GIT -->|승인 후 sync| PROD[Prod Argo CD → Rollout]
+    ECR -->|동일 digest pull| DEV
+    ECR -->|동일 digest pull| PROD
+    USER[클라이언트] --> ALB[ALB HTTPS 443]
+    ALB -->|Gateway API HTTPRoute| ISTIO[Istio ingress Service 80]
+    ISTIO -->|Istio Gateway · VirtualService| APP[앱 Service 3000]
+```
 
-The runtime keeps repository ID `1352247019`. The trusted workflow is the exact current Mini Commerce CI
-identity; post-cutover evidence must also match the reviewed cutover source SHA. Remote rename and push are user actions.
-Preserve legacy Applications, PVCs, PVs and snapshots until the documented non-cascading ownership handoff.
+이 그림에서 봐야 할 핵심: 이미지 배포와 요청 경로는 독립적이다. ALB의 backend는 앱이 아니라 `istio-ingress-stable:80`이며, 앱의 management 포트 `3001`은 외부 Service에 노출되지 않는다.
 
-## Local verification
+## 저장소 구조
 
-Use Helm4.2.4, kubectl1.36.0, yq4.53.6, kubeconform0.7.0, CUE0.12.1, istioctl1.31.0 and promtool3.14.0.
-Set `CHART_CACHE_DIR` to the verified chart cache prepared from `versions.lock.yaml`.
+운영 도구와 검증은 배포·복구 동작을 기준으로 구분한다. Shell은 CLI 조합, Ruby는 YAML/정책 검증, jq는 증빙 데이터 검증에 사용한다. 확장자가 아니라 실제 장애·회귀를 탐지하는지가 유지 기준이다.
+
+| 경로 | 책임 |
+|---|---|
+| `argocd/bootstrap/{dev,prod}` | 환경별 ApplicationSet, AppProject, Namespace, SecretStore 인계 |
+| `argocd/overlays` | 검증 후 PSS·Sigstore·mesh 활성화 |
+| `charts/mini-commerce` | 앱, migration Job, Service, HPA/PDB, native Istio routing·analysis |
+| `charts/mini-commerce-db-dev` | 독립된 Dev PostgreSQL·retained PVC·snapshot 캡처 |
+| `charts/mini-commerce-recovery` | 별도 namespace의 snapshot 검사 |
+| `envs/{dev,prod}` | 이미지, 환경 설정, 승인된 migration·cleanup 단계 |
+| `platform/istio`, `platform/security` | mesh·ALB Gateway API·입장 정책·quota |
+| `scripts` | 설정 렌더링, 승격 검증, 증빙 수집·복구 안전장치 |
+| `tests`, `contracts` | 동작 회귀·schema·저장소 간 명시적 인터페이스 |
+| `docs/runbooks` | sync, incident, 소유권 인계, 복구 절차 |
+| `versions.lock.yaml`, `.github` | 호환 버전·checksum, 독립 CI, 리뷰 소유권 |
+
+## 배포 전 확인
+
+먼저 [운영 활성화](docs/operations.md)의 순서대로 실제 EKS 출력, private ECR digest, source signing key, CODEOWNERS와 서비스 도메인을 설정한다. 아래 명령은 로컬 입력만 검사한다.
+
+```bash
+ruby scripts/validate-activation.rb dev
+ruby scripts/validate-activation.rb prod
+```
+
+`STATIC_VERIFIED`는 입력/렌더링 검증 성공이다. IAM, admission, TLS, 알림, RDS 복구, 트래픽 전환이 실제로 성공했다는 의미는 아니다. 최초 설치와 기존 리소스 소유권 인계는 다른 절차이며, 기존 Namespace·PVC·PV·snapshot 이름을 일괄 변경하면 안 된다.
+
+## 로컬·CI 검증
+
+`versions.lock.yaml`의 도구를 설치한다: Helm 4.2.4, kubectl 1.36.0, yq 4.53.6, kubeconform 0.7.0, CUE 0.12.1, istioctl 1.31.0, promtool 3.14.0. Ruby, Node.js, Python 3, jq, Git, curl, ripgrep도 필요하다. `CHART_CACHE_DIR`의 archive는 사용 전에 lock의 checksum과 chart identity를 검사한다.
 
 ```bash
 bash tests/test-all.sh
 ```
 
-This runs rendered routing/security/tenancy, real PromQL evaluation, strict upstream schemas, image/source
-integrity and local evidence parser/CLI-double contracts. It never applies cloud or Kubernetes resources.
-Optional `EKS_REPO_ROOT` and `APPLICATION_REPO_ROOT` enable read-only producer interface inspection.
-The runner invokes each Ruby owner directly once. For exact application verifier binding, set
-`CROSS_REPO_CONTRACT_MODE=exact-sha`, `SAMPLE_APP_REPO_ROOT` and `SAMPLE_APP_EXPECTED_SHA`
-to a clean reviewed application checkout and its full commit SHA.
+CI는 같은 suite에서 chart와 CRD schema, 실제 PromQL 평가, tenancy, admission, migration·snapshot·rollback·증빙 수집 실패 경로를 검증한다. AWS/Kubernetes 리소스를 변경하지 않는다. 앱 저장소를 제공하지 않은 기본 실행에서는 **앱의 rollback verifier 호출만 명시적으로 생략**하며 GitOps 자체 테스트는 모두 실행한다.
 
-The educational incident catalog, named render cases and incident index builder live in the course
-workspace under `course/tooling/argocd-gitops`. They are independent of this repository's CI.
-Operational incident/DR binding, write-once publication and cleanup ownership checks remain here.
+호환성을 릴리스 단위로 확인할 때는 검토한 앱 checkout의 정확한 commit을 지정한다. `SAMPLE_APP_*`는 기존 자동화와 호환되는 인터페이스 이름이다.
+
+```bash
+CROSS_REPO_CONTRACT_MODE=exact-sha \
+SAMPLE_APP_REPO_ROOT=/absolute/path/to/clean/mini-commerce \
+SAMPLE_APP_EXPECTED_SHA=FULL_40_CHARACTER_APPLICATION_COMMIT_SHA \
+bash tests/test-all.sh
+```
+
+GitHub의 `validate` workflow 수동 실행에도 `application_sha` 입력을 제공했다. SHA를 비우면 저장소 단독 검사, 지정하면 그 commit을 checkout해 추가 검증한다. private 앱 저장소는 읽기 전용 `CROSS_REPO_READ_TOKEN`이 필요할 수 있다. 일반 PR/main CI가 다른 저장소의 최신 상태에 의존하지 않도록 유지한다.
 
 ```bash
 bash scripts/package-chart.sh /tmp/mini-commerce-package
 ```
 
-The package includes its SHA-256 sidecar. CI runs the same complete local suite after installing pinned tools.
-
-## Evidence and operational procedures
-
-- [Production sync and canary abort](docs/runbooks/prod-sync-canary-abort.md)
-- [Argo disaster recovery](docs/runbooks/argocd-disaster-recovery.md)
-- [Drift and orphan response](docs/runbooks/drift-and-orphan.md)
-- [Source integrity failure](docs/runbooks/source-integrity-failure.md)
-- [Istio revision upgrade](docs/runbooks/istio-revision-upgrade.md)
-- [Break-glass SSO](docs/runbooks/break-glass-sso.md)
-
-`capture-incident-binding.rb DR_METADATA_JSON REVIEWED_NOTIFICATION_EVENT_ID` performs read-only live
-identity capture and prints a secret-free binding for review. Notification event ID must come from the
-actual provider delivery/audit record; this helper does not prove notification delivery.
-Set `PLATFORM_INCIDENT_EVIDENCE` and `PLATFORM_DR_METADATA` to the reviewed files before live baseline,
-SLO or rollback capture. Each capture validates source/image/cluster/revision and emits a
-`.platform.json` companion binding the source file hash to the incident and encrypted DR object.
-Metadata alone is not a recoverable Argo export.
-
-## Runtime gates
-
-CNI readiness and restricted injection, private image admission, SSO/HA, actual destination telemetry labels,
-canary abort/promote, firing/resolved notification delivery, initialized RDS TLS/DML/DDL, encrypted export,
-isolated Argo restore and RDS PITR remain LIVE_NOT_VERIFIED until observed on real infrastructure.
-Static snapshot inspection does not establish SQL recovery, RPO/RTO or release readiness.
-
-## Main RC integration contracts
-
-Prod promotion checks only changes to application/migration image identities; operational-only edits do not require DEV_READY.
-Migration phases are initial → expand → contract (reviewed rollback evidence) → finalize (evidence removed).
-Current V2-prime app activation defaults to expand/002, never initial-only/001; initial is an explicit legacy-compatible migration option.
-Snapshot recovery consumes a fresh source-PVC/PV/content-bound snapshot receipt, never a sample handle.
-Cross-repository migration checks use an explicit SAMPLE_APP_REPO_ROOT and optional exact-SHA verifier binding.
+세 chart package와 SHA-256 sidecar가 생성된다. `evidence/`의 실제 incident·cluster metadata와 로컬 package는 Git에서 제외하며, 승인된 보관 경로에 원본·checksum·companion을 함께 보존한다.

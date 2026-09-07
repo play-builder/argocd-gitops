@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "platformCleanup": {
+      "type": "object",
+      "properties": {"workloadsDisabled": {"type": "boolean"}}
+    },
+    "maintenance": {
+      "type": "object",
+      "properties": {"writersStopped": {"type": "boolean"}}
+    },
+    "namespace": {
+      "type": "object",
+      "properties": {"create": {"type": "boolean"}}
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "allowedCidrs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "networkPolicy": false,
+    "rollout": {
+      "type": "object",
+      "properties": {
+        "canary": {
+          "type": "object",
+          "properties": {"manualPromotion": false}
+        }
+      }
+    }
+  }
+}

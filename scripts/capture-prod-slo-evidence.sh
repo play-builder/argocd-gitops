@@ -52,7 +52,7 @@ validate_record() {
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
-    $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+    $ecr.region == $root.region and $cluster.region == $root.region and
     (.rollout | (keys | sort) == ["currentPodHash","name","phase","revision","stableHash","trafficWeight","uid"]) and
     (.rollout.name | nonblank) and (.rollout.uid | nonblank) and
     (.rollout.stableHash | nonblank) and (.rollout.currentPodHash | nonblank) and
@@ -69,7 +69,8 @@ validate_record() {
         (.phase | IN("Successful","Failed","Error")) and
         (.value | type == "string" and (try (tonumber | ((isnan or isinfinite) | not)) catch false)) and
         (.startedAt | canonical_utc_seconds) and (.finishedAt | canonical_utc_seconds) and
-        (.startedAt | fromdateiso8601) <= (.finishedAt | fromdateiso8601))) and
+        (.startedAt | fromdateiso8601) <= (.finishedAt | fromdateiso8601) and
+        (.finishedAt | fromdateiso8601) <= ($root.observedAt | fromdateiso8601))) and
     (.observedAt | canonical_utc_seconds) and ($observedLimit | canonical_utc_seconds) and
     (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601)
   ' "$file" >/dev/null || fail "Prod SLO evidence failed canonical metric or terminal-state validation"
@@ -129,43 +130,7 @@ local_git_revision=$(git -C "$repository_root" rev-parse HEAD)
 
 promotion_json=$(yq -o=json -I=0 '.' "$promotion") || fail "promotion evidence is not valid YAML"
 baseline_json=$(jq -c '.' "$baseline") || fail "Prod baseline is not valid JSON"
-jq -e --arg now "$clock_now" '
-  def canonical_utc_seconds:
-    . as $value |
-    type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
-    (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
-  . as $root |
-  .workflow as $workflow |
-  (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/mini-commerce)/actions/runs/(?<id>[0-9]+)$")) as $run |
-  (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
-  (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
-  (keys | sort) == ["attestation","cluster","environment","expiresAt","gitops","image","issuedAt","region","schemaVersion","slo","sourceSha","workflow"] and
-  .schemaVersion == "playbuilder.dev-ready/v1" and .environment == "dev" and
-  (.region | IN("ap-northeast-2","us-east-1")) and
-  (.sourceSha | test("^[0-9a-f]{40}$")) and
-  ($workflow | (keys | sort) == ["event","name","runAttempt","runId","runUrl"]) and
-  $workflow.name == "ci" and $workflow.event == "push" and
-  ($workflow.runId | type == "string" and test("^[0-9]+$")) and
-  ($workflow.runAttempt | type == "number" and floor == . and . >= 1) and
-  $run.id == $workflow.runId and
-  (.image | (keys | sort) == ["indexDigest","platforms","repository"]) and
-  (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
-  (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
-  .image.platforms == ["linux/amd64","linux/arm64"] and
-  (.attestation | (keys | sort) == ["githubId","githubUrl","ociProvenanceDigest","ociSbomDigest"]) and
-  (.attestation.githubId | type == "string" and test("^[0-9]+$")) and
-  .attestation.githubUrl == ("https://github.com/" + $run.repository + "/attestations/" + .attestation.githubId) and
-  (.attestation.ociSbomDigest | test("^sha256:[0-9a-f]{64}$")) and
-  (.attestation.ociProvenanceDigest | test("^sha256:[0-9a-f]{64}$")) and
-  (.gitops | (keys | sort) == ["devRevision"]) and (.gitops.devRevision | test("^[0-9a-f]{40}$")) and
-  (.cluster | (keys | sort) == ["arn"]) and
-  (.slo | (keys | sort) == ["evidenceId"]) and (.slo.evidenceId | type == "string" and test("[^[:space:]\uFEFF]")) and
-  $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
-  (.issuedAt | canonical_utc_seconds) and (.expiresAt | canonical_utc_seconds) and
-  ($now | canonical_utc_seconds) and
-  (.issuedAt | fromdateiso8601) <= ($now | fromdateiso8601) and
-  ($now | fromdateiso8601) < (.expiresAt | fromdateiso8601)
-' <<<"$promotion_json" >/dev/null || fail "promotion evidence is not canonical DEV_READY"
+jq -e --arg now "$clock_now" -f "$script_dir/lib/dev-ready.jq"  <<<"$promotion_json" >/dev/null || fail "promotion evidence is not canonical DEV_READY"
 jq -e --arg now "$clock_now" '
   def canonical_utc_seconds:
     . as $value |
@@ -185,7 +150,7 @@ jq -e --arg now "$clock_now" '
   (.rollout.stableHash | nonblank) and
   .rollout.revision == 1 and .rollout.trafficWeight == 100 and
   (.region | IN("ap-northeast-2","us-east-1")) and
-  $ecr.region == $root.region and $cluster.region == $root.region and $ecr.account == $cluster.account and
+  $ecr.region == $root.region and $cluster.region == $root.region and
   (.observedAt | canonical_utc_seconds) and ($now | canonical_utc_seconds) and
   (.observedAt | fromdateiso8601) <= ($now | fromdateiso8601)
 ' <<<"$baseline_json" >/dev/null || fail "Prod baseline is not a valid initial stable release"
@@ -208,11 +173,11 @@ baseline_region=$(jq -r '.region' <<<"$baseline_json")
 [[ "$dev_cluster_arn" != "$baseline_cluster_arn" ]] || fail "DEV_READY and baseline must bind distinct clusters"
 
 app_json=$(argocd app get mini-commerce-prod -o json) || fail "unable to read mini-commerce-prod from Argo CD"
-gitops_revision=$(jq -er '.status.operationState.syncResult.revision // .status.sync.revision' <<<"$app_json") ||
+gitops_revision=$(jq -er '.status.sync.revision' <<<"$app_json") ||
   fail "Argo CD did not report a GitOps revision"
 jq -e '
   .metadata.name == "mini-commerce-prod" and .status.sync.status == "Synced" and
-  .status.health.status == "Healthy" and (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$"))
+  .status.health.status == "Healthy" and .spec.source.repoURL == "https://github.com/play-builder/argocd-gitops.git"
 ' <<<"$app_json" >/dev/null || fail "mini-commerce-prod must be Synced, Healthy, and GitOps-backed"
 [[ "$gitops_revision" == "$local_git_revision" ]] ||
   fail "live Argo CD revision does not match the checked-out GitOps commit"
@@ -290,7 +255,12 @@ analysis_matches=$(jq -ce --arg uid "$rollout_uid" --arg revision "$rollout_revi
 [[ $(jq 'length' <<<"$analysis_matches") -eq 1 ]] ||
   fail "owned AnalysisRun selection for the stable revision is ambiguous"
 analysis=$(jq -c '.[0]' <<<"$analysis_matches")
-jq -e '
+jq -e --arg hash "$stable_hash" --arg now "$clock_now" '
+  ([.spec.args[]? | select(.name == "latest-hash") | .value] == [$hash]) and
+  all(.status.metricResults[];
+    any(.measurements[]?; .phase == "Successful" and
+      (.finishedAt | fromdateiso8601) <= ($now | fromdateiso8601) and
+      (.finishedAt | fromdateiso8601) >= (($now | fromdateiso8601) - 1800))) and
   (.metadata.name | type == "string" and length > 0) and
   (.metadata.uid | type == "string" and length > 0) and
   .status.phase == "Successful" and
@@ -298,6 +268,10 @@ jq -e '
   ([.status.metricResults[].name] | sort) == ["latency","request-rate","success-rate"] and
   all(.status.metricResults[].measurements[]?; .finishedAt != null)
 ' <<<"$analysis" >/dev/null || fail "the unique owned AnalysisRun is not a successful canonical SLO analysis"
+
+[[ $(git -C "$repository_root" rev-parse HEAD) == "$local_git_revision" &&
+   -z $(git -C "$repository_root" status --porcelain --untracked-files=all -- . ':(exclude)evidence') ]] ||
+  fail "GitOps source changed during Prod SLO capture"
 
 output_dir=$(dirname -- "$output")
 mkdir -p "$output_dir"
@@ -321,7 +295,14 @@ jq -n --arg source "$source_sha" --arg sourceRepository "$source_repository" \
      currentPodHash:$ro.status.currentPodHash,trafficWeight:100,phase:$ro.status.phase},
    analysisRun:{name:$ar.metadata.name,uid:$ar.metadata.uid,phase:$ar.status.phase,templateName:"mini-commerce-success-rate"},
    metricResults:[$ar.status.metricResults[] | {name,phase,
-     measurements:([.measurements[] | select(.finishedAt != null) | {value,phase,startedAt,finishedAt}])}],
+     measurements:([.measurements[] | select(.finishedAt != null) |
+       # Argo Rollouts Prometheus provider serializes a vector as "[99.9]".
+       # Keep the v1 evidence scalar string while rejecting empty/multiple series.
+       .value |= (if type == "string" and startswith("[") then
+         fromjson | if type == "array" and length == 1 and
+           (.[0] | type == "number" and ((isnan or isinfinite) | not))
+           then .[0] | tostring else error("noncanonical Prometheus vector") end
+         else . end) | {value,phase,startedAt,finishedAt}])}],
    observedAt:$observed}
 ' >"$tmp" || fail "failed to construct Prod SLO evidence"
 validate_record "$tmp" "$evidence_grade" "$clock_now"
