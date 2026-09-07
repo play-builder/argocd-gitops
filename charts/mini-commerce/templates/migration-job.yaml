@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- if and .Values.database.enabled .Values.database.migration.enabled }}
 {{- $migrationPhase := required "database.migration.phase is required when migration is enabled" .Values.database.migration.phase }}
 {{- $migrationTarget := required "database.migration.target is required when migration is enabled" .Values.database.migration.target }}
@@ -176,5 +177,6 @@ spec:
               - key: rollback-candidates.json
                 path: rollback-candidates.json
         {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

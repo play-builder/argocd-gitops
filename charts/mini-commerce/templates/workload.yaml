@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- include "mini-commerce.validateKind" . -}}
 {{- if eq .Values.workload.kind "Deployment" }}
 apiVersion: apps/v1
@@ -74,4 +75,5 @@ spec:
         {{- toYaml .Values.rollout.canary.steps | nindent 8 }}
   template:
     {{- include "mini-commerce.podTemplate" . | nindent 4 }}
+{{- end }}
 {{- end }}

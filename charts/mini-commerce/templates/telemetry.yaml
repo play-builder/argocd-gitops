@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 {{- include "mini-commerce.validateTelemetry" . }}
 {{- if .Values.telemetry.enabled }}
 {{- $endpoint := required "telemetry.otlpEndpoint is required when telemetry is enabled" .Values.telemetry.otlpEndpoint }}
@@ -38,3 +39,4 @@ spec:
             destination_rollout_hash:
               operation: UPSERT
               value: "node.metadata['LABELS']['rollouts-pod-template-hash']"
+{{- end }}

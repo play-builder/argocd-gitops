@@ -13,10 +13,10 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 usage() { echo "Usage: $0 [--fixture path] [--output path --now RFC3339]" >&2; exit 2; }
 
 validate_ecr_repository() {
-  local repository=$1 expected_region=$2 expected_account=$3
-  local prefix="${expected_account}.dkr.ecr.${expected_region}.amazonaws.com/" repository_name
-  [[ "$repository" == "$prefix"* ]] || fail 'Prod image repository does not match the EKS account and Region'
-  repository_name=${repository#"$prefix"}
+  local repository=$1 expected_region=$2 repository_name
+  [[ "$repository" =~ ^[0-9]{12}\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com/ ]] || fail 'Prod image must use a canonical ECR repository'
+  [[ "${BASH_REMATCH[1]}" == "$expected_region" ]] || fail 'Prod ECR Region differs from EKS'
+  repository_name=${repository#*/}
   [[ ${#repository_name} -ge 2 && ${#repository_name} -le 256 &&
      "$repository_name" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]] ||
     fail 'Prod image repository name is not canonical ECR syntax'
@@ -100,12 +100,13 @@ jq -en --arg now "$clock_now" '
 ' >/dev/null ||
   fail 'capture clock must be RFC3339 UTC'
 
-for required in kubectl argocd aws git jq mktemp; do
+for required in kubectl argocd aws git jq mktemp helm ruby; do
   command -v "$required" >/dev/null || fail "$required is required for live Prod baseline capture"
 done
 [[ ${AWS_REGION:-} == ap-northeast-2 || ${AWS_REGION:-} == us-east-1 ]] ||
   fail 'AWS_REGION must be ap-northeast-2 or us-east-1'
 [[ -n ${EKS_CLUSTER_NAME:-} ]] || fail 'EKS_CLUSTER_NAME is required'
+[[ ${EKS_CLUSTER_ARN:-} =~ ^arn:aws:eks:$AWS_REGION:[0-9]{12}:cluster/$EKS_CLUSTER_NAME$ ]] || fail 'EKS_CLUSTER_ARN must identify the approved target cluster'
 [[ -z $(git -C "$repository_root" status --porcelain --untracked-files=all -- . ':(exclude)evidence') ]] ||
   fail 'GitOps source outside evidence/ must match the checked-out commit before baseline capture'
 
@@ -113,11 +114,11 @@ git_revision=$(git -C "$repository_root" rev-parse HEAD)
 [[ "$git_revision" =~ ^[0-9a-f]{40}$ ]] || fail 'local GitOps revision is not a full commit SHA'
 
 app_json=$(argocd app get mini-commerce-prod -o json) || fail 'unable to read mini-commerce-prod from Argo CD'
-live_revision=$(jq -er '.status.operationState.syncResult.revision // .status.sync.revision' <<<"$app_json") ||
+live_revision=$(jq -er '.status.sync.revision' <<<"$app_json") ||
   fail 'Argo CD did not report a GitOps revision'
 jq -e '
   .metadata.name == "mini-commerce-prod" and .status.sync.status == "Synced" and
-  .status.health.status == "Healthy" and (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$"))
+  .status.health.status == "Healthy" and .spec.source.repoURL == "https://github.com/play-builder/argocd-gitops.git"
 ' <<<"$app_json" >/dev/null || fail 'mini-commerce-prod must be Synced and Healthy'
 [[ "$live_revision" =~ ^[0-9a-f]{40}$ && "$live_revision" == "$git_revision" ]] ||
   fail 'live Argo CD revision does not match the checked-out GitOps commit'
@@ -125,6 +126,7 @@ jq -e '
 cluster_json=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --output json) ||
   fail 'unable to describe the Prod EKS cluster'
 cluster_arn=$(jq -er '.cluster.arn' <<<"$cluster_json") || fail 'EKS cluster ARN is missing'
+[[ "$cluster_arn" == "$EKS_CLUSTER_ARN" ]] || fail 'live cluster differs from approved EKS_CLUSTER_ARN'
 cluster_endpoint=$(jq -er '.cluster.endpoint' <<<"$cluster_json") || fail 'EKS cluster endpoint is missing'
 jq -e --arg name "$EKS_CLUSTER_NAME" --arg region "$AWS_REGION" '
   .cluster.name == $name and .cluster.status == "ACTIVE" and
@@ -156,6 +158,9 @@ jq -e '
   fail 'Prod Rollout image must be pinned by an immutable sha256 digest'
 image_repository=${BASH_REMATCH[1]}
 image_digest=${BASH_REMATCH[2]}
+rendered=$(ruby "$script_dir/render-prod-release.rb" "$repository_root") || fail 'cannot render reviewed Prod release'
+jq -e --arg image "$image" '[.[] | select(.[0] == "Rollout" and .[3] == "mini-commerce") | .[4]] == [$image]' \
+  <<<"$rendered" >/dev/null || fail 'live Prod image differs from the reviewed rendered release'
 
 replicasets_json=$(kubectl -n app-prod get replicasets -l "rollouts-pod-template-hash=$stable_hash" -o json) ||
   fail 'unable to read the stable ReplicaSet'
@@ -189,6 +194,9 @@ cluster_account=${cluster_arn#arn:aws:eks:$AWS_REGION:}
 cluster_account=${cluster_account%%:*}
 validate_ecr_repository "$image_repository" "$AWS_REGION" "$cluster_account"
 
+[[ $(git -C "$repository_root" rev-parse HEAD) == "$git_revision" &&
+   -z $(git -C "$repository_root" status --porcelain --untracked-files=all -- . ':(exclude)evidence') ]] ||
+  fail 'GitOps source changed during baseline capture'
 mkdir -p "$(dirname -- "$output")"
 if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
   output_parent=$(cd -- "$(dirname -- "$output")" && pwd -P) || fail 'cannot resolve canonical baseline output directory'

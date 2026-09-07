@@ -43,6 +43,8 @@ if [[ "$mode" == exact-sha ]]; then
   actual_sha=$(git -C "$git_root" rev-parse HEAD)
   [[ "$actual_sha" == "$SAMPLE_APP_EXPECTED_SHA" ]] ||
     fail 'Sample checkout revision differs from SAMPLE_APP_EXPECTED_SHA'
+  [[ -z $(git -C "$git_root" status --porcelain --untracked-files=all) ]] ||
+    fail 'exact-SHA mode requires a clean complete application checkout, including imported dependencies'
   expected_blob=$(git -C "$git_root" rev-parse \
     "$SAMPLE_APP_EXPECTED_SHA:src/migration-ledger.js" 2>/dev/null) ||
     fail 'expected Sample commit does not track src/migration-ledger.js'

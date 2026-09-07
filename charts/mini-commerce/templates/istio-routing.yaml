@@ -1,3 +1,4 @@
+{{- if not .Values.platformCleanup.workloadsDisabled }}
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
@@ -27,3 +28,4 @@ spec:
               number: {{ .Values.service.port }}
           weight: 0
         {{- end }}
+{{- end }}

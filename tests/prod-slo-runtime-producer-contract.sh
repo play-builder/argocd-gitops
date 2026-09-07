@@ -32,7 +32,6 @@ while IFS='|' read -r label expression; do
 done <<'CASES'
 source-repository|.source.repository = "play-builder/other-app"
 source-owner-whitespace|.source.repository = "play-builder /mini-commerce"
-image-account|.image.repository = "999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"
 image-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 measurement-number|.metricResults[0].measurements[0].value = 12.5
 measurement-nan|.metricResults[0].measurements[0].value = "NaN"
@@ -104,7 +103,7 @@ printf '%s\n' fedcba9876543210fedcba9876543210fedcba98 >"$fake_runtime/git-revis
 : >"$fake_runtime/git-status.txt"
 cp "$test_root/fixtures/promotion/valid-ap-northeast-2.yaml" "$fake_runtime/promotion.yaml"
 cp "$fixture_root/baseline-valid.json" "$fake_runtime/baseline.json"
-jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$fake_runtime/application.json"
+jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/play-builder/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$fake_runtime/application.json"
 jq -n '{cluster:{name:"mini-commerce-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$fake_runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$fake_runtime/kubeconfig.json"
 jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
@@ -119,7 +118,7 @@ jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commer
 jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{http:[{name:"primary",route:[{destination:{host:"mini-commerce-stable",port:{number:3000}},weight:100},{destination:{host:"mini-commerce-canary",port:{number:3000}},weight:0}]}]}}' >"$fake_runtime/virtualservice.json"
 jq -n --argjson metrics "$(jq -c '.metricResults' "$fixture_root/prod-slo-valid.json")" '
   {items:[{metadata:{name:"mini-commerce-2",uid:"33333333-3333-3333-3333-333333333333",annotations:{"rollout.argoproj.io/revision":"2"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
-   spec:{metrics:[{name:"request-rate"},{name:"success-rate"},{name:"latency"}]},status:{phase:"Successful",metricResults:$metrics}}]}
+   spec:{args:[{name:"latest-hash",value:"stable-v2"}],metrics:[{name:"request-rate"},{name:"success-rate"},{name:"latency"}]},status:{phase:"Successful",metricResults:$metrics}}]}
 ' >"$fake_runtime/analysisruns.json"
 
 run_static() {
@@ -159,6 +158,34 @@ cp -R "$fake_runtime" "$two_character_runtime"
 set_release_repository "$two_character_runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab'
 run_static "$two_character_runtime" "$tmp_root/ecr-two-character-output.json" >/dev/null ||
   fail 'Prod SLO runtime rejected a two-character ECR repository name'
+
+# Real provider values are vectors; evidence v1 normalizes singleton vectors.
+vector_runtime="$tmp_root/runtime-vector"
+cp -R "$fake_runtime" "$vector_runtime"
+jq '.items[].status.metricResults[].measurements[].value |= ("[" + . + "]")' "$vector_runtime/analysisruns.json" >"$vector_runtime/mutated"
+mv "$vector_runtime/mutated" "$vector_runtime/analysisruns.json"
+run_static "$vector_runtime" "$tmp_root/vector-output.json" >/dev/null || fail 'real Prometheus vector values were rejected'
+jq -e '.metricResults[0].measurements[1].value == "14.2"' "$tmp_root/vector-output.json" >/dev/null || fail 'vector value was not normalized'
+for mutation in wrong-hash stale-measurements future-measurement vector-empty vector-many vector-nan; do
+  runtime="$tmp_root/runtime-$mutation"
+  cp -R "$fake_runtime" "$runtime"
+  case "$mutation" in
+    wrong-hash) expression='.items[0].spec.args[0].value="other-release"' ;;
+    stale-measurements) expression='.items[].status.metricResults[].measurements[] |= (.startedAt="2000-01-01T00:00:00Z" | .finishedAt="2000-01-01T00:00:30Z")' ;;
+    future-measurement) expression='.items[0].status.metricResults[0].measurements[0].finishedAt="2099-01-01T00:00:00Z"' ;;
+    vector-empty) expression='.items[0].status.metricResults[0].measurements[0].value="[]"' ;;
+    vector-many) expression='.items[0].status.metricResults[0].measurements[0].value="[1,2]"' ;;
+    vector-nan) expression='.items[0].status.metricResults[0].measurements[0].value="[NaN]"' ;;
+  esac
+  jq "$expression" "$runtime/analysisruns.json" >"$runtime/mutated"
+  mv "$runtime/mutated" "$runtime/analysisruns.json"
+  if run_static "$runtime" "$tmp_root/$mutation-output.json" >/dev/null 2>&1; then fail "SLO capture accepted $mutation"; fi
+done
+
+cross_account="$tmp_root/runtime-network-ecr"
+cp -R "$fake_runtime" "$cross_account"
+set_release_repository "$cross_account" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce'
+run_static "$cross_account" "$tmp_root/network-ecr-output.json" >/dev/null || fail 'cross-account Network ECR rejected by SLO capture'
 
 for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wrong-revision unfinished-measurement metric-failed no-successful-measurement nonfinite reversed-time nonfinal-route extra-route-backend extra-route-rule image-mismatch git-mismatch baseline-reuse baseline-stable-whitespace baseline-stable-bom malformed-cluster-arn promotion-ecr-double-slash promotion-ecr-name-too-short promotion-attestation-alpha promotion-owner-whitespace promotion-slo-evidence-id-whitespace promotion-slo-evidence-id-bom promotion-calendar-invalid; do
   runtime="$tmp_root/runtime-$label"

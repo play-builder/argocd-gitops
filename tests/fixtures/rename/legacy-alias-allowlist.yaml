@@ -27,7 +27,7 @@ entries:
     removalEvidence: playbuilder.rename-cutover/v1
   - path: tests/sample-verifier-binding-contract.sh
     literal: "SAMPLE\u005fAPP"
-    count: 16
+    count: 18
     reason: explicit verifier checkout environment API retained from main RC fixes
     removalEvidence: playbuilder.rename-cutover/v1
   - path: tests/test-all.sh

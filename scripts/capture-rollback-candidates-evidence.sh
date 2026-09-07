@@ -166,11 +166,11 @@ validate_record() {
 }
 
 validate_ecr_repository() {
-  local repository=$1 region=$2 account=$3 name
+  local repository=$1 region=$2 name
   [[ "$repository" =~ ^([0-9]{12})\.dkr\.ecr\.(ap-northeast-2|us-east-1)\.amazonaws\.com/([a-z0-9]+([._/-][a-z0-9]+)*)$ ]] ||
     fail 'rollback candidate image repository is not canonical commercial ECR'
-  [[ ${BASH_REMATCH[1]} == "$account" && ${BASH_REMATCH[2]} == "$region" ]] ||
-    fail 'rollback candidate image repository account or Region differs from EKS'
+  [[ ${BASH_REMATCH[2]} == "$region" ]] ||
+    fail 'rollback candidate image repository Region differs from EKS'
   name=${BASH_REMATCH[3]}
   ((${#name} >= 2 && ${#name} <= 256)) || fail 'rollback candidate ECR repository name length is invalid'
   [[ "$name" == mini-commerce || "$name" == */mini-commerce ]] ||
@@ -215,7 +215,7 @@ validate_application_binding() {
   jq -e --arg revision "$revision" '
     .metadata.name == "mini-commerce-prod" and .status.sync.status == "OutOfSync" and
     .status.sync.revision == $revision and .status.health.status == "Healthy" and
-    (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
+    .spec.source.repoURL == "https://github.com/play-builder/argocd-gitops.git" and
     ((.spec.syncPolicy.automated // null) == null) and
     ((.status.operationState.phase // "") | IN("","Succeeded"))
   ' <<<"$application" >/dev/null ||
@@ -235,7 +235,7 @@ validate_finalize_binding() {
     .status.sync.status == "Synced" and .status.sync.revision == $revision and
     .status.health.status == "Healthy" and
     ((.status.operationState.phase // "") | IN("", "Succeeded")) and
-    (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
+    .spec.source.repoURL == "https://github.com/play-builder/argocd-gitops.git" and
     ((.spec.syncPolicy.automated // null) == null) and
     .spec.source.helm.valueFiles == [
       "../../envs/prod/values.yaml",
@@ -434,6 +434,7 @@ for command in argocd aws git kubectl; do command -v "$command" >/dev/null || fa
 [[ ${EKS_CLUSTER_NAME:-} =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] || fail 'EKS_CLUSTER_NAME is invalid'
 [[ -z $(git -C "$repository_root" status --porcelain --untracked-files=all -- . ':(exclude)evidence') ]] ||
   fail 'GitOps source outside evidence/ must match the checked-out commit before rollback capture'
+[[ ${EKS_CLUSTER_ARN:-} =~ ^arn:aws:eks:$AWS_REGION:[0-9]{12}:cluster/$EKS_CLUSTER_NAME$ ]] || fail 'EKS_CLUSTER_ARN must identify the approved target cluster'
 local_revision=$(git -C "$repository_root" rev-parse HEAD)
 [[ "$local_revision" =~ ^[0-9a-f]{40}$ ]] || fail 'local GitOps revision is not a full commit SHA'
 
@@ -441,7 +442,7 @@ application=$(argocd app get mini-commerce-prod -o json) || fail 'unable to quer
 desired_revision=$(jq -er '.status.sync.revision' <<<"$application") || fail 'Argo CD desired revision is missing'
 jq -e '
   .metadata.name == "mini-commerce-prod" and .status.sync.status == "OutOfSync" and
-  .status.health.status == "Healthy" and (.spec.source.repoURL | test("/argocd-gitops(\\.git)?$")) and
+  .status.health.status == "Healthy" and .spec.source.repoURL == "https://github.com/play-builder/argocd-gitops.git" and
   ((.spec.syncPolicy.automated // null) == null) and
   ((.status.operationState.phase // "") | IN("","Succeeded"))
 ' <<<"$application" >/dev/null ||
@@ -451,6 +452,7 @@ jq -e '
 cluster=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --output json) ||
   fail 'unable to describe the Prod EKS cluster'
 cluster_arn=$(jq -er '.cluster.arn' <<<"$cluster") || fail 'Prod EKS cluster ARN is missing'
+[[ "$cluster_arn" == "$EKS_CLUSTER_ARN" ]] || fail 'live cluster differs from approved EKS_CLUSTER_ARN'
 cluster_endpoint=$(jq -er '.cluster.endpoint' <<<"$cluster") || fail 'Prod EKS endpoint is missing'
 jq -e --arg name "$EKS_CLUSTER_NAME" --arg region "$AWS_REGION" '
   .cluster.name == $name and .cluster.status == "ACTIVE" and

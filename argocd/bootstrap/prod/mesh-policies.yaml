@@ -12,7 +12,7 @@
   "spec": {
     "project": "platform-mesh-prod",
     "source": {
-      "repoURL": "https://github.com/REPLACE_ME/argocd-gitops.git",
+      "repoURL": "https://github.com/play-builder/argocd-gitops.git",
       "targetRevision": "main",
       "path": "platform/istio/overlays/prod"
     },

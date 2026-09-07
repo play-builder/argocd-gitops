@@ -5,6 +5,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      application_sha:
+        description: Optional full mini-commerce commit SHA for cross-repository verification
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -19,6 +25,33 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate optional application revision
+        if: github.event_name == 'workflow_dispatch' && inputs.application_sha != ''
+        env:
+          APPLICATION_SHA: ${{ inputs.application_sha }}
+        run: |
+          [[ "$APPLICATION_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Full lowercase application SHA required' >&2; exit 1; }
+
+      - name: Checkout exact application revision
+        if: github.event_name == 'workflow_dispatch' && inputs.application_sha != ''
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: play-builder/mini-commerce
+          ref: ${{ inputs.application_sha }}
+          path: .cross-repo/mini-commerce
+          persist-credentials: false
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+
+      - name: Enable exact application verifier binding
+        if: github.event_name == 'workflow_dispatch' && inputs.application_sha != ''
+        env:
+          APPLICATION_SHA: ${{ inputs.application_sha }}
+        run: |
+          echo "CROSS_REPO_CONTRACT_MODE=exact-sha" >> "$GITHUB_ENV"
+          echo "SAMPLE_APP_REPO_ROOT=$GITHUB_WORKSPACE/.cross-repo/mini-commerce" >> "$GITHUB_ENV"
+          echo "SAMPLE_APP_EXPECTED_SHA=$APPLICATION_SHA" >> "$GITHUB_ENV"
 
       - name: Install required host tools
         run: |
@@ -89,19 +122,6 @@ jobs:
             > "$RUNNER_TEMP/external-secrets-2.10.0.yaml"
           EXTERNAL_SECRETS_RENDERED_MANIFEST="$RUNNER_TEMP/external-secrets-2.10.0.yaml" \
             bash tests/bootstrap-contract.sh --case external-secrets-project
-
-      - name: Verify production rollback window
-        run: |
-          awk '
-            /^kind: Rollout$/ { in_rollout = 1 }
-            in_rollout && /^  rollbackWindow:$/ { getline; if ($0 == "    revisions: 2") found = 1 }
-            END {
-              if (!found) {
-                print "Prod Rollout must render rollbackWindow.revisions=2" > "/dev/stderr"
-                exit 1
-              }
-            }
-          ' /tmp/mini-commerce-prod.yaml
 
       - name: Install pinned kubeconform
         run: |

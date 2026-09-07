@@ -42,20 +42,12 @@ app.kubernetes.io/component: application
 {{- .Chart.AppVersion -}}
 {{- end -}}
 
-{{- define "mini-commerce.databaseFullname" -}}
-{{- printf "%s-postgresql" (include "mini-commerce.fullname" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
 {{- define "mini-commerce.runtimeSecretName" -}}
 {{- required "externalSecrets.runtime.targetSecretName is required when External Secrets is enabled" .Values.externalSecrets.runtime.targetSecretName -}}
 {{- end -}}
 
 {{- define "mini-commerce.databaseSecretName" -}}
 {{- required "externalSecrets.database.targetSecretName is required when database is enabled" .Values.externalSecrets.database.targetSecretName -}}
-{{- end -}}
-
-{{- define "mini-commerce.recoveryDatabaseSecretName" -}}
-{{- printf "%s-db-recovery" (include "mini-commerce.fullname" .) -}}
 {{- end -}}
 
 {{- define "mini-commerce.telemetryConfigName" -}}
@@ -117,15 +109,6 @@ app.kubernetes.io/component: application
 {{- if ne (mod $address $blockSize) 0 -}}
 {{- fail $error -}}
 {{- end -}}
-{{- end -}}
-
-{{- define "mini-commerce.databaseImage" -}}
-{{- $repository := required "database.image.repository is required" .Values.database.image.repository -}}
-{{- $digest := required "database.image.digest is required; mutable tags are not accepted" .Values.database.image.digest -}}
-{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
-{{- fail "database.image.digest must be sha256 followed by 64 lowercase hexadecimal characters" -}}
-{{- end -}}
-{{- printf "%s@%s" $repository $digest -}}
 {{- end -}}
 
 {{- define "mini-commerce.migrationImage" -}}

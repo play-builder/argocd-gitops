@@ -6,6 +6,7 @@ require 'tempfile'
 def check(x,m);abort("FAIL: #{m}") unless x;end
 docs=YAML.load_stream(Open3.capture2('kubectl','kustomize','platform/istio/overlays/prod')[0])
 waf=docs.find{|d|d['kind']=='LoadBalancerConfiguration'}
+waf['spec']['sourceRanges'] = ['10.10.1.0/24']
 waf['spec']['wafV2']['webACL']='arn:aws:wafv2:ap-northeast-2:123456789012:regional/webacl/fixture/12345678-1234-1234-1234-123456789012'
 waf['spec']['listenerConfigurations'][0]['defaultCertificate']='arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012'
 def accepted(docs)
@@ -17,6 +18,12 @@ def accepted(docs)
 end
 check(accepted(docs),'valid fixture rejected')
 [
+ ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['scheme']='internet-facing'},
+ ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['sourceRanges']=['0.0.0.0/0']},
+ ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['sourceRanges']=['10.0.0.0/7']},
+ ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['sourceRanges']=['::/0']},
+ ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['sourceRanges']=[]},
+ ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['securityGroups']=['sg-open']},
  ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['wafV2']['webACL']=''},
  ->(d){d.find{|x|x['kind']=='LoadBalancerConfiguration'}['spec']['wafv2ACLArn']='bad'},
  ->(d){d.find{|x|x['kind']=='HTTPRoute'}['spec']['rules'][0]['backendRefs'][0]['port']=3001},

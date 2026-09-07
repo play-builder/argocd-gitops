@@ -5,6 +5,11 @@
 /charts/          @REPLACE_ME
 /argocd/          @REPLACE_ME
 /.github/         @REPLACE_ME
+/platform/        @REPLACE_ME
+/scripts/         @REPLACE_ME
+/contracts/       @REPLACE_ME
+/tests/           @REPLACE_ME
+/versions.lock.yaml @REPLACE_ME
 
 # envs/dev is intentionally omitted: the CI bot can auto-merge digest-only PRs
 # after the required validate check passes.

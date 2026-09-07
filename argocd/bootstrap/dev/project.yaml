@@ -10,11 +10,11 @@ spec:
   description: Bootstrap and Phase A platform handoff resources in the dev cluster
   sourceRepos:
   # Git signing key distribution is EKS-owned; HEAD precedes strict/seal migration.
-  - https://github.com/REPLACE_ME/argocd-gitops.git
+  - https://github.com/play-builder/argocd-gitops.git
   sourceIntegrity:
     git:
       policies:
-        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+        - repos: [{url: https://github.com/play-builder/argocd-gitops.git}]
           gpg: {mode: head, keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]}
   destinations:
   - server: https://kubernetes.default.svc
@@ -52,7 +52,7 @@ metadata:
 spec:
   description: Platform application resources in app-dev and app-recovery only
   sourceRepos:
-  - https://github.com/REPLACE_ME/argocd-gitops.git
+  - https://github.com/play-builder/argocd-gitops.git
   destinations:
   - server: https://kubernetes.default.svc
     namespace: app-dev
@@ -122,14 +122,14 @@ spec:
   sourceIntegrity:
     git:
       policies:
-        - repos: [{url: https://github.com/REPLACE_ME/argocd-gitops.git}]
+        - repos: [{url: https://github.com/play-builder/argocd-gitops.git}]
           gpg:
             mode: head
             keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]
   description: Mini Commerce namespaced workload resources; legacy ownership remains
     in mini-commerce-dev
   sourceRepos:
-  - https://github.com/REPLACE_ME/argocd-gitops.git
+  - https://github.com/play-builder/argocd-gitops.git
   destinations:
   - server: https://kubernetes.default.svc
     namespace: app-dev

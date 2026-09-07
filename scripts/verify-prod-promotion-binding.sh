@@ -20,7 +20,15 @@ base_image_identity=$(git -C "$repository_root" show "${base_sha}:envs/prod/valu
 current_image_identity=$(yq -o=json -I=0 "$image_identity_query" "$values") ||
   fail "cannot read current Prod image identity"
 
-if [[ "$base_image_identity" == "$current_image_identity" ]]; then
+snapshot=$(mktemp -d)
+trap 'rm -rf -- "$snapshot"' EXIT
+git -C "$repository_root" archive "$base_sha" | tar -xf - -C "$snapshot" || fail "cannot extract base source"
+base_rendered=$(ruby "$script_dir/render-prod-release.rb" "$snapshot" --base) || fail "cannot render base Prod source"
+current_rendered=$(ruby "$script_dir/render-prod-release.rb" "$repository_root") || fail "cannot render current Prod source"
+
+new_images=$(jq -cn --argjson base "$base_rendered" --argjson current "$current_rendered" \
+  '($current | map(.[4]) | unique) - ($base | map(.[4]) | unique)')
+if [[ "$base_image_identity" == "$current_image_identity" && "$new_images" == '[]' ]]; then
   echo "PASS: Prod image identity is unchanged; no promotion binding is required."
   exit 0
 fi
@@ -33,6 +41,9 @@ physical_parent=$(cd -- "$(dirname -- "$evidence")" && pwd -P) ||
   fail "cannot resolve canonical DEV_READY parent"
 [[ "$physical_parent/$(basename -- "$evidence")" == "$evidence" ]] ||
   fail "canonical DEV_READY evidence escaped the repository"
+
+yq -o=json '.' "$evidence" | jq -e --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -f "$script_dir/lib/dev-ready.jq" >/dev/null || fail "DEV_READY schema, identity, or expiry is invalid"
 
 evidence_repository=$(yq -er '.image.repository' "$evidence") ||
   fail "DEV_READY image repository is missing"
@@ -57,5 +68,8 @@ evidence_repository_name=${evidence_repository#*/}
   fail "Prod application and migration repositories must match current DEV_READY"
 [[ "$application_digest" == "$evidence_digest" && "$migration_digest" == "$evidence_digest" ]] ||
   fail "Prod application and migration digests must match current DEV_READY"
+
+jq -e --arg image "$evidence_repository@$evidence_digest" 'length > 0 and all(.[]; .[4] == $image)' \
+  <<<"$current_rendered" >/dev/null || fail "rendered Prod workload/migration image differs from DEV_READY"
 
 echo "PASS: changed Prod image identity matches current canonical DEV_READY evidence."

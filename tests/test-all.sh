@@ -30,6 +30,7 @@ ruby "$test_root/istio-analyze-contract.rb"
 ruby "$test_root/istio-cni-contract.rb"
 ruby "$test_root/istio-cni-readiness-contract.rb"
 ruby "$test_root/application-secrets-contract.rb"
+ruby "$test_root/activation-contract.rb"
 ruby "$test_root/rc-integration-contract.rb"
 ruby "$test_root/rc-recovery-contract.rb"
 bash "$test_root/bootstrap-contract.sh" --case all

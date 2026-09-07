@@ -300,7 +300,8 @@
     }
   },
   "spec": {
-    "scheme": "internet-facing",
+    "scheme": "internal",
+    "sourceRanges": ["REPLACE_WITH_TRUSTED_CALLER_CIDR"],
     "wafV2": {
       "webACL": "REPLACE_FROM_EKS_MINI_COMMERCE_WAF_WEB_ACL_ARN"
     },

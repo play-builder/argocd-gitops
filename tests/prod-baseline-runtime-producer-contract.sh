@@ -38,7 +38,7 @@ for timestamp in 2026-09-03T00:29:59.123Z 2026-09-03T09:29:59+09:00 2026-02-31T0
   fi
 done
 
-for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-too-short ecr-name-too-long ecr-region-mismatch ecr-account-mismatch; do
+for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-too-short ecr-name-too-long ecr-region-mismatch; do
   invalid_fixture="$tmp_root/fixture-$label.json"
   case "$label" in
     ecr-double-slash)
@@ -53,8 +53,7 @@ for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-to
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/" + ("a" * 257)' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-region-mismatch)
       jq '.image.repository="123456789012.dkr.ecr.us-east-1.amazonaws.com/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
-    ecr-account-mismatch)
-      jq '.image.repository="999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+
   esac
   if bash "$script" --fixture "$invalid_fixture" >/dev/null 2>&1; then
     fail "baseline fixture validator accepted $label"
@@ -76,12 +75,12 @@ done
 fake_bin="$tmp_root/bin"
 runtime="$tmp_root/runtime"
 mkdir -p "$fake_bin" "$runtime"
-for command in argocd aws git kubectl; do
+for command in argocd aws git kubectl helm; do
   ln -s "$test_root/helpers/fake-prod-slo-cli.sh" "$fake_bin/$command"
 done
 printf '%s\n' 1111111111111111111111111111111111111111 >"$runtime/git-revision.txt"
 : >"$runtime/git-status.txt"
-jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' >"$runtime/application.json"
+jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/play-builder/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' >"$runtime/application.json"
 jq -n '{cluster:{name:"mini-commerce-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$runtime/kubeconfig.json"
 jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
@@ -95,10 +94,12 @@ jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commer
 ' >"$runtime/replicasets.json"
 jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{http:[{name:"primary",route:[{destination:{host:"mini-commerce-stable",port:{number:3000}},weight:100},{destination:{host:"mini-commerce-canary",port:{number:3000}},weight:0}]}]}}' >"$runtime/virtualservice.json"
 
+jq '. + {apiVersion:"argoproj.io/v1alpha1",kind:"Rollout"}' "$runtime/rollout.json" >"$runtime/rendered.json"
+
 run_static() {
   local source=$1 output=$2
   PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$source" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
-    bash "$script" --output "$output" --now 2026-09-03T00:30:00Z
+    EKS_CLUSTER_ARN=arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod bash "$script" --output "$output" --now 2026-09-03T00:30:00Z
 }
 
 set_runtime_repository() {
@@ -129,8 +130,17 @@ jq -e '.evidenceGrade=="STATIC" and .rollout=={stableHash:"stable-v1",revision:1
 two_character_runtime="$tmp_root/runtime-ecr-two-character"
 cp -R "$runtime" "$two_character_runtime"
 set_runtime_repository "$two_character_runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/ab'
+jq '. + {apiVersion:"argoproj.io/v1alpha1",kind:"Rollout"}' "$two_character_runtime/rollout.json" >"$two_character_runtime/rendered.json"
 run_static "$two_character_runtime" "$tmp_root/ecr-two-character.json" >/dev/null ||
   fail 'static baseline runtime rejected a two-character ECR repository name'
+
+# A shared Network ECR is independent of the target EKS account.
+cross_account="$tmp_root/runtime-network-ecr"
+cp -R "$runtime" "$cross_account"
+set_runtime_repository "$cross_account" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce'
+jq '. + {apiVersion:"argoproj.io/v1alpha1",kind:"Rollout"}' "$cross_account/rollout.json" >"$cross_account/rendered.json"
+run_static "$cross_account" "$tmp_root/network-ecr.json" >/dev/null || fail 'approved cross-account ECR release was rejected'
+bash "$script" --fixture "$tmp_root/network-ecr.json" >/dev/null 2>&1 && fail 'STATIC fixture was upgraded to CLOUD_RUNTIME'
 
 for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision nonfinal-route extra-route-backend extra-route-rule image-account image-region image-double-slash image-invalid-segment image-trailing-space image-name-too-short image-name-too-long context-drift git-mismatch dirty-source argo-repository malformed-cluster-arn; do
   candidate="$tmp_root/runtime-$label"

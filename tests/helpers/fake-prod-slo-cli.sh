@@ -7,7 +7,10 @@ set -Eeuo pipefail
 }
 
 tool=${0##*/}
-if [[ "$tool" == git ]]; then
+if [[ "$tool" == helm ]]; then
+  [[ "$*" == template\ mini-commerce\ * ]] || { echo 'unexpected Helm invocation' >&2; exit 64; }
+  source="$FAKE_RUNTIME_DIR/rendered.json"
+elif [[ "$tool" == git ]]; then
   case " $* " in
     *' status --porcelain --untracked-files=all -- . :(exclude)evidence '*) source="$FAKE_RUNTIME_DIR/git-status.txt" ;;
     *' rev-parse HEAD '*) source="$FAKE_RUNTIME_DIR/git-revision.txt" ;;
