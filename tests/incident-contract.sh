@@ -43,8 +43,8 @@ validate_catalog() {
 
 make_runtime_bundle() {
   local target=$1 grade=$2 curriculum=$3 started_at=$4 db04_mismatch=${5:-none}
-  local course_id=${6:-course-ci} account_id=${7:-123456789012} region=${8:-us-east-1}
-  python3 - "$repository_root" "$target" "$grade" "$curriculum" "$started_at" "$db04_mismatch" "$course_id" "$account_id" "$region" <<'PY'
+  local owner_id=${6:-playbuilder-ci} account_id=${7:-123456789012} region=${8:-us-east-1}
+  python3 - "$repository_root" "$target" "$grade" "$curriculum" "$started_at" "$db04_mismatch" "$owner_id" "$account_id" "$region" <<'PY'
 import hashlib
 import json
 import subprocess
@@ -52,10 +52,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-repository_root, target, grade, curriculum, started_at, db04_mismatch, course_id, account_id, region = sys.argv[1:]
+repository_root, target, grade, curriculum, started_at, db04_mismatch, owner_id, account_id, region = sys.argv[1:]
 target = Path(target)
 roots = {
-    "cicd-course-sample-app": target / "repos" / "cicd-course-sample-app",
+    "mini-commerce": target / "repos" / "mini-commerce",
     "argocd-gitops": target / "repos" / "argocd-gitops",
     "EKS-infra": target / "repos" / "EKS-infra",
 }
@@ -93,21 +93,21 @@ for path in sorted(catalog_root.glob("INC-*.yaml")):
         core_ids.append(path.stem)
 
 stable = {
-    "repository": "play-builder/cicd-course-sample-app",
+    "repository": "play-builder/mini-commerce",
     "sourceSha": "1" * 40,
-    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce",
+    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/mini-commerce",
     "indexDigest": "sha256:" + "a" * 64,
 }
 faulty = {
-    "repository": "play-builder/cicd-course-sample-app",
+    "repository": "play-builder/mini-commerce",
     "sourceSha": "2" * 40,
-    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce",
+    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/mini-commerce",
     "indexDigest": "sha256:" + "b" * 64,
 }
 hotfix = {
-    "repository": "play-builder/cicd-course-sample-app",
+    "repository": "play-builder/mini-commerce",
     "sourceSha": "3" * 40,
-    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce",
+    "imageRepository": f"{account_id}.dkr.ecr.{region}.amazonaws.com/mini-commerce",
     "indexDigest": "sha256:" + "c" * 64,
 }
 if db04_mismatch == "invalid-stable-source-sha":
@@ -127,11 +127,11 @@ elif db04_mismatch == "non-ecr-image-repository":
 elif db04_mismatch == "cross-region-image-repository":
     other_region = "ap-northeast-2" if region == "us-east-1" else "us-east-1"
     for identity in (stable, faulty, hotfix):
-        identity["imageRepository"] = f"{account_id}.dkr.ecr.{other_region}.amazonaws.com/course/mini-commerce"
+        identity["imageRepository"] = f"{account_id}.dkr.ecr.{other_region}.amazonaws.com/mini-commerce"
 elif db04_mismatch == "foreign-account-image-repository":
     foreign_account = "999999999999" if account_id != "999999999999" else "111111111111"
     for identity in (stable, faulty, hotfix):
-        identity["imageRepository"] = f"{foreign_account}.dkr.ecr.{region}.amazonaws.com/course/mini-commerce"
+        identity["imageRepository"] = f"{foreign_account}.dkr.ecr.{region}.amazonaws.com/mini-commerce"
 elif db04_mismatch in {"one-character-image-repository", "noncanonical-image-repository"}:
     repository_name = {"one-character-image-repository": "a", "noncanonical-image-repository": "other-service"}[db04_mismatch]
     for identity in (stable, faulty, hotfix):
@@ -149,18 +149,18 @@ for number, scenario in enumerate(scenarios, start=1):
         recovered["strategy"] = "hotfix-fix-forward"
     run_id = str(1000 + number)
     run_attempt = 1
-    run_url = f"https://github.com/play-builder/cicd-course-sample-app/actions/runs/{run_id}"
+    run_url = f"https://github.com/play-builder/mini-commerce/actions/runs/{run_id}"
     gitops_revision = str(number) * 40
     rollout_revision = number + 10
     recovery_observed_at = phase_times["recover"]
     execution_id = f"execution-{number}"
     if db04_mismatch == "invalid-workflow" and scenario == "git-revert":
         run_id = "run-one"
-        run_url = "https://github.com/play-builder/cicd-course-sample-app/actions/runs/1001"
+        run_url = "https://github.com/play-builder/mini-commerce/actions/runs/1001"
     elif db04_mismatch == "invalid-run-attempt" and scenario == "git-revert":
         run_attempt = 0
     elif db04_mismatch == "workflow-url-mismatch" and scenario == "git-revert":
-        run_url = "https://github.com/play-builder/cicd-course-sample-app/actions/runs/9999"
+        run_url = "https://github.com/play-builder/mini-commerce/actions/runs/9999"
     elif db04_mismatch == "workflow-repository-mismatch":
         run_url = f"https://github.com/evil/other-app/actions/runs/{run_id}"
     elif db04_mismatch == "invalid-gitops-revision" and scenario == "git-revert":
@@ -176,11 +176,11 @@ for number, scenario in enumerate(scenarios, start=1):
     elif db04_mismatch == "bom-execution-id" and scenario == "git-revert":
         execution_id = "\ufeff"
     recovery = {
-        "schemaVersion": "course.db04-recovery/v1",
+        "schemaVersion": "playbuilder.db04-recovery/v1",
         "evidenceGrade": grade,
         "incidentId": "INC-DB-04",
         "scenario": scenario,
-        "courseId": course_id,
+        "ownerId": owner_id,
         "accountId": account_id,
         "region": region,
         "executionId": execution_id,
@@ -196,9 +196,9 @@ for number, scenario in enumerate(scenarios, start=1):
         "rolloutRevision": rollout_revision,
         "observedAt": recovery_observed_at,
     }
-    path = roots["cicd-course-sample-app"] / "evidence" / "sources" / f"db04-{scenario}.json"
+    path = roots["mini-commerce"] / "evidence" / "sources" / f"db04-{scenario}.json"
     path.write_text(json.dumps(recovery, separators=(",", ":")) + "\n")
-    recovery_sources[scenario] = ("cicd-course-sample-app", path)
+    recovery_sources[scenario] = ("mini-commerce", path)
 
 def relative(repository, path):
     return str(path.relative_to(roots[repository]))
@@ -219,17 +219,17 @@ for incident_id in core_ids:
         incident_scenarios = ("primary", "secondary")
     for scenario in incident_scenarios:
         for phase_number, phase in enumerate(phases):
-            source_repository = ("cicd-course-sample-app", "argocd-gitops", "EKS-infra")[phase_number % 3]
+            source_repository = ("mini-commerce", "argocd-gitops", "EKS-infra")[phase_number % 3]
             source = roots[source_repository] / "evidence" / "sources" / "common.json"
             if incident_id == "INC-DB-04" and phase == "recover":
                 source_repository, source = recovery_sources[scenario]
             artifact = {
-                "schemaVersion": "course.incident-artifact/v1",
+                "schemaVersion": "playbuilder.incident-artifact/v1",
                 "evidenceGrade": grade,
                 "incidentId": incident_id,
                 "scenario": scenario,
                 "phase": phase,
-                "courseId": course_id,
+                "ownerId": owner_id,
                 "accountId": account_id,
                 "region": region,
                 "environment": "prod",
@@ -281,14 +281,14 @@ PY
 }
 
 run_runtime_producer() {
-  local bundle=$1 course_id=${2:-course-ci} account_id=${3:-123456789012} region=${4:-us-east-1}
+  local bundle=$1 owner_id=${2:-playbuilder-ci} account_id=${3:-123456789012} region=${4:-us-east-1}
   bash "$repository_root/scripts/build-incident-index.sh" \
     --manifest "$bundle/manifest.json" \
     --evidence-root "$bundle/repos/argocd-gitops/evidence" \
-    --sample-repo-root "$bundle/repos/cicd-course-sample-app" \
+    --sample-repo-root "$bundle/repos/mini-commerce" \
     --gitops-repo-root "$bundle/repos/argocd-gitops" \
     --eks-repo-root "$bundle/repos/EKS-infra" \
-    --course-id "$course_id" --account-id "$account_id" --region "$region" \
+    --owner-id "$owner_id" --account-id "$account_id" --region "$region" \
     --output "$bundle/repos/argocd-gitops/evidence/incidents/index.json"
 }
 
@@ -385,7 +385,7 @@ case_runtime_grade() {
   local envelope_path
   envelope_path=$(jq -r '.incidents[0].scenarios[0].lifecycle.baseline[0].path' \
     "$work/incident/repos/argocd-gitops/evidence/incidents/index.json")
-  jq -e '.schemaVersion == "course.incident-artifact/v1"' \
+  jq -e '.schemaVersion == "playbuilder.incident-artifact/v1"' \
     "$work/incident/repos/argocd-gitops/$envelope_path" >/dev/null \
     || fail "runtime index lifecycle reference cannot be parsed as an incident envelope"
 
@@ -445,7 +445,7 @@ case_db04_recovery_identity() {
   trap 'rm -rf -- "$work"' RETURN
 
   make_runtime_bundle "$work/valid" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z
-  for recovery_source in "$work"/valid/repos/cicd-course-sample-app/evidence/sources/db04-*.json; do
+  for recovery_source in "$work"/valid/repos/mini-commerce/evidence/sources/db04-*.json; do
     jq -e '[.stable,.faulty,.recovered] | all(.imageRepository | test("(^|/)mini-commerce$"))' \
       "$recovery_source" >/dev/null || fail "runtime bundle emitted a noncanonical DB04 mini-commerce ECR identity"
   done
@@ -517,25 +517,25 @@ case_scenario_contract() {
 }
 
 case_scope_contract() {
-  local work label course_id account_id region bom
+  local work label owner_id account_id region bom
   work=$(mktemp -d)
   trap 'rm -rf -- "$work"' RETURN
-  while IFS='|' read -r label course_id account_id region; do
+  while IFS='|' read -r label owner_id account_id region; do
     make_runtime_bundle "$work/$label" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z none \
-      "$course_id" "$account_id" "$region"
-    if run_runtime_producer "$work/$label" "$course_id" "$account_id" "$region" >/dev/null 2>&1; then
+      "$owner_id" "$account_id" "$region"
+    if run_runtime_producer "$work/$label" "$owner_id" "$account_id" "$region" >/dev/null 2>&1; then
       fail "runtime producer accepted invalid index scope: $label"
     fi
   done <<'CASES'
-blank-course| |123456789012|us-east-1
-invalid-account|course-ci|1234|us-east-1
-unsupported-region|course-ci|123456789012|eu-west-1
+blank-owner| |123456789012|us-east-1
+invalid-account|playbuilder-ci|1234|us-east-1
+unsupported-region|playbuilder-ci|123456789012|eu-west-1
 CASES
   bom=$(printf '\357\273\277')
-  make_runtime_bundle "$work/bom-course" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z none \
+  make_runtime_bundle "$work/bom-platform" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z none \
     "$bom" 123456789012 us-east-1
-  if run_runtime_producer "$work/bom-course" "$bom" 123456789012 us-east-1 >/dev/null 2>&1; then
-    fail "runtime producer accepted invalid index scope: bom-course"
+  if run_runtime_producer "$work/bom-platform" "$bom" 123456789012 us-east-1 >/dev/null 2>&1; then
+    fail "runtime producer accepted invalid index scope: bom-platform"
   fi
 }
 
@@ -546,13 +546,13 @@ case_root_boundary() {
   bundle="$work/base"
   make_runtime_bundle "$bundle" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z
   gitops_root="$bundle/repos/argocd-gitops"
-  cp "$bundle"/repos/cicd-course-sample-app/evidence/sources/db04-*.json \
+  cp "$bundle"/repos/mini-commerce/evidence/sources/db04-*.json \
     "$gitops_root/evidence/sources/"
 
   if bash "$repository_root/scripts/build-incident-index.sh" \
     --manifest "$bundle/manifest.json" --evidence-root "$gitops_root/evidence" \
     --sample-repo-root "$gitops_root" --gitops-repo-root "$gitops_root" \
-    --eks-repo-root "$gitops_root" --course-id course-ci --account-id 123456789012 \
+    --eks-repo-root "$gitops_root" --owner-id playbuilder-ci --account-id 123456789012 \
     --region us-east-1 --output "$gitops_root/evidence/incidents/index.json" >/dev/null 2>&1; then
     fail "runtime producer accepted one physical root under three repository identities"
   fi
@@ -561,9 +561,9 @@ case_root_boundary() {
   mkdir -p "$outside"
   if bash "$repository_root/scripts/build-incident-index.sh" \
     --manifest "$bundle/manifest.json" --evidence-root "$outside" \
-    --sample-repo-root "$bundle/repos/cicd-course-sample-app" \
+    --sample-repo-root "$bundle/repos/mini-commerce" \
     --gitops-repo-root "$gitops_root" --eks-repo-root "$bundle/repos/EKS-infra" \
-    --course-id course-ci --account-id 123456789012 --region us-east-1 \
+    --owner-id playbuilder-ci --account-id 123456789012 --region us-east-1 \
     --output "$gitops_root/evidence/incidents/index.json" >/dev/null 2>&1; then
     fail "runtime producer accepted an evidence root outside the GitOps repository"
   fi
@@ -581,9 +581,9 @@ case_output_boundary() {
 
   if bash "$repository_root/scripts/build-incident-index.sh" \
     --manifest "$bundle/manifest.json" --evidence-root "$gitops_root/evidence" \
-    --sample-repo-root "$bundle/repos/cicd-course-sample-app" \
+    --sample-repo-root "$bundle/repos/mini-commerce" \
     --gitops-repo-root "$gitops_root" --eks-repo-root "$bundle/repos/EKS-infra" \
-    --course-id course-ci --account-id 123456789012 --region us-east-1 \
+    --owner-id playbuilder-ci --account-id 123456789012 --region us-east-1 \
     --output "$outside_output" >/dev/null 2>&1; then
     fail "runtime producer wrote INCIDENT_EVIDENCE outside the canonical GitOps path"
   fi
@@ -593,9 +593,9 @@ case_output_boundary() {
   ln -s "$outside_directory" "$gitops_root/evidence/incidents"
   if bash "$repository_root/scripts/build-incident-index.sh" \
     --manifest "$bundle/manifest.json" --evidence-root "$gitops_root/evidence" \
-    --sample-repo-root "$bundle/repos/cicd-course-sample-app" \
+    --sample-repo-root "$bundle/repos/mini-commerce" \
     --gitops-repo-root "$gitops_root" --eks-repo-root "$bundle/repos/EKS-infra" \
-    --course-id course-ci --account-id 123456789012 --region us-east-1 \
+    --owner-id playbuilder-ci --account-id 123456789012 --region us-east-1 \
     --output "$canonical_output" >/dev/null 2>&1; then
     fail "runtime producer followed a canonical output parent symlink"
   fi
@@ -607,7 +607,7 @@ case_provenance_boundary() {
   trap 'rm -rf -- "$work"' RETURN
   bundle="$work/base"
   make_runtime_bundle "$bundle" INCIDENT_EVIDENCE v3.4 2026-01-01T00:00:00Z
-  echo "unreviewed" > "$bundle/repos/cicd-course-sample-app/dirty.txt"
+  echo "unreviewed" > "$bundle/repos/mini-commerce/dirty.txt"
   if run_runtime_producer "$bundle" >/dev/null 2>&1; then
     fail "runtime producer trusted a reviewed repository with non-evidence changes"
   fi

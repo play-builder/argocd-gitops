@@ -67,7 +67,7 @@ if %w[all project-scope].include?(mode)
    scope=doc.dig('metadata','namespace') ? 'namespaceResourceWhitelist' : 'clusterResourceWhitelist'
    check(project.fetch(scope,[]).include?({'group'=>group,'kind'=>doc['kind']}),"#{env} project missing #{scope} #{group}/#{doc['kind']}")
   end
-  legacy=projects.fetch("course-#{env}")
+  legacy=projects.fetch("mini-commerce-#{env}")
   check(!legacy['clusterResourceWhitelist'].include?({'group'=>'gateway.k8s.aws','kind'=>'LoadBalancerConfiguration'}),'LoadBalancerConfiguration wrongly cluster-scoped')
   check(legacy['namespaceResourceWhitelist'].include?({'group'=>'gateway.k8s.aws','kind'=>'LoadBalancerConfiguration'}),'legacy namespaced LoadBalancerConfiguration permission lost')
  end

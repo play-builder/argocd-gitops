@@ -5,4 +5,4 @@ snapshotHandle: ""
 source:
   namespace: app-dev
   pvcName: data-mini-commerce-postgresql-0
-snapshotClassName: course-ebs-snapshots
+snapshotClassName: mini-commerce-ebs-snapshots

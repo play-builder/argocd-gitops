@@ -27,7 +27,7 @@ The vendored public AWS CA is mounted with NODE_EXTRA_CA_CERTS; DB_SSL enables h
 Follow [data and telemetry cutover](docs/runbooks/data-and-telemetry-cutover.md).
 
 The new runtime keeps repository ID `1352247019`. Old/new workflow names remain migration-aware until
-fresh `course.rename-cutover/v1` evidence. Remote rename and push are user actions.
+fresh `playbuilder.rename-cutover/v1` evidence. Remote rename and push are user actions.
 Preserve legacy Applications, PVCs, PVs and snapshots until the documented non-cascading ownership handoff.
 
 ## Local verification

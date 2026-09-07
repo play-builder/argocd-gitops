@@ -11,7 +11,7 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=false
     argocd.argoproj.io/sync-wave: "1"
 spec:
-  volumeSnapshotClassName: course-ebs-snapshots
+  volumeSnapshotClassName: mini-commerce-ebs-snapshots
   source:
     persistentVolumeClaimName: data-mini-commerce-postgresql-0
 {{- end }}

@@ -11,7 +11,7 @@ database:
   enabled: true
   terminationGracePeriodSeconds: 120
   port: 5432
-  storageClassName: course-gp3
+  storageClassName: mini-commerce-gp3
   storageSize: 5Gi
   image:
     repository: docker.io/library/postgres

@@ -24,7 +24,7 @@
           "identities": [
             {
               "issuer": "https://token.actions.githubusercontent.com",
-              "subject": "https://github.com/play-builder/cicd-course-sample-app/.github/workflows/ci.yml@refs/heads/main"
+              "subject": "https://github.com/play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main"
             },
             {
               "issuer": "https://token.actions.githubusercontent.com",
@@ -50,7 +50,7 @@
           "identities": [
             {
               "issuer": "https://token.actions.githubusercontent.com",
-              "subject": "https://github.com/play-builder/cicd-course-sample-app/.github/workflows/ci.yml@refs/heads/main"
+              "subject": "https://github.com/play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main"
             },
             {
               "issuer": "https://token.actions.githubusercontent.com",

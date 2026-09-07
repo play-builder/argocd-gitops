@@ -23,7 +23,7 @@ evidence:
 preventionTest: tests/render-contract.sh --case network-policy
 cleanup:
   labels:
-    course.playbuilder.io/incident: INC-CLN-01
+    playbuilder.io/incident: INC-CLN-01
   action: remove-optional-writers-and-retained-state
   externalSecretLifecycle:
     targetSecretOwnerReferenceGC: true

@@ -7,7 +7,7 @@ policy resources, not Namespace. App charts and retained legacy Applications do 
 
 The actual root producer is EKS-infra
 `environments/{dev,prod}/04-workloads/argocd/main.tf` `kubectl_manifest.bootstrap`.
-With approved enable_bootstrap=true it creates course-{env}-bootstrap in AppProject
+With approved enable_bootstrap=true it creates mini-commerce-{env}-bootstrap in AppProject
 `default` (Dev auto-syncs; Prod is manual). platform-bootstrap-{env} is the bounded
 child project, not the root project: do not reassign root to it, since it does not grant
 the direct ServiceAccount/SecretStore/ExternalSecret resource permissions. This change

@@ -1,17 +1,17 @@
 {
-  "schemaVersion": "course.prod-slo/v1",
+  "schemaVersion": "playbuilder.prod-slo/v1",
   "evidenceGrade": "CLOUD_RUNTIME",
   "status": "PASS",
   "source": {
-    "repository": "OWNER/cicd-course-sample-app",
+    "repository": "OWNER/mini-commerce",
     "sha": "0123456789abcdef0123456789abcdef01234567"
   },
   "image": {
-    "repository": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce",
+    "repository": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce",
     "indexDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   },
   "gitopsRevision": "fedcba9876543210fedcba9876543210fedcba98",
-  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",
+  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",
   "region": "ap-northeast-2",
   "evidenceId": "prod-slo-20260903T013000Z",
   "rollout": {

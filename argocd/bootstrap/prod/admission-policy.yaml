@@ -1,7 +1,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: course-workload-security
+  name: mini-commerce-workload-security
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
@@ -65,15 +65,15 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: course-workload-security
+  name: mini-commerce-workload-security
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
-  policyName: course-workload-security
+  policyName: mini-commerce-workload-security
   validationActions:
     - Audit
     - Warn
   matchResources:
     namespaceSelector:
       matchLabels:
-        course.playbuilder.io/admission: enabled
+        playbuilder.io/admission: enabled

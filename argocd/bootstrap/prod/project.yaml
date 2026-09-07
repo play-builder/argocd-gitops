@@ -46,12 +46,12 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: course-prod
+  name: mini-commerce-prod
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 spec:
-  description: Course application resources in app-prod only
+  description: Platform application resources in app-prod only
   sourceRepos:
   - https://github.com/REPLACE_ME/argocd-gitops.git
   destinations:
@@ -119,7 +119,7 @@ spec:
             mode: head
             keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]
   description: Mini Commerce namespaced workload resources; legacy ownership remains
-    in course-prod
+    in mini-commerce-prod
   sourceRepos:
   - https://github.com/REPLACE_ME/argocd-gitops.git
   destinations:
@@ -159,13 +159,13 @@ spec:
   - name: observer
     description: Read production applications without mutation permission
     groups:
-    - course:prod-observers
+    - playbuilder:prod-observers
     policies:
     - p, proj:platform-prod:observer, applications, get, platform-prod/*, allow
   - name: operator
     description: Read, sync, and promote approved production releases
     groups:
-    - course:prod-operators
+    - playbuilder:prod-operators
     policies:
     - p, proj:platform-prod:operator, applications, get, platform-prod/*, allow
     - p, proj:platform-prod:operator, applications, sync, platform-prod/*, allow

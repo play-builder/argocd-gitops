@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "course.platform-release-handoff/v1",
+  "schemaVersion": "playbuilder.platform-release-handoff/v1",
   "evidenceGrade": "STATIC",
   "environment": "dev",
   "region": "ap-northeast-2",
-  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev",
+  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev",
   "gitopsRevision": "1111111111111111111111111111111111111111",
   "application": {
     "name": "external-secrets-dev",

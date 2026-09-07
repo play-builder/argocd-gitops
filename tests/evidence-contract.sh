@@ -27,9 +27,9 @@ validate_deployment() {
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
-    .schemaVersion == "course.dev-deployment/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
+    .schemaVersion == "playbuilder.dev-deployment/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     .status == {sync:"Synced",health:"Healthy"} and
-    (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
+    (.source.repository | test("^[^/\\s]+/mini-commerce$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
@@ -55,8 +55,8 @@ validate_slo() {
     . as $root |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
-    .schemaVersion == "course.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
-    (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
+    .schemaVersion == "playbuilder.dev-slo/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .status == "PASS" and
+    (.source.repository | test("^[^/\\s]+/mini-commerce$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.evidenceId | nonblank) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
@@ -80,7 +80,7 @@ validate_baseline() {
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
-    .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
+    .schemaVersion == "playbuilder.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.image.repository | type == "string" and length > 0) and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
@@ -119,9 +119,9 @@ case_identity_edges() {
     rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"
     fail "raw deployment evidence accepted a noncanonical source/ECR/EKS identity"
   fi
-  jq '.source.repository="OWNER /cicd-course-sample-app"' \
+  jq '.source.repository="OWNER /mini-commerce"' \
     "$fixture_root/deployment-valid.json" >"$invalid"
-  jq '.source.repository="OWNER /cicd-course-sample-app"' \
+  jq '.source.repository="OWNER /mini-commerce"' \
     "$fixture_root/slo-valid.json" >"$invalid_slo"
   if (DEPLOYMENT="$invalid" SLO="$invalid_slo" BASELINE="$fixture_root/baseline-valid.json" case_raw) >/dev/null 2>&1; then
     rm -f -- "$invalid" "$invalid_slo" "$invalid_baseline"

@@ -14,7 +14,7 @@ fixture=
 publish_fixture=
 now_override=
 runtime_override=false
-adapter_dir=${COURSE_CHECK_BIN_DIR:-}
+adapter_dir=${PLATFORM_CHECK_BIN_DIR:-}
 configmap_name=mini-commerce-rollback-candidates
 namespace=app-prod
 
@@ -141,7 +141,7 @@ validate_record() {
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $record |
     (keys | sort) == ["candidates","clusterArn","environment","evidenceGrade","expiresAt","gitopsRevision","observedAt","region","rolloutName","schemaVersion","sourceEvidenceDigest"] and
-    .schemaVersion == "course.rollback-candidates/v1" and .evidenceGrade == $grade and
+    .schemaVersion == "playbuilder.rollback-candidates/v1" and .evidenceGrade == $grade and
     .environment == "prod" and (.region | IN("ap-northeast-2","us-east-1")) and
     (.clusterArn | test("^arn:aws:eks:" + $record.region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     .rolloutName == "mini-commerce" and (.rolloutName | nonblank) and
@@ -274,9 +274,9 @@ write_configmap_payload() {
      metadata:{name:"mini-commerce-rollback-candidates",namespace:"app-prod",
        labels:{"app.kubernetes.io/name":"mini-commerce-rollback-candidates",
                "app.kubernetes.io/part-of":"mini-commerce",
-               "course.playbuilder.io/cleanup-scope":"rollback-candidates"},
-       annotations:{"course.playbuilder.io/content-sha256":$evidenceSha,
-                    "course.playbuilder.io/source-evidence-digest":$sourceDigest}},
+               "playbuilder.io/cleanup-scope":"rollback-candidates"},
+       annotations:{"playbuilder.io/content-sha256":$evidenceSha,
+                    "playbuilder.io/source-evidence-digest":$sourceDigest}},
      immutable:true,
      data:{"rollback-candidates.json":$evidence,environment:$environment,region:$region,
            clusterArn:$clusterArn,rolloutName:$rolloutName,gitopsRevision:$gitopsRevision,
@@ -539,7 +539,7 @@ trap 'rm -f -- "$tmp"' EXIT
 jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$cluster_arn" \
   --arg revision "$local_revision" --arg digest "$source_digest" --arg observed "$observed_at" \
   --arg expires "$expires_at" --argjson candidates "$candidates" '
-  {schemaVersion:"course.rollback-candidates/v1",evidenceGrade:$grade,environment:"prod",
+  {schemaVersion:"playbuilder.rollback-candidates/v1",evidenceGrade:$grade,environment:"prod",
    region:$region,clusterArn:$arn,rolloutName:"mini-commerce",gitopsRevision:$revision,
    sourceEvidenceDigest:$digest,observedAt:$observed,expiresAt:$expires,candidates:$candidates}
 ' >"$tmp" || fail 'unable to construct rollback candidate evidence'

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository_root=$(cd -- "$test_root/.." && pwd)
 legacy_runtime="$(printf '%s-%s' sample app)"
-legacy_workflow="play-builder/cicd-course-${legacy_runtime}/.github/workflows/ci.yml@refs/heads/main"
+legacy_workflow="play-builder/cicd-legacy-${legacy_runtime}/.github/workflows/ci.yml@refs/heads/main"
 new_workflow="play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main"
 
 fail() {

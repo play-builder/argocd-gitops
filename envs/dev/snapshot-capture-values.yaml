@@ -10,7 +10,7 @@ snapshot:
 recovery:
   restoreEnabled: false
   namespace: app-recovery
-  snapshotClassName: course-ebs-snapshots
+  snapshotClassName: mini-commerce-ebs-snapshots
   source:
     namespace: app-dev
     pvcName: data-mini-commerce-postgresql-0

@@ -61,10 +61,10 @@ command -v jq >/dev/null 2>&1 || fail "jq is required"
 expected_grade=CLOUD_RUNTIME
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 output_prefix='[CLOUD_RUNTIME]'
-if [[ "${COURSE_PHASE_B_TEST_MODE:-0}" == "1" ]]; then
+if [[ "${PLATFORM_PHASE_B_TEST_MODE:-0}" == "1" ]]; then
   expected_grade=STATIC
-  now=${COURSE_PHASE_B_NOW:-}
-  [[ -n "$now" ]] || fail "COURSE_PHASE_B_NOW is required in test mode"
+  now=${PLATFORM_PHASE_B_NOW:-}
+  [[ -n "$now" ]] || fail "PLATFORM_PHASE_B_NOW is required in test mode"
   output_prefix='[STATIC]'
 else
   case "$handoff:$adoption" in
@@ -109,7 +109,7 @@ jq -e \
   ] and
   (.readiness | keys) == ["crdsEstablished", "deploymentsAvailable"] and
   (.ownership | keys) == ["from", "terraformAddress", "to"] and
-  .schemaVersion == "course.platform-release-handoff/v1" and
+  .schemaVersion == "playbuilder.platform-release-handoff/v1" and
   .evidenceGrade == $grade and
   .environment == $environment and
   ($region == "ap-northeast-2" or $region == "us-east-1") and
@@ -180,7 +180,7 @@ jq -e \
   (.terraform | keys) == [
     "address", "imported", "planActions", "stateLineage", "stateSerial"
   ] and
-  .schemaVersion == "course.platform-release-adoption/v1" and
+  .schemaVersion == "playbuilder.platform-release-adoption/v1" and
   .evidenceGrade == $grade and
   .environment == $environment and
   .region == $region and

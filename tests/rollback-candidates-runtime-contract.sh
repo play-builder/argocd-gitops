@@ -58,7 +58,7 @@ printf '%s\n' yes >"$runtime/configmap-delete-permission.txt"
 : >"$runtime/existing-configmap.json"
 : >"$runtime/kubectl.log"
 jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"},syncPolicy:{}},status:{sync:{status:"OutOfSync",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$runtime/application.json"
-jq -n '{cluster:{name:"course-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
+jq -n '{cluster:{name:"mini-commerce-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$runtime/kubeconfig.json"
 jq -n '
   {metadata:{name:"mini-commerce",namespace:"app-prod",uid:"11111111-1111-1111-1111-111111111111"},
@@ -68,7 +68,7 @@ jq -n '
 ' >"$runtime/rollout.json"
 yq -o=json '.' "$runtime/source.yaml" | jq '
   . as $source |
-  "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce" as $repository |
+  "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce" as $repository |
   $source.releaseLineage.v2PrimeContractCompatible.indexDigest as $v2prime |
   {apiVersion:"apps/v1",kind:"ReplicaSetList",items:[
     $source.completedRollback.replicaSetList.items[] |
@@ -85,19 +85,19 @@ runtime_region() { jq -r '.cluster.arn | split(":")[3]' "$1/cluster.json"; }
 runtime_cluster() { jq -r '.cluster.name' "$1/cluster.json"; }
 run_static() {
   local source_dir=$1 output=$2 now=${3:-2026-09-03T01:00:00Z}
-  COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
+  PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
     AWS_REGION="$(runtime_region "$source_dir")" EKS_CLUSTER_NAME="$(runtime_cluster "$source_dir")" \
     bash "$script" --source "$source_dir/source.yaml" --output "$output" --now "$now"
 }
 run_publish_fixture() {
   local source_dir=$1 evidence=$2 now=${3:-2026-09-03T01:00:00Z}
-  COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
+  PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
     AWS_REGION="$(runtime_region "$source_dir")" EKS_CLUSTER_NAME="$(runtime_cluster "$source_dir")" \
     bash "$script" --publish-fixture "$evidence" --now "$now"
 }
 run_cleanup_fixture() {
   local source_dir=$1 evidence=$2 now=${3:-2026-09-03T01:10:00Z}
-  COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
+  PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$source_dir" \
     AWS_REGION="$(runtime_region "$source_dir")" EKS_CLUSTER_NAME="$(runtime_cluster "$source_dir")" \
     bash "$script" cleanup --fixture "$evidence" --now "$now"
 }
@@ -108,9 +108,9 @@ grep -Fq '[STATIC]' <<<"$static_log" || fail 'fake runtime execution was not lab
 source_digest="sha256:$(shasum -a 256 "$runtime/source.yaml" | awk '{print $1}')"
 jq -e --arg digest "$source_digest" '
   (keys | sort) == ["candidates","clusterArn","environment","evidenceGrade","expiresAt","gitopsRevision","observedAt","region","rolloutName","schemaVersion","sourceEvidenceDigest"] and
-  .schemaVersion == "course.rollback-candidates/v1" and .evidenceGrade == "STATIC" and
+  .schemaVersion == "playbuilder.rollback-candidates/v1" and .evidenceGrade == "STATIC" and
   .environment == "prod" and .region == "ap-northeast-2" and
-  .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod" and
+  .clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod" and
   .rolloutName == "mini-commerce" and
   .gitopsRevision == "fedcba9876543210fedcba9876543210fedcba98" and
   .sourceEvidenceDigest == $digest and
@@ -164,8 +164,8 @@ for label in dirty-git git-mismatch already-synced automated-sync running-operat
     already-synced) jq '.status.sync.status="Synced"' "$invalid/application.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/application.json" ;;
     automated-sync) jq '.spec.syncPolicy.automated={prune:true}' "$invalid/application.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/application.json" ;;
     running-operation) jq '.status.operationState.phase="Running"' "$invalid/application.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/application.json" ;;
-    cluster-account) jq '.cluster.arn="arn:aws:eks:ap-northeast-2:999999999999:cluster/course-prod"' "$invalid/cluster.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/cluster.json" ;;
-    cluster-region) jq '.cluster.arn="arn:aws:eks:us-east-1:123456789012:cluster/course-prod"' "$invalid/cluster.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/cluster.json" ;;
+    cluster-account) jq '.cluster.arn="arn:aws:eks:ap-northeast-2:999999999999:cluster/mini-commerce-prod"' "$invalid/cluster.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/cluster.json" ;;
+    cluster-region) jq '.cluster.arn="arn:aws:eks:us-east-1:123456789012:cluster/mini-commerce-prod"' "$invalid/cluster.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/cluster.json" ;;
     cluster-name) jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/other-prod"' "$invalid/cluster.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/cluster.json" ;;
     kube-endpoint) jq '.clusters[0].cluster.server="https://foreign.eks.example"' "$invalid/kubeconfig.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/kubeconfig.json" ;;
     rollout-name) jq '.metadata.name="other-app"' "$invalid/rollout.json" >"$invalid/mutated" && mv "$invalid/mutated" "$invalid/rollout.json" ;;
@@ -226,11 +226,11 @@ for region in ap-northeast-2 us-east-1; do
 done
 
 for option in --source --output --now; do
-  if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod bash "$script" "$option" "$tmp_root/override" >/dev/null 2>&1; then
+  if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod bash "$script" "$option" "$tmp_root/override" >/dev/null 2>&1; then
     fail "runtime producer accepted arbitrary $option override"
   fi
 done
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_ROLLBACK_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
   bash "$script" --source "$runtime/source.yaml" --output "$canonical" --now 2026-09-03T01:00:00Z >/dev/null 2>&1; then
   fail 'static runtime adapter wrote the canonical runtime evidence path'
 fi
@@ -248,16 +248,16 @@ jq -e --rawfile evidence "$cloud_fixture" --arg evidenceSha "$evidence_sha" --ar
   .metadata.labels == {
     "app.kubernetes.io/name":"mini-commerce-rollback-candidates",
     "app.kubernetes.io/part-of":"mini-commerce",
-    "course.playbuilder.io/cleanup-scope":"rollback-candidates"
+    "playbuilder.io/cleanup-scope":"rollback-candidates"
   } and
   .metadata.annotations == {
-    "course.playbuilder.io/content-sha256":$evidenceSha,
-    "course.playbuilder.io/source-evidence-digest":$sourceDigest
+    "playbuilder.io/content-sha256":$evidenceSha,
+    "playbuilder.io/source-evidence-digest":$sourceDigest
   } and .immutable == true and
   (.data | keys | sort) == ["clusterArn","environment","gitopsRevision","region","rollback-candidates.json","rolloutName","sourceEvidenceDigest"] and
   .data["rollback-candidates.json"] == $evidence and
   .data.environment == "prod" and .data.region == "ap-northeast-2" and
-  .data.clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod" and
+  .data.clusterArn == "arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod" and
   .data.rolloutName == "mini-commerce" and
   .data.gitopsRevision == "fedcba9876543210fedcba9876543210fedcba98" and
   .data.sourceEvidenceDigest == $sourceDigest and
@@ -285,7 +285,7 @@ for label in grade environment cluster-arn rollout-name observed-fraction observ
   case "$label" in
     grade) expression='.evidenceGrade="STATIC"' ;;
     environment) expression='.environment="dev"' ;;
-    cluster-arn) expression='.clusterArn="arn:aws:eks:ap-northeast-2:999999999999:cluster/course-prod"' ;;
+    cluster-arn) expression='.clusterArn="arn:aws:eks:ap-northeast-2:999999999999:cluster/mini-commerce-prod"' ;;
     rollout-name) expression='.rolloutName=" "' ;;
     observed-fraction) expression='.observedAt="2026-09-03T00:59:59.000Z"' ;;
     observed-offset) expression='.observedAt="2026-09-03T09:59:59+09:00"' ;;
@@ -357,7 +357,7 @@ for label in configmap-drift missing-uid app-outofsync app-wrong-revision app-wr
     failed-job) jq '.status.succeeded=0 | .status.failed=1' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     early-job) jq '.status.completionTime="2026-09-03T00:59:58Z"' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     wrong-target) jq '.spec.template.spec.containers[0].args[1]="002_expand_product_display_name"' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
-    stale-evidence) jq '.spec.template.spec.containers[0].env += [{name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/course-evidence/rollback-candidates.json"}]' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
+    stale-evidence) jq '.spec.template.spec.containers[0].env += [{name:"ROLLBACK_CANDIDATES_FILE",value:"/var/run/platform-evidence/rollback-candidates.json"}]' "$invalid_cleanup/migration-job.json" >"$invalid_cleanup/mutated" && mv "$invalid_cleanup/mutated" "$invalid_cleanup/migration-job.json" ;;
     delete-denied) printf '%s\n' no >"$invalid_cleanup/configmap-delete-permission.txt" ;;
   esac
   if run_cleanup_fixture "$invalid_cleanup" "$cloud_fixture" >/dev/null 2>&1; then

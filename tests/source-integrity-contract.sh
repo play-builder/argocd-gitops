@@ -8,7 +8,7 @@ trusted_repository=$(yq -r '.outputs.mini_commerce_ecr_repository_url' "$fixture
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-yq -e '.applicationAttestation.trustedEcrOutput == "mini_commerce_ecr_repository_url" and .applicationAttestation.postCutoverWorkflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" and .applicationAttestation.cutoverEvidenceSchema == "course.rename-cutover/v1"' "$repository_root/contracts/platform-requirements.yaml" >/dev/null || fail "typed ECR and post-cutover contract is incomplete"
+yq -e '.applicationAttestation.trustedEcrOutput == "mini_commerce_ecr_repository_url" and .applicationAttestation.postCutoverWorkflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" and .applicationAttestation.cutoverEvidenceSchema == "playbuilder.rename-cutover/v1"' "$repository_root/contracts/platform-requirements.yaml" >/dev/null || fail "typed ECR and post-cutover contract is incomplete"
 
 validate() {
   local mode=$1 evidence=$2
@@ -19,12 +19,12 @@ validate() {
     (.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.sourceSha | test("^[0-9a-f]{40}$")) and
     ((.predicates | sort | join(",")) == "https://slsa.dev/provenance/v1,https://spdx.dev/Document/v2.3") and
-    (if env.MODE == "pre" then (.workflow == "play-builder/cicd-course-sample-app/.github/workflows/ci.yml@refs/heads/main" or .workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main") else (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" and .sourceSha == env.CUTOVER_SOURCE_SHA) end)
+    (if env.MODE == "pre" then (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" or .workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main") else (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" and .sourceSha == env.CUTOVER_SOURCE_SHA) end)
   ' "$evidence" >/dev/null
 }
 
 validate pre "$fixture_root/pre-cutover-valid.json" || fail "pre-cutover valid evidence is rejected"
-yq -e '.schemaVersion == "course.rename-cutover/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .repositoryId == 1352247019 and (.sourceSha | test("^[0-9a-f]{40}$"))' "$fixture_root/cutover-evidence.yaml" >/dev/null || fail "fresh cutover evidence fixture is invalid"
+yq -e '.schemaVersion == "playbuilder.rename-cutover/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .repositoryId == 1352247019 and (.sourceSha | test("^[0-9a-f]{40}$"))' "$fixture_root/cutover-evidence.yaml" >/dev/null || fail "fresh cutover evidence fixture is invalid"
 cutover_source_sha=$(yq -r '.sourceSha' "$fixture_root/cutover-evidence.yaml")
 validate post "$fixture_root/post-cutover-valid.json" || fail "post-cutover evidence is not bound to fresh cutover evidence"
 if validate post "$fixture_root/pre-cutover-valid.json"; then fail "post-cutover accepts legacy workflow"; fi

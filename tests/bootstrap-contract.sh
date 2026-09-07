@@ -45,7 +45,7 @@ assert_manifest() {
 external_secrets_project_valid() {
   local manifest=$1
   local environment=$2
-  local project="course-external-secrets-$environment"
+  local project="mini-commerce-external-secrets-$environment"
 
   PROJECT="$project" yq eval-all -o=json '
     select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))
@@ -76,7 +76,7 @@ case_external_secrets_project() {
   for environment in dev prod; do
     manifest="$render_root/bootstrap-$environment-external-secrets.yaml"
     application="external-secrets-$environment"
-    project="course-external-secrets-$environment"
+    project="mini-commerce-external-secrets-$environment"
     render_bootstrap "$environment" "$manifest"
 
     PROJECT="$project" yq eval-all -o=json '[select(.kind == "AppProject" and .metadata.name == strenv(PROJECT))]' "$manifest" | jq -e 'length == 1' >/dev/null || fail "dedicated ESO project identity missing"
@@ -162,7 +162,7 @@ case_namespace_pss() {
 
   assert_manifest "$bootstrap_dev" '
     select(.kind == "Namespace" and .metadata.name == "app-recovery") |
-    .metadata.labels["course.playbuilder.io/cleanup-scope"] == "recovery" and
+    .metadata.labels["playbuilder.io/cleanup-scope"] == "recovery" and
     .metadata.labels["pod-security.kubernetes.io/warn"] == "restricted" and
     .metadata.labels["pod-security.kubernetes.io/audit"] == "restricted" and
     .metadata.labels["pod-security.kubernetes.io/warn-version"] == "v1.36" and
@@ -213,14 +213,14 @@ case_least_privilege() {
     assert_document_count "$manifest" ValidatingAdmissionPolicy 1
     assert_document_count "$manifest" ValidatingAdmissionPolicyBinding 1
     yq eval-all -o=json '
-      select(.kind == "ValidatingAdmissionPolicyBinding" and .metadata.name == "course-workload-security")
+      select(.kind == "ValidatingAdmissionPolicyBinding" and .metadata.name == "mini-commerce-workload-security")
     ' "$manifest" | jq -e '
       .spec.validationActions == ["Audit", "Warn"] and
-      .spec.matchResources.namespaceSelector.matchLabels["course.playbuilder.io/admission"] == "enabled"
+      .spec.matchResources.namespaceSelector.matchLabels["playbuilder.io/admission"] == "enabled"
     ' >/dev/null || fail "Default admission stage must audit and warn without denying"
 
     yq eval-all -o=json '
-      select(.kind == "ValidatingAdmissionPolicy" and .metadata.name == "course-workload-security")
+      select(.kind == "ValidatingAdmissionPolicy" and .metadata.name == "mini-commerce-workload-security")
     ' "$manifest" | jq -e '
       ([.spec.matchConstraints.resourceRules[].resources[]] | sort) ==
         ["deployments", "jobs", "pods", "rollouts", "statefulsets"] and
@@ -233,24 +233,24 @@ case_least_privilege() {
   done
 
   yq eval-all -o=json '
-    select(.kind == "AppProject" and .metadata.name == "course-dev")
+    select(.kind == "AppProject" and .metadata.name == "mini-commerce-dev")
   ' "$bootstrap_dev" | jq -e '
     [.spec.destinations[].namespace] == ["app-dev", "app-recovery"] and
     .spec.sourceRepos == ["https://github.com/REPLACE_ME/argocd-gitops.git"] and
     (.spec.roles | map(.name)) == ["developer"] and
-    .spec.roles[0].groups == ["course:dev-developers"] and
-    (.spec.roles[0].policies | index("p, proj:course-dev:developer, applications, sync, course-dev/*, allow")) != null and
+    .spec.roles[0].groups == ["playbuilder:dev-developers"] and
+    (.spec.roles[0].policies | index("p, proj:mini-commerce-dev:developer, applications, sync, mini-commerce-dev/*, allow")) != null and
     ([.spec.roles[].policies[]] | any(contains("applications, delete"))) == false
   ' >/dev/null || fail "Dev project must map the developer group to scoped Dev sync"
 
   yq eval-all -o=json '
-    select(.kind == "AppProject" and .metadata.name == "course-prod")
+    select(.kind == "AppProject" and .metadata.name == "mini-commerce-prod")
   ' "$bootstrap_prod" | jq -e '
     [.spec.destinations[].namespace] == ["app-prod"] and
     .spec.sourceRepos == ["https://github.com/REPLACE_ME/argocd-gitops.git"] and
     ([.spec.roles[].name] | sort) == ["observer", "operator"] and
-    (.spec.roles | map(select(.name == "observer"))[0].groups) == ["course:prod-observers"] and
-    (.spec.roles | map(select(.name == "operator"))[0].groups) == ["course:prod-operators"] and
+    (.spec.roles | map(select(.name == "observer"))[0].groups) == ["playbuilder:prod-observers"] and
+    (.spec.roles | map(select(.name == "operator"))[0].groups) == ["playbuilder:prod-operators"] and
     ([.spec.roles[].policies[]] | any(contains("applications, delete"))) == false
   ' >/dev/null || fail "Prod project must separate observer/operator groups and forbid application deletion"
 
@@ -293,7 +293,7 @@ case_pss_enforce() {
     ' >/dev/null || fail "$environment PSS enforcement must target the namespace owner with the generator-pinned version"
 
     yq eval-all -o=json '
-      select(.kind == "ValidatingAdmissionPolicyBinding" and .metadata.name == "course-workload-security")
+      select(.kind == "ValidatingAdmissionPolicyBinding" and .metadata.name == "mini-commerce-workload-security")
     ' "$manifest" | jq -e '.spec.validationActions == ["Deny"]' >/dev/null || \
       fail "$environment admission enforcement must switch to Deny"
   done
@@ -374,8 +374,8 @@ case_recovery_wiring() {
   render_bootstrap dev "$dev"; render_bootstrap prod "$prod"
   yq eval-all -o=json -I=0 '[.]' "$dev" | jq -s -e 'add | . as $all |
     ([ $all[] | select(.kind == "ApplicationSet" and .metadata.name == "mini-commerce-dev") ] | length) == 1 and
-    ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.destinations[].namespace] | sort) == ["app-dev","app-recovery"] and
-    ([ $all[] | select(.kind == "AppProject" and .metadata.name == "course-dev") | .spec.clusterResourceWhitelist[] | select(.group == "snapshot.storage.k8s.io" and .kind == "VolumeSnapshotContent")] | length) == 1
+    ([ $all[] | select(.kind == "AppProject" and .metadata.name == "mini-commerce-dev") | .spec.destinations[].namespace] | sort) == ["app-dev","app-recovery"] and
+    ([ $all[] | select(.kind == "AppProject" and .metadata.name == "mini-commerce-dev") | .spec.clusterResourceWhitelist[] | select(.group == "snapshot.storage.k8s.io" and .kind == "VolumeSnapshotContent")] | length) == 1
   ' >/dev/null || fail "Dev bootstrap must explicitly wire app-recovery and VolumeSnapshotContent"
   yq -o=json '.' "$appset" | jq -e '
     .spec.generators[0].list.elements[0].phaseValuesFile == "envs/dev/phase-default-values.yaml" and

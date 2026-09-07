@@ -83,7 +83,7 @@ spec:
               mountPath: /tmp
             {{- if .Values.database.migration.rollbackCandidates.enabled }}
             - name: rollback-candidates
-              mountPath: /var/run/course-evidence
+              mountPath: /var/run/platform-evidence
               readOnly: true
             {{- end }}
           resources:
@@ -127,7 +127,7 @@ spec:
             {{- end }}
             {{- if .Values.database.migration.rollbackCandidates.enabled }}
             - name: ROLLBACK_CANDIDATES_FILE
-              value: /var/run/course-evidence/rollback-candidates.json
+              value: /var/run/platform-evidence/rollback-candidates.json
             - name: ROLLBACK_EXPECTED_ENVIRONMENT
               valueFrom:
                 configMapKeyRef:

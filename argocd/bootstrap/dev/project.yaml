@@ -45,12 +45,12 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: course-dev
+  name: mini-commerce-dev
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 spec:
-  description: Course application resources in app-dev and app-recovery only
+  description: Platform application resources in app-dev and app-recovery only
   sourceRepos:
   - https://github.com/REPLACE_ME/argocd-gitops.git
   destinations:
@@ -127,7 +127,7 @@ spec:
             mode: head
             keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]
   description: Mini Commerce namespaced workload resources; legacy ownership remains
-    in course-dev
+    in mini-commerce-dev
   sourceRepos:
   - https://github.com/REPLACE_ME/argocd-gitops.git
   destinations:
@@ -169,7 +169,7 @@ spec:
   - name: developer
     description: Read and sync Dev applications without delete permission
     groups:
-    - course:dev-developers
+    - playbuilder:dev-developers
     policies:
     - p, proj:platform-dev:developer, applications, get, platform-dev/*, allow
     - p, proj:platform-dev:developer, applications, sync, platform-dev/*, allow

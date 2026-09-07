@@ -31,8 +31,8 @@ while IFS='|' read -r label expression; do
   [[ "$before" == "$(fingerprint)" ]] || fail "invalid $label fixture changed canonical runtime evidence"
 done <<'CASES'
 source-repository|.source.repository = "play-builder/other-app"
-source-owner-whitespace|.source.repository = "play-builder /cicd-course-sample-app"
-image-account|.image.repository = "999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce"
+source-owner-whitespace|.source.repository = "play-builder /mini-commerce"
+image-account|.image.repository = "999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"
 image-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 measurement-number|.metricResults[0].measurements[0].value = 12.5
 measurement-nan|.metricResults[0].measurements[0].value = "NaN"
@@ -69,7 +69,7 @@ bash "$script" --fixture "$two_character_fixture" >/dev/null ||
 head -1 "$script" | grep -Fqx '#!/usr/bin/env bash' || fail 'Prod SLO producer has the wrong shebang'
 grep -Fq 'set -Eeuo pipefail' "$script" || fail 'Prod SLO producer is not fail-fast'
 grep -Fq 'workflow.runUrl | capture' "$script" || fail 'Prod SLO producer does not derive source repository from workflow URL'
-if grep -Fq 'repository:"OWNER/cicd-course-sample-app"' "$script"; then
+if grep -Fq 'repository:"OWNER/mini-commerce"' "$script"; then
   fail 'Prod SLO producer still hard-codes the source repository'
 fi
 grep -Fq 'rollout.argoproj.io/revision' "$script" || fail 'Prod SLO producer does not use stable ReplicaSet revision identity'
@@ -88,7 +88,7 @@ grep -Fq 'existing canonical Prod SLO evidence belongs to a different immutable 
 grep -Fq 'status --porcelain --untracked-files=all' "$script" || fail 'Prod SLO producer does not enforce a clean source tree'
 
 for option in --promotion-evidence --baseline --output; do
-  if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+  if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
     bash "$script" "$option" "$tmp_root/override" >/dev/null 2>&1; then
     fail "runtime producer accepted arbitrary $option override"
   fi
@@ -105,14 +105,14 @@ printf '%s\n' fedcba9876543210fedcba9876543210fedcba98 >"$fake_runtime/git-revis
 cp "$test_root/fixtures/promotion/valid-ap-northeast-2.yaml" "$fake_runtime/promotion.yaml"
 cp "$fixture_root/baseline-valid.json" "$fake_runtime/baseline.json"
 jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"fedcba9876543210fedcba9876543210fedcba98"},health:{status:"Healthy"}}}' >"$fake_runtime/application.json"
-jq -n '{cluster:{name:"course-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$fake_runtime/cluster.json"
+jq -n '{cluster:{name:"mini-commerce-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$fake_runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$fake_runtime/kubeconfig.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
   {metadata:{name:"mini-commerce",namespace:"app-prod",uid:"22222222-2222-2222-2222-222222222222"},
    spec:{template:{spec:{containers:[{name:"mini-commerce",image:$image}]}},strategy:{canary:{steps:[{analysis:{templates:[{templateName:"mini-commerce-success-rate"}]}}]}}},
    status:{phase:"Healthy",stableRS:"stable-v2",currentPodHash:"stable-v2",replicas:3,readyReplicas:3,availableReplicas:3,pauseConditions:[]}}
 ' >"$fake_runtime/rollout.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '
   {items:[{metadata:{name:"mini-commerce-stable-v2",labels:{"rollouts-pod-template-hash":"stable-v2"},annotations:{"rollout.argoproj.io/revision":"2"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
    spec:{replicas:3,template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
 ' >"$fake_runtime/replicasets.json"
@@ -124,7 +124,7 @@ jq -n --argjson metrics "$(jq -c '.metricResults' "$fixture_root/prod-slo-valid.
 
 run_static() {
   local runtime=$1 output=$2
-  COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+  PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
     bash "$script" --promotion-evidence "$runtime/promotion.yaml" --baseline "$runtime/baseline.json" \
       --output "$output" --now 2026-09-03T01:22:00Z
 }
@@ -146,7 +146,7 @@ static_log=$(run_static "$fake_runtime" "$static_output") || fail 'valid static 
 grep -Fq '[STATIC]' <<<"$static_log" || fail 'fake runtime execution was not labelled STATIC'
 jq -e '
   .evidenceGrade == "STATIC" and .status == "PASS" and
-  .source.repository == "OWNER/cicd-course-sample-app" and
+  .source.repository == "OWNER/mini-commerce" and
   .rollout.revision == 2 and .rollout.trafficWeight == 100 and
   .metricResults[0].measurements[0].value == "12.5" and
   .metricResults[0].measurements[0].phase == "Failed" and
@@ -183,13 +183,13 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
     baseline-stable-whitespace) jq '.rollout.stableHash=" "' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json" ;;
     baseline-stable-bom) jq '.rollout.stableHash="\uFEFF"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json" ;;
     malformed-cluster-arn)
-      jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
-      jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
+      jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/mini-commerce-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
+      jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/mini-commerce-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
       ;;
-    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce"' "$runtime/promotion.yaml" ;;
+    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"' "$runtime/promotion.yaml" ;;
     promotion-ecr-name-too-short) set_release_repository "$runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
-    promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"' "$runtime/promotion.yaml" ;;
-    promotion-owner-whitespace) yq -i '.workflow.runUrl="https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl="https://github.com/OWNER /cicd-course-sample-app/attestations/1001"' "$runtime/promotion.yaml" ;;
+    promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/mini-commerce/attestations/alpha"' "$runtime/promotion.yaml" ;;
+    promotion-owner-whitespace) yq -i '.workflow.runUrl="https://github.com/OWNER /mini-commerce/actions/runs/1001" | .attestation.githubUrl="https://github.com/OWNER /mini-commerce/attestations/1001"' "$runtime/promotion.yaml" ;;
     promotion-slo-evidence-id-whitespace) yq -i '.slo.evidenceId="   "' "$runtime/promotion.yaml" ;;
     promotion-slo-evidence-id-bom)
       yq -o=json '.' "$runtime/promotion.yaml" | jq '.slo.evidenceId="\uFEFF"' | yq -P >"$runtime/mutated"
@@ -202,7 +202,7 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
   fi
 done
 
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$fake_runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$fake_runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
   bash "$script" --promotion-evidence "$fake_runtime/promotion.yaml" --baseline "$fake_runtime/baseline.json" \
     --output "$canonical" --now 2026-09-03T01:22:00Z >/dev/null 2>&1; then
   fail 'static runtime adapter wrote to the canonical runtime evidence path'

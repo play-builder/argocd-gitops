@@ -49,7 +49,7 @@ jq -e --arg now "$validation_now" '
     (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
   . as $record |
   (keys | sort) == ["clusterArn","environment","evidenceGrade","expiresAt","gitopsRevision","observedAt","recovery","region","schemaVersion","snapshot","source"] and
-  .schemaVersion == "course.snapshot-ready/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
+  .schemaVersion == "playbuilder.snapshot-ready/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
   .environment == "dev" and (.region | IN("ap-northeast-2", "us-east-1")) and
   (.clusterArn | test("^arn:aws:eks:" + $record.region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
   (.gitopsRevision | test("^[0-9a-f]{40}$")) and
@@ -65,7 +65,7 @@ jq -e --arg now "$validation_now" '
   .snapshot.namespace == "app-dev" and .snapshot.name == "mini-commerce-postgresql-snapshot" and
   (.snapshot.uid | test("^[0-9a-f-]{36}$")) and (.snapshot.contentUid | test("^[0-9a-f-]{36}$")) and
   (.snapshot.contentName | test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")) and
-  .snapshot.className == "course-ebs-snapshots" and .snapshot.driver == "ebs.csi.aws.com" and
+  .snapshot.className == "mini-commerce-ebs-snapshots" and .snapshot.driver == "ebs.csi.aws.com" and
   (.snapshot.sourceVolumeHandle | test("^vol-[0-9a-f]{8,64}$")) and
   .snapshot.sourceVolumeHandle == .source.volumeHandle and
   (.snapshot.handle | test("^snap-[0-9a-f]{17}$")) and .snapshot.readyToUse == true and
@@ -90,7 +90,7 @@ jq -n --arg handle "$(jq -r '.snapshot.handle' "$evidence")" \
   {
     environment:"dev",namespace:"app-recovery",snapshotHandle:$handle,
     source:{namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0"},
-    snapshotClassName:"course-ebs-snapshots",
+    snapshotClassName:"mini-commerce-ebs-snapshots",
     snapshotEvidence:{readerRoleArn:$role}
   }
 ' | yq -P >"$tmp"

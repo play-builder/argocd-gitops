@@ -21,7 +21,7 @@ set -e
 [[ "$missing_status" -ne 0 ]]
 grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: handoff evidence file not found' <<<"$missing_output"
 
-static_output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+static_output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
   bash "$gate" \
     --environment dev \
     --handoff "$fixture_root/dev-handoff.json" \
@@ -59,7 +59,7 @@ grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: CLOUD_RUNTIME evidence is required' \
 jq '.terraform.planActions = ["create"]' "$fixture_root/dev-adoption.json" \
   >"$scratch_root/create-plan.json"
 set +e
-plan_output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+plan_output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
   bash "$gate" \
     --environment dev \
     --handoff "$fixture_root/dev-handoff.json" \
@@ -74,7 +74,7 @@ grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: adoption proof is not a no-op import' 
 jq '.release.after.workloadUids[0].uid = "replacement-uid"' \
   "$fixture_root/dev-adoption.json" >"$scratch_root/replaced-uid.json"
 set +e
-uid_output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+uid_output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
   bash "$gate" \
     --environment dev \
     --handoff "$fixture_root/dev-handoff.json" \
@@ -89,7 +89,7 @@ grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: release identity or UID changed during
 jq '.unexpected = true' "$fixture_root/dev-handoff.json" \
   >"$scratch_root/extra-key-handoff.json"
 set +e
-exact_output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+exact_output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
   bash "$gate" \
     --environment dev \
     --handoff "$scratch_root/extra-key-handoff.json" \
@@ -104,7 +104,7 @@ grep -Fq 'PLATFORM_OWNER_HANDOFF_BLOCKED: handoff evidence is malformed' \
 jq '.handoffSha256 = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' \
   "$fixture_root/dev-adoption.json" >"$scratch_root/wrong-hash-adoption.json"
 set +e
-hash_output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+hash_output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
   bash "$gate" \
     --environment dev \
     --handoff "$fixture_root/dev-handoff.json" \
@@ -129,12 +129,12 @@ assert_timestamp_rejected() {
     fi
     jq --arg digest "$digest" '.handoffSha256 = $digest' \
       "$fixture_root/dev-adoption.json" >"$paired_adoption"
-    output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+    output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
       bash "$gate" --environment dev --handoff "$candidate" \
         --adoption "$paired_adoption" \
         --expected-gitops-revision "$revision" 2>&1)
   else
-    output=$(COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+    output=$(PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
       bash "$gate" --environment dev --handoff "$fixture_root/dev-handoff.json" \
         --adoption "$candidate" --expected-gitops-revision "$revision" 2>&1)
   fi

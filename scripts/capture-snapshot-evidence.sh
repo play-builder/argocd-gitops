@@ -14,7 +14,7 @@ a2=$canonical_output
 a1_output=$canonical_a1
 output=$canonical_output
 now_override=
-adapter_dir=${COURSE_CHECK_BIN_DIR:-}
+adapter_dir=${PLATFORM_CHECK_BIN_DIR:-}
 overridden=false
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -62,7 +62,7 @@ validate_a1() {
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $record |
     (keys | sort) == ["checksum","clusterArn","environment","evidenceGrade","gitopsRevision","phaseValuesDigest","phaseValuesFile","region","schemaVersion","source","writers"] and
-    .schemaVersion == "course.snapshot-quiesce-a1/v1" and .evidenceGrade == $grade and
+    .schemaVersion == "playbuilder.snapshot-quiesce-a1/v1" and .evidenceGrade == $grade and
     .environment == "dev" and (.region | IN("ap-northeast-2","us-east-1")) and
     (.clusterArn | test("^arn:aws:eks:" + $record.region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
@@ -94,7 +94,7 @@ validate_record() {
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $record |
     (keys | sort) == ["checksum","clusterArn","database","environment","evidenceGrade","expiresAt","gitopsRevision","observedAt","region","schemaVersion","source","storage","writers"] and
-    .schemaVersion == "course.snapshot-quiesce/v1" and .evidenceGrade == $grade and .environment == "dev" and
+    .schemaVersion == "playbuilder.snapshot-quiesce/v1" and .evidenceGrade == $grade and .environment == "dev" and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (.clusterArn | test("^arn:aws:eks:" + $record.region + ":[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
@@ -185,7 +185,7 @@ validate_ready_phase() {
     .database == {enabled:true,replicaCount:0,migration:{enabled:false}} and
     .maintenance == {writersStopped:true} and .snapshot == {captureEnabled:true} and
     .recovery.restoreEnabled == false and .recovery.namespace == "app-recovery" and
-    .recovery.snapshotClassName == "course-ebs-snapshots" and
+    .recovery.snapshotClassName == "mini-commerce-ebs-snapshots" and
     .recovery.source == {namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0",snapshotName:"mini-commerce-postgresql-snapshot"}
   ' >/dev/null || fail 'snapshot capture values are not the exact A3 phase'
 }
@@ -224,7 +224,7 @@ capture_ready_snapshot() {
   jq -e --arg pvc "$pvc_uid" '
     .metadata.name == "mini-commerce-postgresql-snapshot" and .metadata.namespace == "app-dev" and
     (.metadata.uid | test("^[0-9a-f-]{36}$")) and
-    .spec.volumeSnapshotClassName == "course-ebs-snapshots" and
+    .spec.volumeSnapshotClassName == "mini-commerce-ebs-snapshots" and
     .spec.source.persistentVolumeClaimName == "data-mini-commerce-postgresql-0" and
     .status.readyToUse == true and (.status.boundVolumeSnapshotContentName | length) > 0
   ' <<<"$snapshot" >/dev/null || fail 'VolumeSnapshot is not ready or bound to the reviewed source'
@@ -233,7 +233,7 @@ capture_ready_snapshot() {
   jq -e --arg name "$content_name" --arg snapshotUid "$(jq -r '.metadata.uid' <<<"$snapshot")" \
     --arg volumeHandle "$pv_volume_handle" '
     .metadata.name == $name and (.metadata.uid | test("^[0-9a-f-]{36}$")) and
-    .spec.driver == "ebs.csi.aws.com" and .spec.volumeSnapshotClassName == "course-ebs-snapshots" and
+    .spec.driver == "ebs.csi.aws.com" and .spec.volumeSnapshotClassName == "mini-commerce-ebs-snapshots" and
     .spec.volumeSnapshotRef == {name:"mini-commerce-postgresql-snapshot",namespace:"app-dev",uid:$snapshotUid} and
     .spec.source.volumeHandle == $volumeHandle and
     .status.readyToUse == true and (.status.snapshotHandle | test("^snap-[0-9a-f]{17}$"))
@@ -252,11 +252,11 @@ capture_ready_snapshot() {
     --arg handle "$(jq -r '.status.snapshotHandle' <<<"$content")" \
     --arg role "$RECOVERY_DB_SECRET_READER_ROLE_ARN" --arg normalRole "$EXTERNAL_SECRETS_READER_ROLE_ARN" \
     --arg observed "$observed" --arg expires "$expires" '
-    {schemaVersion:"course.snapshot-ready/v1",evidenceGrade:$grade,environment:"dev",region:$region,
+    {schemaVersion:"playbuilder.snapshot-ready/v1",evidenceGrade:$grade,environment:"dev",region:$region,
      clusterArn:$arn,gitopsRevision:$revision,
      source:{namespace:"app-dev",pvcName:"data-mini-commerce-postgresql-0",pvcUid:$pvcUid,volumeName:$volume,volumeHandle:$volumeHandle},
      snapshot:{namespace:"app-dev",name:"mini-commerce-postgresql-snapshot",uid:$snapshotUid,
-       contentName:$contentName,contentUid:$contentUid,className:"course-ebs-snapshots",
+       contentName:$contentName,contentUid:$contentUid,className:"mini-commerce-ebs-snapshots",
        driver:"ebs.csi.aws.com",sourceVolumeHandle:$sourceVolumeHandle,handle:$handle,readyToUse:true},
      recovery:{readerRoleArn:$role,normalReaderRoleArn:$normalRole},observedAt:$observed,expiresAt:$expires}
   ' >"$record"
@@ -461,7 +461,7 @@ if [[ "$mode" == prepare ]]; then
   checksum_command=$(cat <<'COMMAND'
 psql -X -A -t -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
 SELECT jsonb_build_object(
-  'schemaVersion', 'course.snapshot-checksum/v1',
+  'schemaVersion', 'playbuilder.snapshot-checksum/v1',
   'foreignKeyViolations', (SELECT count(*) FROM order_items oi LEFT JOIN orders o ON o.id=oi.order_id LEFT JOIN products p ON p.id=oi.product_id WHERE o.id IS NULL OR p.id IS NULL),
   'duplicateIdempotencyKeys', (SELECT count(*) FROM (SELECT idempotency_key FROM orders GROUP BY idempotency_key HAVING count(*) > 1) duplicates),
   'negativeInventoryRows', (SELECT count(*) FROM inventory WHERE available_quantity < 0),
@@ -479,7 +479,7 @@ COMMAND
     fail 'canonical invariant/checksum query failed against the readable A1 database'
   jq -e '
     (keys | sort) == ["canonicalRows","duplicateIdempotencyKeys","foreignKeyViolations","negativeInventoryRows","schemaVersion"] and
-    .schemaVersion == "course.snapshot-checksum/v1" and
+    .schemaVersion == "playbuilder.snapshot-checksum/v1" and
     .foreignKeyViolations == 0 and .duplicateIdempotencyKeys == 0 and .negativeInventoryRows == 0 and
     [.canonicalRows[].table] == ["products","inventory","orders","order_items"]
   ' <<<"$checksum_payload" >/dev/null || fail 'A1 checksum query reported an invariant violation or malformed row set'
@@ -492,7 +492,7 @@ COMMAND
     --arg revision "$local_revision" --arg phaseDigest "$phase_digest" --arg podUid "$pod_uid" \
     --arg pvcUid "$pvc_uid" --arg volume "$volume_name" --arg image "$database_image" \
     --arg checksum "$checksum_value" --arg captured "$clock_now" '
-    {schemaVersion:"course.snapshot-quiesce-a1/v1",evidenceGrade:$grade,environment:"dev",
+    {schemaVersion:"playbuilder.snapshot-quiesce-a1/v1",evidenceGrade:$grade,environment:"dev",
      region:$region,clusterArn:$arn,gitopsRevision:$revision,
      phaseValuesFile:"envs/dev/snapshot-maintenance-values.yaml",phaseValuesDigest:$phaseDigest,
      source:{namespace:"app-dev",statefulSet:"mini-commerce-postgresql",pvcName:"data-mini-commerce-postgresql-0",
@@ -583,7 +583,7 @@ jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$clust
   --arg shutdown "$shutdown_digest" --arg stopped "$stopped_at" \
   --arg checksum "$(jq -r '.checksum.value' "$a1")" --arg captured "$(jq -r '.checksum.capturedAt' "$a1")" \
   --arg observed "$clock_now" --arg expires "$expires_at" '
-  {schemaVersion:"course.snapshot-quiesce/v1",evidenceGrade:$grade,environment:"dev",
+  {schemaVersion:"playbuilder.snapshot-quiesce/v1",evidenceGrade:$grade,environment:"dev",
    region:$region,clusterArn:$arn,gitopsRevision:$revision,
    source:{namespace:"app-dev",statefulSet:"mini-commerce-postgresql",pvcName:"data-mini-commerce-postgresql-0",pvcUid:$pvcUid,volumeName:$volume},
    writers:{applicationReplicas:0,migrationActive:0,migrationPending:0},

@@ -71,7 +71,7 @@ for environment in dev prod; do
   namespace=$(yq -r '.spec.generators[0].list.elements[0].namespace' "$current_appset")
   root_namespace="$repository_root/argocd/bootstrap/$environment/application-namespace.yaml"
 
-  # The course deploys only mini-commerce: its render must not claim bootstrap-owned shared resources.
+  # The platform deploys only mini-commerce: its render must not claim bootstrap-owned shared resources.
   render_application_source "$current_appset" "$repository_root" "$current_render"
   write_shared_ownership_overlap "$root_namespace" "$current_render" "$root_overlap" "$namespace"
   [[ ! -s "$root_overlap" ]] || {

@@ -35,7 +35,7 @@ case "$tool" in
     esac
     ;;
   aws)
-    [[ "$*" == "eks describe-cluster --name course-dev --region ap-northeast-2 --output json" ]] || { echo "FAIL: unexpected fake aws invocation: $*" >&2; exit 64; }
+    [[ "$*" == "eks describe-cluster --name mini-commerce-dev --region ap-northeast-2 --output json" ]] || { echo "FAIL: unexpected fake aws invocation: $*" >&2; exit 64; }
     cat "$root/cluster.json"
     ;;
   kubectl)

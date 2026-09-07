@@ -8,6 +8,6 @@ stop: {action: restore-dns}
 evidence: {baseline: [ok], inject: [ok], detect: [ok], mitigate: [ok], recover: [ok], prevent: [ok], cleanup: [ok]}
 preventionTest: tests/render-contract.sh --case network-policy
 cleanup:
-  labels: {course.playbuilder.io/incident: INC-K8S-03}
+  labels: {playbuilder.io/incident: INC-K8S-03}
   action: remove-fault
   externalSecretLifecycle: {targetSecretOwnerReferenceGC: true, providerSecretRetained: true}

@@ -23,7 +23,7 @@ evidence:
 preventionTest: tests/render-contract.sh --case network-policy
 cleanup:
   labels:
-    course.playbuilder.io/incident: INC-RES-01
+    playbuilder.io/incident: INC-RES-01
   action: remove-fault-resource
   externalSecretLifecycle:
     targetSecretOwnerReferenceGC: true

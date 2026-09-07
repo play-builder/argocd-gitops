@@ -102,7 +102,7 @@ database:
   port: 5432
   name: commerce
   user: commerce
-  storageClassName: course-gp3
+  storageClassName: mini-commerce-gp3
   storageSize: 5Gi
   image:
     repository: docker.io/library/postgres
@@ -194,5 +194,5 @@ networkPolicy:
 maintenance:
   writersStopped: false
 
-courseCleanup:
+platformCleanup:
   workloadsDisabled: false

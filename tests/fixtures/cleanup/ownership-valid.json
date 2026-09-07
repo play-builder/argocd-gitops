@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "course.cleanup-ownership/v1",
+  "schemaVersion": "playbuilder.cleanup-ownership/v1",
   "evidenceGrade": "CLOUD_RUNTIME",
-  "courseId": "course-2026",
+  "ownerId": "playbuilder",
   "accountId": "111111111111",
   "region": "ap-northeast-2",
   "resources": [
@@ -10,7 +10,7 @@
       "id": "app-dev",
       "environment": "dev",
       "classification": "application-namespace",
-      "owner": "course",
+      "owner": "playbuilder",
       "managedBy": "terraform",
       "billable": false,
       "decision": "RETAIN",
@@ -22,7 +22,7 @@
       "id": "app-dev/data",
       "environment": "dev",
       "classification": "source-pvc",
-      "owner": "course",
+      "owner": "playbuilder",
       "managedBy": "terraform",
       "billable": true,
       "decision": "RETAIN",

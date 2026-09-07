@@ -6,7 +6,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "-36"
     argocd.argoproj.io/sync-options: Prune=false
   labels:
-    course.playbuilder.io/admission: enabled
+    playbuilder.io/admission: enabled
     gateway-access: "true"
     environment: dev
     istio.io/rev: dev-stable

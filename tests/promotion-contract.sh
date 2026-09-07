@@ -22,10 +22,10 @@ validate_ready() {
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     . as $root |
     .workflow as $workflow |
-    (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
+    (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/mini-commerce)/actions/runs/(?<id>[0-9]+)$")) as $run |
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
-    .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
+    .schemaVersion == "playbuilder.dev-ready/v1" and .environment == "dev" and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (.sourceSha | test("^[0-9a-f]{40}$")) and
     ($workflow | (keys | sort) == ["event","name","runAttempt","runId","runUrl"]) and
@@ -180,7 +180,7 @@ case_promotion() {
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
-    .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
+    .schemaVersion == "playbuilder.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.image.repository | type == "string" and length > 0) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
@@ -354,14 +354,14 @@ workflow-name|.workflow.name = "promote"
 workflow-event|.workflow.event = "workflow_dispatch"
 workflow-runid-type|.workflow.runId = 1001
 workflow-runattempt|.workflow.runAttempt = 0
-workflow-runurl-id|.workflow.runUrl = "https://github.com/OWNER/cicd-course-sample-app/actions/runs/9999"
+workflow-runurl-id|.workflow.runUrl = "https://github.com/OWNER/mini-commerce/actions/runs/9999"
 workflow-runurl-repository|.workflow.runUrl = "https://github.com/OWNER/other-app/actions/runs/1001"
-workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /cicd-course-sample-app/actions/runs/1001" | .attestation.githubUrl = "https://github.com/OWNER /cicd-course-sample-app/attestations/1001"
+workflow-owner-whitespace|.workflow.runUrl = "https://github.com/OWNER /mini-commerce/actions/runs/1001" | .attestation.githubUrl = "https://github.com/OWNER /mini-commerce/attestations/1001"
 platform-order|.image.platforms = ["linux/arm64", "linux/amd64"]
-ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce"
+ecr-double-slash|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"
 ecr-name-too-short|.image.repository = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"
 slo-evidence-id-whitespace|.slo.evidenceId = "   "
-attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/cicd-course-sample-app/attestations/alpha"
+attestation-id|.attestation.githubId = "alpha" | .attestation.githubUrl = "https://github.com/OWNER/mini-commerce/attestations/alpha"
 issued-at-calendar|.issuedAt = "2026-02-31T00:00:00Z"
 expires-at-calendar|.expiresAt = "2026-02-31T02:00:00Z"
 issued-at-fraction|.issuedAt = "2026-09-03T00:30:00.000Z"

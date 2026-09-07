@@ -9,7 +9,7 @@ promotion="$repository_root/envs/prod/promotion-evidence.yaml"
 baseline="$repository_root/evidence/prod/baseline.json"
 runtime_override=false
 now_override=""
-adapter_dir=${COURSE_CHECK_BIN_DIR:-}
+adapter_dir=${PLATFORM_CHECK_BIN_DIR:-}
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 usage() { echo "Usage: $0 [--fixture path] [--promotion-evidence path] [--baseline path] [--output path]" >&2; exit 2; }
@@ -45,10 +45,10 @@ validate_record() {
     (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
     (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
     (keys | sort) == ["analysisRun","clusterArn","evidenceGrade","evidenceId","gitopsRevision","image","metricResults","observedAt","region","rollout","schemaVersion","source","status"] and
-    .schemaVersion == "course.prod-slo/v1" and .evidenceGrade == $grade and .status == "PASS" and
+    .schemaVersion == "playbuilder.prod-slo/v1" and .evidenceGrade == $grade and .status == "PASS" and
     (.evidenceId | nonblank) and
     (.source | (keys | sort) == ["repository","sha"]) and (.image | (keys | sort) == ["indexDigest","repository"]) and
-    (.source.repository | test("^[^/\\s]+/cicd-course-sample-app$")) and
+    (.source.repository | test("^[^/\\s]+/mini-commerce$")) and
     (.source.sha | test("^[0-9a-f]{40}$")) and (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and (.clusterArn | test("^arn:aws:eks:(ap-northeast-2|us-east-1):[0-9]{12}:cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) and (.region | IN("ap-northeast-2","us-east-1")) and
@@ -92,7 +92,7 @@ if [[ -z "$adapter_dir" ]]; then
 fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 if [[ -n "$adapter_dir" ]]; then
-  [[ -d "$adapter_dir" ]] || fail "COURSE_CHECK_BIN_DIR is not a directory"
+  [[ -d "$adapter_dir" ]] || fail "PLATFORM_CHECK_BIN_DIR is not a directory"
   [[ "$runtime_override" == true && -n "$now_override" ]] ||
     fail "static runtime adapter requires explicit noncanonical inputs, output, and clock"
   [[ "$output" != "$repository_root/evidence/"* && "$output" != *'/tests/fixtures/'* ]] ||
@@ -136,11 +136,11 @@ jq -e --arg now "$clock_now" '
     (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
   . as $root |
   .workflow as $workflow |
-  (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/cicd-course-sample-app)/actions/runs/(?<id>[0-9]+)$")) as $run |
+  (.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/mini-commerce)/actions/runs/(?<id>[0-9]+)$")) as $run |
   (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
   (.cluster.arn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["attestation","cluster","environment","expiresAt","gitops","image","issuedAt","region","schemaVersion","slo","sourceSha","workflow"] and
-  .schemaVersion == "course.dev-ready/v1" and .environment == "dev" and
+  .schemaVersion == "playbuilder.dev-ready/v1" and .environment == "dev" and
   (.region | IN("ap-northeast-2","us-east-1")) and
   (.sourceSha | test("^[0-9a-f]{40}$")) and
   ($workflow | (keys | sort) == ["event","name","runAttempt","runId","runUrl"]) and
@@ -176,7 +176,7 @@ jq -e --arg now "$clock_now" '
   (.image.repository | capture("^(?<account>[0-9]{12})\\.dkr\\.ecr\\.(?<region>ap-northeast-2|us-east-1)\\.amazonaws\\.com/(?<name>[a-z0-9]+([._/-][a-z0-9]+)*)$")) as $ecr |
   (.clusterArn | capture("^arn:aws:eks:(?<region>ap-northeast-2|us-east-1):(?<account>[0-9]{12}):cluster/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")) as $cluster |
   (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
-  .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
+  .schemaVersion == "playbuilder.prod-baseline/v1" and .evidenceGrade == "CLOUD_RUNTIME" and
   (.image | (keys | sort) == ["indexDigest","repository"]) and
   (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
   (($ecr.name | length) >= 2 and ($ecr.name | length) <= 256) and
@@ -191,7 +191,7 @@ jq -e --arg now "$clock_now" '
 ' <<<"$baseline_json" >/dev/null || fail "Prod baseline is not a valid initial stable release"
 
 source_sha=$(jq -r '.sourceSha' <<<"$promotion_json")
-source_repository=$(jq -r '.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/cicd-course-sample-app)/actions/runs/[0-9]+$").repository' <<<"$promotion_json")
+source_repository=$(jq -r '.workflow.runUrl | capture("^https://github\\.com/(?<repository>[^/\\s]+/mini-commerce)/actions/runs/[0-9]+$").repository' <<<"$promotion_json")
 expected_repository=$(jq -r '.image.repository' <<<"$promotion_json")
 expected_digest=$(jq -r '.image.indexDigest' <<<"$promotion_json")
 dev_cluster_arn=$(jq -r '.cluster.arn' <<<"$promotion_json")
@@ -313,7 +313,7 @@ jq -n --arg source "$source_sha" --arg sourceRepository "$source_repository" \
   --arg arn "$cluster_arn" --arg region "$AWS_REGION" --arg grade "$evidence_grade" \
   --arg observed "$clock_now" --argjson revision "$rollout_revision" \
   --argjson ro "$rollout_json" --argjson ar "$analysis" '
-  {schemaVersion:"course.prod-slo/v1",evidenceGrade:$grade,status:"PASS",
+  {schemaVersion:"playbuilder.prod-slo/v1",evidenceGrade:$grade,status:"PASS",
    source:{repository:$sourceRepository,sha:$source},image:{repository:$repository,indexDigest:$digest},
    gitopsRevision:$git,clusterArn:$arn,region:$region,
    evidenceId:("prod-slo-" + (($observed | fromdateiso8601) | floor | tostring)),

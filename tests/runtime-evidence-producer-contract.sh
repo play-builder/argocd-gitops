@@ -123,7 +123,7 @@ done
 printf '%s\n' 1111111111111111111111111111111111111111 >"$runtime/git-revision.txt"
 : >"$runtime/git-status.txt"
 for environment in dev prod; do
-  jq -n --arg name "course-$environment" --arg arn "arn:aws:eks:ap-northeast-2:111111111111:cluster/course-$environment" \
+  jq -n --arg name "mini-commerce-$environment" --arg arn "arn:aws:eks:ap-northeast-2:111111111111:cluster/mini-commerce-$environment" \
     --arg endpoint "https://$environment.eks.example" '{cluster:{name:$name,arn:$arn,status:"ACTIVE",endpoint:$endpoint}}' \
     >"$runtime/$environment-cluster.json"
   jq -n --arg endpoint "https://$environment.eks.example" '{clusters:[{cluster:{server:$endpoint}}]}' \
@@ -157,15 +157,15 @@ jq -n '{ARN:"arn:aws:secretsmanager:ap-northeast-2:111111111111:secret:runtime"}
 jq '
   .evidenceGrade = "STATIC" |
   .resources += [
-    {kind:"VolumeSnapshot",id:"app-dev/data-snapshot",environment:"dev",classification:"source-snapshot",owner:"course",managedBy:"terraform",billable:false,decision:"RETAIN",reason:"recovery evidence",followUpAction:"delete after explicit approval"},
-    {kind:"VolumeSnapshotContent",id:"data-content",environment:"dev",classification:"source-snapshot-content",owner:"course",managedBy:"terraform",billable:false,decision:"RETAIN",reason:"recovery evidence",followUpAction:"delete after explicit approval"}
+    {kind:"VolumeSnapshot",id:"app-dev/data-snapshot",environment:"dev",classification:"source-snapshot",owner:"platform",managedBy:"terraform",billable:false,decision:"RETAIN",reason:"recovery evidence",followUpAction:"delete after explicit approval"},
+    {kind:"VolumeSnapshotContent",id:"data-content",environment:"dev",classification:"source-snapshot-content",owner:"platform",managedBy:"terraform",billable:false,decision:"RETAIN",reason:"recovery evidence",followUpAction:"delete after explicit approval"}
   ] | .resources |= sort_by(.kind,.id)
 ' "$fixture_root/cleanup/ownership-valid.json" >"$eks_root/evidence/cleanup/ownership-inventory.json"
 
 symlink_parent_root="$tmp_root/symlink-parent-inventory-root"
 mkdir -p "$symlink_parent_root/evidence"
 ln -s "$eks_root/evidence/cleanup" "$symlink_parent_root/evidence/cleanup"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$symlink_parent_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$fixture_root/cleanup/freeze-valid.json" \
     --output "$tmp_root/symlink-parent-removal.json" >/dev/null 2>&1; then
@@ -173,8 +173,8 @@ if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
 fi
 
 static_freeze="$tmp_root/static-freeze.json"
-freeze_log=$(COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" AWS_REGION=ap-northeast-2 \
-  DEV_CLUSTER_NAME=course-dev PROD_CLUSTER_NAME=course-prod \
+freeze_log=$(PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" AWS_REGION=ap-northeast-2 \
+  DEV_CLUSTER_NAME=mini-commerce-dev PROD_CLUSTER_NAME=mini-commerce-prod \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --dev-context dev-context \
     --prod-context prod-context --output "$static_freeze") || fail 'valid static freeze execution was rejected'
 grep -Fq '[STATIC]' <<<"$freeze_log" || fail 'fake freeze execution was not labelled STATIC'
@@ -184,9 +184,9 @@ jq -e '.evidenceGrade=="STATIC" and .writers=={loadGenerators:0,chaosResources:0
 
 active_runtime="$tmp_root/cleanup-runtime-active"
 cp -R "$runtime" "$active_runtime"
-jq -n '{items:[{metadata:{labels:{"course.writer":"load-generator"}},status:{active:1}}]}' >"$active_runtime/dev-jobs.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$active_runtime" AWS_REGION=ap-northeast-2 \
-  DEV_CLUSTER_NAME=course-dev PROD_CLUSTER_NAME=course-prod \
+jq -n '{items:[{metadata:{labels:{"playbuilder.io/writer":"load-generator"}},status:{active:1}}]}' >"$active_runtime/dev-jobs.json"
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$active_runtime" AWS_REGION=ap-northeast-2 \
+  DEV_CLUSTER_NAME=mini-commerce-dev PROD_CLUSTER_NAME=mini-commerce-prod \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --dev-context dev-context \
     --prod-context prod-context --output "$tmp_root/active-freeze.json" >/dev/null 2>&1; then
   fail 'static freeze execution accepted an active writer'
@@ -196,8 +196,8 @@ drift_runtime="$tmp_root/cleanup-runtime-drift"
 cp -R "$runtime" "$drift_runtime"
 jq '.clusters[0].cluster.server="https://foreign.eks.example"' "$drift_runtime/dev-kubeconfig.json" >"$drift_runtime/mutated"
 mv "$drift_runtime/mutated" "$drift_runtime/dev-kubeconfig.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$drift_runtime" AWS_REGION=ap-northeast-2 \
-  DEV_CLUSTER_NAME=course-dev PROD_CLUSTER_NAME=course-prod \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$drift_runtime" AWS_REGION=ap-northeast-2 \
+  DEV_CLUSTER_NAME=mini-commerce-dev PROD_CLUSTER_NAME=mini-commerce-prod \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --dev-context dev-context \
     --prod-context prod-context --output "$tmp_root/drift-freeze.json" >/dev/null 2>&1; then
   fail 'static freeze execution accepted a context and EKS endpoint mismatch'
@@ -208,8 +208,8 @@ cp -R "$runtime" "$arn_drift_runtime"
 jq '.cluster.arn="arn:aws:eks:ap-northeast-2:111111111111:cluster/other-dev"' \
   "$arn_drift_runtime/dev-cluster.json" >"$arn_drift_runtime/mutated"
 mv "$arn_drift_runtime/mutated" "$arn_drift_runtime/dev-cluster.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$arn_drift_runtime" AWS_REGION=ap-northeast-2 \
-  DEV_CLUSTER_NAME=course-dev PROD_CLUSTER_NAME=course-prod \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$arn_drift_runtime" AWS_REGION=ap-northeast-2 \
+  DEV_CLUSTER_NAME=mini-commerce-dev PROD_CLUSTER_NAME=mini-commerce-prod \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --dev-context dev-context \
     --prod-context prod-context --output "$tmp_root/arn-drift-freeze.json" >/dev/null 2>&1; then
   fail 'static freeze execution accepted an EKS ARN whose cluster name differs from the requested cluster'
@@ -217,18 +217,18 @@ fi
 
 malformed_arn_runtime="$tmp_root/cleanup-runtime-malformed-arn"
 cp -R "$runtime" "$malformed_arn_runtime"
-jq '.cluster.arn="arn:aws:eks:ap-northeast-2:111111111111:cluster/forged:cluster/course-dev"' \
+jq '.cluster.arn="arn:aws:eks:ap-northeast-2:111111111111:cluster/forged:cluster/mini-commerce-dev"' \
   "$malformed_arn_runtime/dev-cluster.json" >"$malformed_arn_runtime/mutated"
 mv "$malformed_arn_runtime/mutated" "$malformed_arn_runtime/dev-cluster.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$malformed_arn_runtime" AWS_REGION=ap-northeast-2 \
-  DEV_CLUSTER_NAME=course-dev PROD_CLUSTER_NAME=course-prod \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$malformed_arn_runtime" AWS_REGION=ap-northeast-2 \
+  DEV_CLUSTER_NAME=mini-commerce-dev PROD_CLUSTER_NAME=mini-commerce-prod \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" freeze --dev-context dev-context \
     --prod-context prod-context --output "$tmp_root/malformed-arn-freeze.json" >/dev/null 2>&1; then
   fail 'static freeze execution accepted a malformed EKS cluster ARN'
 fi
 
 static_removal="$tmp_root/static-removal.json"
-removal_log=$(COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+removal_log=$(PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context \
     --freeze-evidence "$static_freeze" --output "$static_removal") ||
@@ -244,16 +244,16 @@ jq -e '
 for label in ascii-space bom; do
   value=' '
   [[ "$label" == bom ]] && value=$(printf '\357\273\277')
-  invalid_inventory_root="$tmp_root/EKS-infra-$label-course-id"
+  invalid_inventory_root="$tmp_root/EKS-infra-$label-owner-id"
   mkdir -p "$invalid_inventory_root/evidence/cleanup"
-  jq --arg value "$value" '.courseId=$value' \
+  jq --arg value "$value" '.ownerId=$value' \
     "$eks_root/evidence/cleanup/ownership-inventory.json" \
     >"$invalid_inventory_root/evidence/cleanup/ownership-inventory.json"
-  if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+  if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
     bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
       --eks-repo-root "$invalid_inventory_root" --dev-context dev-context --prod-context prod-context \
-      --freeze-evidence "$static_freeze" --output "$tmp_root/$label-course-id-removal.json" >/dev/null 2>&1; then
-    fail "static removal execution accepted $label-only ownership courseId"
+      --freeze-evidence "$static_freeze" --output "$tmp_root/$label-owner-id-removal.json" >/dev/null 2>&1; then
+    fail "static removal execution accepted $label-only ownership ownerId"
   fi
   invalid_inventory_root="$tmp_root/EKS-infra-$label-reason"
   mkdir -p "$invalid_inventory_root/evidence/cleanup"
@@ -261,7 +261,7 @@ for label in ascii-space bom; do
     '.resources |= map(if .kind=="PersistentVolumeClaim" then .reason=$value else . end)' \
     "$eks_root/evidence/cleanup/ownership-inventory.json" \
     >"$invalid_inventory_root/evidence/cleanup/ownership-inventory.json"
-  if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+  if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
     bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal \
       --eks-repo-root "$invalid_inventory_root" --dev-context dev-context --prod-context prod-context \
       --freeze-evidence "$static_freeze" --output "$tmp_root/$label-reason-removal.json" >/dev/null 2>&1; then
@@ -272,7 +272,7 @@ done
 existing_runtime="$tmp_root/cleanup-runtime-existing-app"
 cp -R "$runtime" "$existing_runtime"
 printf '%s\n' 'application.argoproj.io/mini-commerce-dev' >"$existing_runtime/dev-application-name.txt"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$existing_runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$existing_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/existing-app-removal.json" >/dev/null 2>&1; then
@@ -283,7 +283,7 @@ workload_runtime="$tmp_root/cleanup-runtime-existing-workload"
 cp -R "$runtime" "$workload_runtime"
 jq -n '{items:[{kind:"Deployment",metadata:{namespace:"app-dev",name:"mini-commerce"}}]}' \
   >"$workload_runtime/dev-app-dev-workloads.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$workload_runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$workload_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/existing-workload-removal.json" >/dev/null 2>&1; then
@@ -296,7 +296,7 @@ jq -n '{apiVersion:"v1",kind:"Namespace",metadata:{name:"app-prod",uid:"namespac
   >"$rollback_configmap_runtime/prod-app-prod-namespace.json"
 printf '%s\n' 'configmap/mini-commerce-rollback-candidates' \
   >"$rollback_configmap_runtime/prod-rollback-configmap-name.txt"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$rollback_configmap_runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$rollback_configmap_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/existing-rollback-configmap-removal.json" >/dev/null 2>&1; then
@@ -307,7 +307,7 @@ collision_root="$tmp_root/EKS-infra-collision"
 mkdir -p "$collision_root/evidence/cleanup"
 jq '.resources |= map(if .kind=="PersistentVolumeClaim" then .id="app-dev/data-u-1" else . end) | .resources |= sort_by(.kind,.id)' \
   "$eks_root/evidence/cleanup/ownership-inventory.json" >"$collision_root/evidence/cleanup/ownership-inventory.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$collision_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/collision-removal.json" >/dev/null 2>&1; then
@@ -316,9 +316,9 @@ fi
 
 delete_provider_root="$tmp_root/EKS-infra-delete-provider"
 mkdir -p "$delete_provider_root/evidence/cleanup"
-jq '.resources |= map(if .kind=="SecretsManagerSecret" then .decision="DELETE" | .owner="course" else . end)' \
+jq '.resources |= map(if .kind=="SecretsManagerSecret" then .decision="DELETE" | .owner="platform" else . end)' \
   "$eks_root/evidence/cleanup/ownership-inventory.json" >"$delete_provider_root/evidence/cleanup/ownership-inventory.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$delete_provider_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/delete-provider-removal.json" >/dev/null 2>&1; then
@@ -328,14 +328,14 @@ fi
 provider_runtime="$tmp_root/cleanup-runtime-provider-unobservable"
 cp -R "$runtime" "$provider_runtime"
 rm -f -- "$provider_runtime/provider-secret.json"
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$provider_runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$provider_runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$tmp_root/provider-removal.json" >/dev/null 2>&1; then
   fail 'static removal execution accepted an unobservable provider Secret'
 fi
 
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_CLEANUP_DIR="$runtime" \
   bash "$repository_root/scripts/capture-cleanup-evidence.sh" removal --eks-repo-root "$eks_root" \
     --dev-context dev-context --prod-context prod-context --freeze-evidence "$static_freeze" \
     --output "$removal_output" >/dev/null 2>&1; then

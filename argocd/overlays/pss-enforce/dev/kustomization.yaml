@@ -31,7 +31,7 @@ patches:
       group: admissionregistration.k8s.io
       version: v1
       kind: ValidatingAdmissionPolicyBinding
-      name: course-workload-security
+      name: mini-commerce-workload-security
     patch: |-
       - op: replace
         path: /spec/validationActions

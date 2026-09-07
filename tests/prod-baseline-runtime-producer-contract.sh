@@ -42,19 +42,19 @@ for label in ecr-double-slash ecr-invalid-segment ecr-trailing-space ecr-name-to
   invalid_fixture="$tmp_root/fixture-$label.json"
   case "$label" in
     ecr-double-slash)
-      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce//app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-invalid-segment)
-      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce/-app"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-trailing-space)
-      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce "' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce "' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-name-too-short)
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-name-too-long)
       jq '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/" + ("a" * 257)' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-region-mismatch)
-      jq '.image.repository="123456789012.dkr.ecr.us-east-1.amazonaws.com/course/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="123456789012.dkr.ecr.us-east-1.amazonaws.com/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
     ecr-account-mismatch)
-      jq '.image.repository="999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
+      jq '.image.repository="999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"' "$fixture_root/baseline-valid.json" >"$invalid_fixture" ;;
   esac
   if bash "$script" --fixture "$invalid_fixture" >/dev/null 2>&1; then
     fail "baseline fixture validator accepted $label"
@@ -67,7 +67,7 @@ bash "$script" --fixture "$two_character_fixture" >/dev/null ||
   fail 'baseline fixture validator rejected a two-character ECR repository name'
 
 for option in --output --now; do
-  if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+  if AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
     bash "$script" "$option" "$tmp_root/override" >/dev/null 2>&1; then
     fail "live baseline producer accepted runtime path or clock override: $option"
   fi
@@ -82,14 +82,14 @@ done
 printf '%s\n' 1111111111111111111111111111111111111111 >"$runtime/git-revision.txt"
 : >"$runtime/git-status.txt"
 jq -n '{metadata:{name:"mini-commerce-prod"},spec:{source:{repoURL:"https://github.com/OWNER/argocd-gitops.git"}},status:{sync:{status:"Synced",revision:"1111111111111111111111111111111111111111"},health:{status:"Healthy"}}}' >"$runtime/application.json"
-jq -n '{cluster:{name:"course-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/course-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
+jq -n '{cluster:{name:"mini-commerce-prod",arn:"arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-prod",status:"ACTIVE",endpoint:"https://prod.eks.example"}}' >"$runtime/cluster.json"
 jq -n '{clusters:[{cluster:{server:"https://prod.eks.example"}}]}' >"$runtime/kubeconfig.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
   {metadata:{name:"mini-commerce",namespace:"app-prod",uid:"22222222-2222-2222-2222-222222222222"},
    spec:{template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},
    status:{phase:"Healthy",stableRS:"stable-v1",currentPodHash:"stable-v1",replicas:3,readyReplicas:3,availableReplicas:3,pauseConditions:[]}}
 ' >"$runtime/rollout.json"
-jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
+jq -n --arg image '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '
   {items:[{metadata:{name:"mini-commerce-stable-v1",labels:{"rollouts-pod-template-hash":"stable-v1"},annotations:{"rollout.argoproj.io/revision":"1"},ownerReferences:[{apiVersion:"argoproj.io/v1alpha1",kind:"Rollout",name:"mini-commerce",uid:"22222222-2222-2222-2222-222222222222",controller:true}]},
    spec:{replicas:3,template:{spec:{containers:[{name:"mini-commerce",image:$image}]}}},status:{readyReplicas:3,availableReplicas:3}}]}
 ' >"$runtime/replicasets.json"
@@ -97,7 +97,7 @@ jq -n '{metadata:{name:"mini-commerce",namespace:"app-prod"},spec:{http:[{name:"
 
 run_static() {
   local source=$1 output=$2
-  COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$source" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+  PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$source" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
     bash "$script" --output "$output" --now 2026-09-03T00:30:00Z
 }
 
@@ -113,7 +113,7 @@ set_runtime_repository() {
 }
 
 for timestamp in 2026-09-03T00:30:00.123Z 2026-09-03T09:30:00+09:00 2026-02-31T00:30:00Z; do
-  if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+  if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
     bash "$script" --output "$tmp_root/invalid-clock.json" --now "$timestamp" >/dev/null 2>&1; then
     fail "static baseline runtime accepted noncanonical capture clock: $timestamp"
   fi
@@ -143,25 +143,25 @@ for label in duplicate-replicaset wrong-owner wrong-owner-name wrong-revision no
     nonfinal-route) jq '.spec.http[0].route[0].weight=50 | .spec.http[0].route[1].weight=50' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
     extra-route-backend) jq '.spec.http[0].route += [{destination:{host:"shadow",port:{number:3000}},weight:0}]' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
     extra-route-rule) jq '.spec.http += [.spec.http[0]]' "$candidate/virtualservice.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/virtualservice.json" ;;
-    image-account) set_runtime_repository "$candidate" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce' ;;
-    image-region) set_runtime_repository "$candidate" '123456789012.dkr.ecr.us-east-1.amazonaws.com/course/mini-commerce' ;;
-    image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course//mini-commerce' ;;
-    image-invalid-segment) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/-mini-commerce' ;;
-    image-trailing-space) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/course/mini-commerce ' ;;
+    image-account) set_runtime_repository "$candidate" '999999999999.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce' ;;
+    image-region) set_runtime_repository "$candidate" '123456789012.dkr.ecr.us-east-1.amazonaws.com/mini-commerce' ;;
+    image-double-slash) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce//app' ;;
+    image-invalid-segment) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce/-app' ;;
+    image-trailing-space) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce ' ;;
     image-name-too-short) set_runtime_repository "$candidate" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     image-name-too-long) set_runtime_repository "$candidate" "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/$(printf 'a%.0s' {1..257})" ;;
     context-drift) jq '.clusters[0].cluster.server="https://foreign.eks.example"' "$candidate/kubeconfig.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/kubeconfig.json" ;;
     git-mismatch) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$candidate/git-revision.txt" ;;
     dirty-source) printf '%s\n' ' M envs/prod/values.yaml' >"$candidate/git-status.txt" ;;
     argo-repository) jq '.spec.source.repoURL="https://github.com/OWNER/other-repo.git"' "$candidate/application.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/application.json" ;;
-    malformed-cluster-arn) jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/course-prod"' "$candidate/cluster.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/cluster.json" ;;
+    malformed-cluster-arn) jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/mini-commerce-prod"' "$candidate/cluster.json" >"$candidate/mutated" && mv "$candidate/mutated" "$candidate/cluster.json" ;;
   esac
   if run_static "$candidate" "$tmp_root/$label.json" >/dev/null 2>&1; then
     fail "static baseline runtime accepted $label"
   fi
 done
 
-if COURSE_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=course-prod \
+if PLATFORM_CHECK_BIN_DIR="$fake_bin" FAKE_RUNTIME_DIR="$runtime" AWS_REGION=ap-northeast-2 EKS_CLUSTER_NAME=mini-commerce-prod \
   bash "$script" --output "$canonical" --now 2026-09-03T00:30:00Z >/dev/null 2>&1; then
   fail 'static baseline runtime wrote to the canonical CLOUD_RUNTIME path'
 fi

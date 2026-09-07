@@ -20,13 +20,13 @@ sha256_file() {
 max_name="A$(printf 'a%.0s' {1..99})"
 long_name="A$(printf 'a%.0s' {1..100})"
 invalid_arns=(
-  'arn:aws-cn:eks:ap-northeast-2:123456789012:cluster/course-dev'
+  'arn:aws-cn:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev'
   'arn:aws:eks:ap-northeast-2:123456789012:cluster/'
-  'arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev/extra'
-  'arn:aws:eks:ap-northeast-2:123456789012:cluster/course dev'
-  'arn:aws:eks:ap-northeast-2:123456789012:cluster/course.dev'
-  'arn:aws:eks:ap-northeast-2:123456789012:cluster/-course-dev'
-  'arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev '
+  'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev/extra'
+  'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev'
+  'arn:aws:eks:ap-northeast-2:123456789012:cluster/playbuilder.dev'
+  'arn:aws:eks:ap-northeast-2:123456789012:cluster/-mini-commerce-dev'
+  'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev '
   "arn:aws:eks:ap-northeast-2:123456789012:cluster/$long_name"
 )
 
@@ -101,7 +101,7 @@ for arn in "${invalid_arns[@]}"; do
   jq --arg arn "$arn" --arg digest "$handoff_digest" \
     '.clusterArn=$arn | .handoffSha256=$digest' \
     "$fixture_root/platform-owner-handoff/dev-adoption.json" >"$adoption"
-  if COURSE_PHASE_B_TEST_MODE=1 COURSE_PHASE_B_NOW=2026-09-03T00:20:00Z \
+  if PLATFORM_PHASE_B_TEST_MODE=1 PLATFORM_PHASE_B_NOW=2026-09-03T00:20:00Z \
     bash "$repository_root/scripts/verify-platform-owner-phase-b.sh" --environment dev \
       --handoff "$handoff" --adoption "$adoption" \
       --expected-gitops-revision 1111111111111111111111111111111111111111 >/dev/null 2>&1; then

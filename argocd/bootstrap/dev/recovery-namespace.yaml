@@ -5,8 +5,8 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
   labels:
-    course.playbuilder.io/admission: enabled
-    course.playbuilder.io/cleanup-scope: recovery
+    playbuilder.io/admission: enabled
+    playbuilder.io/cleanup-scope: recovery
     environment: recovery
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/audit: restricted

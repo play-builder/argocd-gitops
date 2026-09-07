@@ -11,7 +11,7 @@ dev_context=
 prod_context=
 output_override=
 freeze_override=
-adapter_dir=${COURSE_CHECK_BIN_DIR:-}
+adapter_dir=${PLATFORM_CHECK_BIN_DIR:-}
 usage() { echo "Usage: $0 freeze|removal [--fixture file] [--eks-repo-root dir] [--dev-context name --prod-context name]" >&2; exit 2; }
 
 physical_file_path() {
@@ -77,10 +77,10 @@ def validate_inventory(path):
     if path.is_symlink() or not path.is_file():
         fail("canonical ownership inventory must be a regular non-symlink file")
     inventory = read_json(path, "canonical ownership inventory")
-    exact(inventory, {"schemaVersion","evidenceGrade","courseId","accountId","region","resources","observedAt"}, "ownership inventory")
-    if inventory["schemaVersion"] != "course.cleanup-ownership/v1" or inventory["evidenceGrade"] != "CLOUD_RUNTIME":
+    exact(inventory, {"schemaVersion","evidenceGrade","ownerId","accountId","region","resources","observedAt"}, "ownership inventory")
+    if inventory["schemaVersion"] != "playbuilder.cleanup-ownership/v1" or inventory["evidenceGrade"] != "CLOUD_RUNTIME":
         fail("ownership inventory schema or evidence grade is invalid")
-    if not nonblank(inventory["courseId"]) or not re.fullmatch(r"[0-9]{12}", inventory["accountId"]):
+    if not nonblank(inventory["ownerId"]) or not re.fullmatch(r"[0-9]{12}", inventory["accountId"]):
         fail("ownership inventory identity is invalid")
     if inventory["region"] not in {"ap-northeast-2", "us-east-1"} or not isinstance(inventory["resources"], list) or not inventory["resources"]:
         fail("ownership inventory Region or resources are invalid")
@@ -95,8 +95,8 @@ def validate_inventory(path):
             fail("ownership resource identity is incomplete")
         if type(resource["billable"]) is not bool or resource["decision"] not in {"DELETE","RETAIN","EXTERNAL_SHARED"}:
             fail("ownership resource decision is invalid")
-        if resource["decision"] == "DELETE" and resource["owner"] != "course":
-            fail("delete decision is not course-owned")
+        if resource["decision"] == "DELETE" and resource["owner"] != "platform":
+            fail("delete decision is not platform-owned")
         if resource["decision"] != "DELETE" and not all(nonblank(resource[key]) for key in ("reason","followUpAction")):
             fail("retained ownership resource lacks rationale")
         identities.append((resource["kind"], resource["id"]))
@@ -117,7 +117,7 @@ if fixture_path.is_symlink() or not fixture_path.is_file():
 doc = read_json(fixture_path, "cleanup fixture")
 if mode == "freeze":
     exact(doc, {"schemaVersion","evidenceGrade","status","gitopsRevision","clusters","writers","observedAt"}, "freeze evidence")
-    if doc["schemaVersion"] != "course.gitops-freeze/v1" or doc["evidenceGrade"] != "CLOUD_RUNTIME" or doc["status"] != "FROZEN" or not HEX40.fullmatch(doc["gitopsRevision"]):
+    if doc["schemaVersion"] != "playbuilder.gitops-freeze/v1" or doc["evidenceGrade"] != "CLOUD_RUNTIME" or doc["status"] != "FROZEN" or not HEX40.fullmatch(doc["gitopsRevision"]):
         fail("freeze evidence is not a canonical CLOUD_RUNTIME FROZEN record")
     if not isinstance(doc["clusters"], list) or [cluster.get("environment") for cluster in doc["clusters"]] != ["dev","prod"]:
         fail("freeze evidence must bind ordered dev and prod clusters")
@@ -140,7 +140,7 @@ if mode == "freeze":
     utc_timestamp(doc["observedAt"], "freeze observedAt")
 else:
     exact(doc, {"schemaVersion","evidenceGrade","status","gitopsRevision","freezeEvidenceSha256","clusters","remaining","retained","providerSecrets","observedAt"}, "removal evidence")
-    if doc["schemaVersion"] != "course.gitops-removal/v1" or doc["evidenceGrade"] != "CLOUD_RUNTIME" or doc["status"] != "REMOVED":
+    if doc["schemaVersion"] != "playbuilder.gitops-removal/v1" or doc["evidenceGrade"] != "CLOUD_RUNTIME" or doc["status"] != "REMOVED":
         fail("removal evidence is not a canonical CLOUD_RUNTIME REMOVED record")
     if not HEX40.fullmatch(doc["gitopsRevision"]) or not HEX64.fullmatch(doc["freezeEvidenceSha256"]):
         fail("removal Git or freeze digest identity is invalid")
@@ -211,7 +211,7 @@ evidence_grade=CLOUD_RUNTIME
 output_path="$evidence_root/$mode.json"
 if [[ -n "$adapter_dir" ]]; then
   [[ -d "$adapter_dir" && -n "$output_override" ]] || {
-    echo "FAIL: static runtime adapter requires COURSE_CHECK_BIN_DIR and --output" >&2
+    echo "FAIL: static runtime adapter requires PLATFORM_CHECK_BIN_DIR and --output" >&2
     exit 1
   }
   [[ "$output_override" != "$repository_root/evidence/"* && "$output_override" != *'/tests/fixtures/'* ]] || {
@@ -367,19 +367,19 @@ if [[ "$mode" == freeze ]]; then
       loadGenerators:
         (([items($devLoad;$prodLoad)[] | select((.status.stage // "unknown") != "finished")] | length) +
          ([$jobs[] | select(((.status.active // 0) > 0) and
-           (.metadata.labels["course.writer"] == "load-generator" or
+           (.metadata.labels["playbuilder.io/writer"] == "load-generator" or
             .metadata.labels["app.kubernetes.io/component"] == "load-generator"))] | length)),
       chaosResources:(items($devChaos;$prodChaos) | length),
       recoveryJobs:
         (([$jobs[] | select(((.status.active // 0) > 0) and
-          (.metadata.labels["course.writer"] == "recovery" or
+          (.metadata.labels["playbuilder.io/writer"] == "recovery" or
            .metadata.labels["app.kubernetes.io/component"] == "recovery"))] | length) +
          ([$stateful[] | select(((.spec.replicas // 0) > 0) and
-          (.metadata.labels["course.writer"] == "recovery" or
+          (.metadata.labels["playbuilder.io/writer"] == "recovery" or
            .metadata.labels["app.kubernetes.io/component"] == "recovery" or
-           .metadata.labels["course.playbuilder.io/cleanup-scope"] == "recovery"))] | length)),
+           .metadata.labels["playbuilder.io/cleanup-scope"] == "recovery"))] | length)),
       migrationJobs:([$jobs[] | select(((.status.active // 0) > 0) and
-        (.metadata.labels["course.writer"] == "migration" or
+        (.metadata.labels["playbuilder.io/writer"] == "migration" or
          .metadata.labels["app.kubernetes.io/component"] == "migration"))] | length)
     }
   ') || {
@@ -395,7 +395,7 @@ if [[ "$mode" == freeze ]]; then
   jq -n --arg revision "$git_revision" --arg observed "$freeze_observed" --arg grade "$evidence_grade" \
     --slurpfile dev "$freeze_tmp_dir/dev-cluster.json" --slurpfile prod "$freeze_tmp_dir/prod-cluster.json" \
     --argjson writers "$writers" '
-    {schemaVersion:"course.gitops-freeze/v1",evidenceGrade:$grade,status:"FROZEN",
+    {schemaVersion:"playbuilder.gitops-freeze/v1",evidenceGrade:$grade,status:"FROZEN",
      gitopsRevision:$revision,clusters:[$dev[0],$prod[0]],writers:$writers,observedAt:$observed}
   ' >"$freeze_tmp" || {
     echo "FAIL: unable to construct GitOps freeze evidence" >&2
@@ -470,9 +470,9 @@ else
       type == "string" and
       test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       ((try (fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") == .);
-    (keys | sort) == ["accountId","courseId","evidenceGrade","observedAt","region","resources","schemaVersion"] and
-    .schemaVersion == "course.cleanup-ownership/v1" and .evidenceGrade == $grade and
-    (.courseId | nonblank) and (.accountId | test("^[0-9]{12}$")) and
+    (keys | sort) == ["accountId","evidenceGrade","observedAt","ownerId","region","resources","schemaVersion"] and
+    .schemaVersion == "playbuilder.cleanup-ownership/v1" and .evidenceGrade == $grade and
+    (.ownerId | nonblank) and (.accountId | test("^[0-9]{12}$")) and
     (.region | IN("ap-northeast-2","us-east-1")) and
     (.resources | type == "array" and length > 0) and
     ([.resources[] | [.kind,.id]] == ([.resources[] | [.kind,.id]] | sort)) and
@@ -484,11 +484,11 @@ else
       (.classification | nonblank) and
       (.owner | nonblank) and .managedBy == "terraform" and
       (.billable | type == "boolean") and (.decision | IN("DELETE","RETAIN","EXTERNAL_SHARED")) and
-      (if .decision == "DELETE" then .owner == "course"
+      (if .decision == "DELETE" then .owner == "platform"
        else (.reason | nonblank) and (.followUpAction | nonblank) end)) and
     (.observedAt | canonical_utc_seconds) and (.observedAt | fromdateiso8601) <= now
   ' "$inventory" >/dev/null || {
-    echo "FAIL: ownership inventory does not satisfy course.cleanup-ownership/v1" >&2
+    echo "FAIL: ownership inventory does not satisfy playbuilder.cleanup-ownership/v1" >&2
     exit 1
   }
   account_id=$(jq -r '.accountId' "$inventory")
@@ -504,7 +504,7 @@ else
       test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
       ((try (fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") == .);
     (keys | sort) == ["clusters","evidenceGrade","gitopsRevision","observedAt","schemaVersion","status","writers"] and
-    .schemaVersion == "course.gitops-freeze/v1" and .evidenceGrade == $grade and .status == "FROZEN" and
+    .schemaVersion == "playbuilder.gitops-freeze/v1" and .evidenceGrade == $grade and .status == "FROZEN" and
     (.gitopsRevision | test("^[0-9a-f]{40}$")) and
     [.clusters[].environment] == ["dev","prod"] and
     all(.clusters[];
@@ -775,7 +775,7 @@ PY
     --arg observed "$observed" --argjson clusters "$(jq -c '[.clusters[] | {environment,clusterArn}]' "$freeze")" \
     --argjson remaining "$summary" --argjson retained "$retained" '
     {
-      schemaVersion:"course.gitops-removal/v1",evidenceGrade:$grade,status:"REMOVED",
+      schemaVersion:"playbuilder.gitops-removal/v1",evidenceGrade:$grade,status:"REMOVED",
       gitopsRevision:$revision,freezeEvidenceSha256:$freeze,clusters:$clusters,
       remaining:$remaining,retained:$retained,
       providerSecrets:{retained:true,inventorySha256:$provider},observedAt:$observed

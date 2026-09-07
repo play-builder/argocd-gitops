@@ -9,13 +9,13 @@ evidence_root=
 sample_repo_root=
 gitops_repo_root=
 eks_repo_root=
-course_id=
+owner_id=
 account_id=
 region=
 output="$repository_root/evidence/incidents/index.json"
 
 usage() {
-  echo "Usage: $0 --fixture file | --manifest file --evidence-root dir --sample-repo-root dir --gitops-repo-root dir --eks-repo-root dir --course-id id --account-id id --region region [--output file]" >&2
+  echo "Usage: $0 --fixture file | --manifest file --evidence-root dir --sample-repo-root dir --gitops-repo-root dir --eks-repo-root dir --owner-id id --account-id id --region region [--output file]" >&2
   exit 2
 }
 while (($#)); do
@@ -26,7 +26,7 @@ while (($#)); do
     --sample-repo-root) sample_repo_root=${2:?missing sample repository root}; shift 2 ;;
     --gitops-repo-root) gitops_repo_root=${2:?missing GitOps repository root}; shift 2 ;;
     --eks-repo-root) eks_repo_root=${2:?missing EKS repository root}; shift 2 ;;
-    --course-id) course_id=${2:?missing course id}; shift 2 ;;
+    --owner-id) owner_id=${2:?missing owner id}; shift 2 ;;
     --account-id) account_id=${2:?missing account id}; shift 2 ;;
     --region) region=${2:?missing region}; shift 2 ;;
     --output) output=${2:?missing output}; shift 2 ;;
@@ -36,7 +36,7 @@ done
 
 [[ -n "$fixture" || -n "$manifest" ]] || usage
 if [[ -n "$fixture" ]]; then
-  jq -e 'type == "object" and .schemaVersion == "course.incident-index/v1" and .evidenceGrade == "STATIC" and ((keys | sort) == ["evidenceGrade","incidents","schemaVersion"])' "$fixture" >/dev/null || {
+  jq -e 'type == "object" and .schemaVersion == "playbuilder.incident-index/v1" and .evidenceGrade == "STATIC" and ((keys | sort) == ["evidenceGrade","incidents","schemaVersion"])' "$fixture" >/dev/null || {
     echo "FAIL: static incident index fixture has an invalid structure" >&2; exit 1;
   }
   case "$(basename "$fixture")" in
@@ -51,9 +51,9 @@ fi
 [[ -d "$evidence_root" ]] || { echo "FAIL: evidence root does not exist" >&2; exit 1; }
 [[ -f "$manifest" ]] || { echo "FAIL: incident lifecycle manifest not found" >&2; exit 1; }
 [[ -d "$sample_repo_root" && -d "$gitops_repo_root" && -d "$eks_repo_root" ]] || { echo "FAIL: all three reviewed repository roots are required" >&2; exit 1; }
-[[ -n "$course_id" && -n "$account_id" && -n "$region" ]] || usage
+[[ -n "$owner_id" && -n "$account_id" && -n "$region" ]] || usage
 
-python3 - "$repository_root" "$catalog_root" "$manifest" "$evidence_root" "$sample_repo_root" "$gitops_repo_root" "$eks_repo_root" "$course_id" "$account_id" "$region" "$output" <<'PY'
+python3 - "$repository_root" "$catalog_root" "$manifest" "$evidence_root" "$sample_repo_root" "$gitops_repo_root" "$eks_repo_root" "$owner_id" "$account_id" "$region" "$output" <<'PY'
 import hashlib, json, os, re, subprocess, sys, tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -65,7 +65,7 @@ evidence_root = Path(sys.argv[4])
 sample_repo_root = Path(sys.argv[5])
 gitops_repo_root = Path(sys.argv[6])
 eks_repo_root = Path(sys.argv[7])
-course_id, account_id, region = sys.argv[8:11]
+owner_id, account_id, region = sys.argv[8:11]
 output = Path(sys.argv[11])
 
 def fail(message):
@@ -75,8 +75,8 @@ def fail(message):
 def nonblank(value):
     return isinstance(value, str) and any(not (character.isspace() or character == "\ufeff") for character in value)
 
-if not nonblank(course_id):
-    fail("course ID must be nonblank")
+if not nonblank(owner_id):
+    fail("owner ID must be nonblank")
 if not re.fullmatch(r"[0-9]{12}", account_id):
     fail("account ID must contain exactly 12 digits")
 if region not in {"ap-northeast-2", "us-east-1"}:
@@ -130,7 +130,7 @@ def safe_path(root, candidate, label):
     return actual
 
 reviewed_roots = {
-    "cicd-course-sample-app": sample_repo_root.resolve(),
+    "mini-commerce": sample_repo_root.resolve(),
     "argocd-gitops": gitops_repo_root.resolve(),
     "EKS-infra": eks_repo_root.resolve(),
 }
@@ -224,13 +224,13 @@ def artifact_record(record):
         fail(f"{incident_id} has an unknown lifecycle phase")
     path = safe_path(evidence_root, record.get("path", ""), "incident artifact")
     envelope = load_yaml(path)
-    required = {"schemaVersion","evidenceGrade","incidentId","scenario","phase","courseId","accountId","region","environment","producer","subject","sources","outcome","observedAt"}
-    if set(envelope) != required or envelope.get("schemaVersion") != "course.incident-artifact/v1" or envelope.get("evidenceGrade") != "INCIDENT_EVIDENCE":
+    required = {"schemaVersion","evidenceGrade","incidentId","scenario","phase","ownerId","accountId","region","environment","producer","subject","sources","outcome","observedAt"}
+    if set(envelope) != required or envelope.get("schemaVersion") != "playbuilder.incident-artifact/v1" or envelope.get("evidenceGrade") != "INCIDENT_EVIDENCE":
         fail(f"{path.name} is not an exact INCIDENT_EVIDENCE incident artifact envelope")
     if (envelope["incidentId"], envelope["scenario"], envelope["phase"]) != (incident_id, scenario, phase):
         fail(f"{path.name} identity does not match its manifest record")
-    if envelope["courseId"] != course_id or envelope["accountId"] != account_id or envelope["region"] != region:
-        fail(f"{path.name} course/account/Region mismatch")
+    if envelope["ownerId"] != owner_id or envelope["accountId"] != account_id or envelope["region"] != region:
+        fail(f"{path.name} owner/account/Region mismatch")
     producer = envelope.get("producer")
     if not isinstance(producer, dict) or set(producer) != {"repository","revision"}:
         fail(f"{path.name} producer identity is not exact")
@@ -273,7 +273,7 @@ def artifact_record(record):
 def validate_db04(selected):
     """Validate the three independent recovery identities for INC-DB-04."""
     identity_keys = {"repository","sourceSha","imageRepository","indexDigest"}
-    canonical_repository = "play-builder/cicd-course-sample-app"
+    canonical_repository = "play-builder/mini-commerce"
     sha_pattern = r"[0-9a-f]{40}"
     digest_pattern = r"sha256:[0-9a-f]{64}"
     ecr_pattern = re.compile(r"(?P<account>[0-9]{12})\.dkr\.ecr\.(?P<region>ap-northeast-2|us-east-1)\.amazonaws\.com/(?P<name>[a-z0-9]+(?:[._/-][a-z0-9]+)*)")
@@ -311,7 +311,7 @@ def validate_db04(selected):
             fail(f"releaseLineage.{name}.indexDigest is invalid")
 
     recoveries = {}
-    expected_root = {"schemaVersion","evidenceGrade","incidentId","scenario","courseId","accountId","region","executionId","stable","faulty","recovered","workflow","gitopsRevision","rolloutRevision","observedAt"}
+    expected_root = {"schemaVersion","evidenceGrade","incidentId","scenario","ownerId","accountId","region","executionId","stable","faulty","recovered","workflow","gitopsRevision","rolloutRevision","observedAt"}
     for scenario in ("git-revert", "break-glass-undo-plus-git", "hotfix-fix-forward"):
         item = selected.get(("INC-DB-04", scenario, "recover"))
         if item is None or len(item[4]) != 1:
@@ -319,9 +319,9 @@ def validate_db04(selected):
         source_reference = item[4][0]
         source_path = safe_path(reviewed_roots[source_reference["repository"]], source_reference["path"], "INC-DB-04 recovery source")
         recovery = load_yaml(source_path)
-        if set(recovery) != expected_root or recovery.get("schemaVersion") != "course.db04-recovery/v1" or recovery.get("evidenceGrade") != "INCIDENT_EVIDENCE":
+        if set(recovery) != expected_root or recovery.get("schemaVersion") != "playbuilder.db04-recovery/v1" or recovery.get("evidenceGrade") != "INCIDENT_EVIDENCE":
             fail(f"INC-DB-04/{scenario} recovery source has an invalid exact schema")
-        if (recovery.get("incidentId"), recovery.get("scenario"), recovery.get("courseId"), recovery.get("accountId"), recovery.get("region")) != ("INC-DB-04", scenario, course_id, account_id, region):
+        if (recovery.get("incidentId"), recovery.get("scenario"), recovery.get("ownerId"), recovery.get("accountId"), recovery.get("region")) != ("INC-DB-04", scenario, owner_id, account_id, region):
             fail(f"INC-DB-04/{scenario} recovery identity mismatch")
         for key in ("stable", "faulty"):
             release_identity(recovery.get(key), f"INC-DB-04/{scenario} {key}")
@@ -451,7 +451,7 @@ if all(i["status"] == "COMPLETE" for i in core_should):
 if all(i["status"] == "COMPLETE" for i in incidents):
     completion = "ALL_INCIDENTS_COMPLETE"
 generated_at = generated_at_time.isoformat().replace("+00:00","Z")
-result = {"schemaVersion":"course.incident-index/v1","evidenceGrade":"INCIDENT_EVIDENCE","curriculumVersion":"v3.4","courseId":course_id,"accountId":account_id,"region":region,"startedAt":started_at,"generatedAt":generated_at,"completionLevel":completion,"incidents":incidents}
+result = {"schemaVersion":"playbuilder.incident-index/v1","evidenceGrade":"INCIDENT_EVIDENCE","curriculumVersion":"v3.4","ownerId":owner_id,"accountId":account_id,"region":region,"startedAt":started_at,"generatedAt":generated_at,"completionLevel":completion,"incidents":incidents}
 target = Path(output)
 target.parent.mkdir(parents=True, exist_ok=True)
 fd, tmp = tempfile.mkstemp(prefix=".incident-index.", dir=target.parent)

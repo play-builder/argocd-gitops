@@ -7,7 +7,7 @@ output="$repository_root/evidence/prod/baseline.json"
 fixture=''
 runtime_override=false
 now_override=''
-adapter_dir=${COURSE_CHECK_BIN_DIR:-}
+adapter_dir=${PLATFORM_CHECK_BIN_DIR:-}
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 usage() { echo "Usage: $0 [--fixture path] [--output path --now RFC3339]" >&2; exit 2; }
@@ -40,7 +40,7 @@ validate_record() {
       (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $value) catch false);
     def nonblank: type == "string" and test("[^[:space:]\uFEFF]");
     (keys | sort) == ["clusterArn","evidenceGrade","gitopsRevision","image","observedAt","region","rollout","schemaVersion"] and
-    .schemaVersion == "course.prod-baseline/v1" and .evidenceGrade == $grade and
+    .schemaVersion == "playbuilder.prod-baseline/v1" and .evidenceGrade == $grade and
     (.image | (keys | sort) == ["indexDigest","repository"]) and
     (.image.repository | type == "string") and
     (.image.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
@@ -53,7 +53,7 @@ validate_record() {
       ($region | IN("ap-northeast-2","us-east-1")) and
       (.observedAt | canonical_utc_seconds) and ($observedLimit | canonical_utc_seconds) and
       (.observedAt | fromdateiso8601) <= ($observedLimit | fromdateiso8601))
-  ' "$file" >/dev/null || fail 'Prod baseline does not satisfy course.prod-baseline/v1'
+  ' "$file" >/dev/null || fail 'Prod baseline does not satisfy playbuilder.prod-baseline/v1'
 
   local cluster_account cluster_region image_repository
   cluster_account=$(jq -r '.clusterArn | split(":")[4]' "$file")
@@ -202,7 +202,7 @@ jq -n --arg repository "$image_repository" --arg digest "$image_digest" \
   --arg region "$AWS_REGION" --arg grade "$evidence_grade" --arg observed "$clock_now" \
   --argjson rolloutRevision "$rollout_revision" '
   {
-    schemaVersion:"course.prod-baseline/v1", evidenceGrade:$grade,
+    schemaVersion:"playbuilder.prod-baseline/v1", evidenceGrade:$grade,
     image:{repository:$repository,indexDigest:$digest}, gitopsRevision:$revision,
     rollout:{stableHash:$stable,revision:$rolloutRevision,trafficWeight:100},
     clusterArn:$arn, region:$region, observedAt:$observed

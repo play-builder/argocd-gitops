@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "course.platform-release-adoption/v1",
+  "schemaVersion": "playbuilder.platform-release-adoption/v1",
   "evidenceGrade": "STATIC",
   "environment": "dev",
   "region": "ap-northeast-2",
-  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/course-dev",
+  "clusterArn": "arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev",
   "handoffSha256": "sha256:a8f8689b0e03b30c3a5cd6ca3d9ec9c19fba21eda86dd0461339ec846f42eeae",
   "release": {
     "before": {

@@ -8,6 +8,6 @@ stop: {action: stop-writers}
 evidence: {baseline: [ok], inject: [ok], detect: [ok], mitigate: [ok], recover: [ok], reconcile: [ok], prevent: [ok], cleanup: [ok]}
 preventionTest: tests/render-contract.sh --case matrix
 cleanup:
-  labels: {course.playbuilder.io/incident: INC-CLN-03}
+  labels: {playbuilder.io/incident: INC-CLN-03}
   action: delete-provider-secret
   externalSecretLifecycle: {targetSecretOwnerReferenceGC: true, providerSecretRetained: false, providerSecretDeletion: true}

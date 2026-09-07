@@ -31,7 +31,7 @@ elif [[ "$tool" == kubectl ]]; then
 else
 case "$tool:$*" in
   'argocd:app get mini-commerce-prod -o json') source="$FAKE_RUNTIME_DIR/application.json" ;;
-  'aws:eks describe-cluster --name course-prod --region ap-northeast-2 --output json') source="$FAKE_RUNTIME_DIR/cluster.json" ;;
+  'aws:eks describe-cluster --name mini-commerce-prod --region ap-northeast-2 --output json') source="$FAKE_RUNTIME_DIR/cluster.json" ;;
   *)
     echo "FAIL: unexpected fake CLI invocation: $tool $*" >&2
     exit 64

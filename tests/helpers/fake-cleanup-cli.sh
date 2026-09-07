@@ -26,8 +26,8 @@ fi
 
 if [[ "$tool" == aws ]]; then
   case "$*" in
-    'eks describe-cluster --name course-dev --region ap-northeast-2 --output json') emit "$FAKE_CLEANUP_DIR/dev-cluster.json" ;;
-    'eks describe-cluster --name course-prod --region ap-northeast-2 --output json') emit "$FAKE_CLEANUP_DIR/prod-cluster.json" ;;
+    'eks describe-cluster --name mini-commerce-dev --region ap-northeast-2 --output json') emit "$FAKE_CLEANUP_DIR/dev-cluster.json" ;;
+    'eks describe-cluster --name mini-commerce-prod --region ap-northeast-2 --output json') emit "$FAKE_CLEANUP_DIR/prod-cluster.json" ;;
     secretsmanager\ describe-secret\ --secret-id\ *' --region ap-northeast-2 --output json') emit "$FAKE_CLEANUP_DIR/provider-secret.json" ;;
     *) echo "FAIL: unexpected fake aws invocation: $*" >&2; exit 64 ;;
   esac
