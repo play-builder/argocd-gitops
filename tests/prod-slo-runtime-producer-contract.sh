@@ -186,7 +186,7 @@ for label in ambiguous-analysis failed-sibling wrong-owner wrong-owner-name wron
       jq '.cluster.arn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/mini-commerce-prod"' "$runtime/cluster.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/cluster.json"
       jq '.clusterArn="arn:aws:eks:ap-northeast-2:123456789012:cluster/forged:cluster/mini-commerce-prod"' "$runtime/baseline.json" >"$runtime/mutated" && mv "$runtime/mutated" "$runtime/baseline.json"
       ;;
-    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce"' "$runtime/promotion.yaml" ;;
+    promotion-ecr-double-slash) yq -i '.image.repository="123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/mini-commerce//app"' "$runtime/promotion.yaml" ;;
     promotion-ecr-name-too-short) set_release_repository "$runtime" '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/a' ;;
     promotion-attestation-alpha) yq -i '.attestation.githubId="alpha" | .attestation.githubUrl="https://github.com/OWNER/mini-commerce/attestations/alpha"' "$runtime/promotion.yaml" ;;
     promotion-owner-whitespace) yq -i '.workflow.runUrl="https://github.com/OWNER /mini-commerce/actions/runs/1001" | .attestation.githubUrl="https://github.com/OWNER /mini-commerce/attestations/1001"' "$runtime/promotion.yaml" ;;

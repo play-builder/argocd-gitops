@@ -3,7 +3,6 @@ set -Eeuo pipefail
 test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository_root=$(cd -- "$test_root/.." && pwd)
 fixture_root="$test_root/fixtures/cleanup"
-incident_fixture_root="$test_root/fixtures/incidents"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 validate_fixture() {
@@ -12,7 +11,7 @@ validate_fixture() {
     .cleanup.externalSecretLifecycle.targetSecretOwnerReferenceGC == true and
     .cleanup.externalSecretLifecycle.providerSecretRetained == true and
     ((.cleanup.externalSecretLifecycle.providerSecretDeletion // false) == false)
-  ' >/dev/null || fail "incident cleanup permits provider Secret deletion"
+  ' >/dev/null || fail "cleanup permits provider Secret deletion"
 }
 
 case_all() {
@@ -21,10 +20,10 @@ case_all() {
   tmp_root=$(mktemp -d)
   trap 'rm -rf -- "$tmp_root"' RETURN
   set +e
-  invalid_output=$(bash "$repository_root/tests/incident-contract.sh" --fixture "$incident_fixture_root/invalid-provider-delete.yaml" 2>&1)
+  invalid_output=$(bash "$repository_root/tests/cleanup-contract.sh" --fixture "$fixture_root/provider-secret-deletion.yaml" 2>&1)
   invalid_status=$?
   set -e
-  [[ $invalid_status -ne 0 ]] && grep -Fq "incomplete incident lifecycle" <<<"$invalid_output" || fail "invalid provider deletion fixture was not rejected"
+  [[ $invalid_status -ne 0 ]] && grep -Fq "cleanup permits provider Secret deletion" <<<"$invalid_output" || fail "invalid provider deletion fixture was not rejected"
   local cleanup_fixture cleanup_output cleanup_status
   for cleanup_fixture in \
     "$fixture_root/removal-unclassified-retained.json" \

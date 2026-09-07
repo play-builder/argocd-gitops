@@ -4,7 +4,6 @@ Dir.chdir(File.expand_path('..',__dir__))
 lock=YAML.load_file('versions.lock.yaml')
 raise 'Argo version drift' unless lock.dig('delivery','argoCdController')=='3.5.2' && lock.dig('delivery','argoRolloutsController')=='1.9.1'
 raise 'numeric identity drift' unless lock.dig('delivery','runtime','repositoryId')==1352247019
-require_relative 'application-secrets-contract'
 if ENV['EKS_REPO_ROOT']
  eks=File.realpath(ENV['EKS_REPO_ROOT'])
  producer=YAML.load_file(File.join(eks,'versions.lock.yaml'))

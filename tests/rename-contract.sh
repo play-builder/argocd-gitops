@@ -48,7 +48,7 @@ done < <(yq -r '.entries[] | [.path, .literal, (.count | tostring)] | @tsv' "$al
 # Every real occurrence is counted above; no path is excluded from this scan.
 actual_total=$(rg -o -i 'sample[-_]app' \
   "$repository_root/charts" "$repository_root/argocd" "$repository_root/envs" "$repository_root/scripts" "$repository_root/tests" \
-  -g '!scripts/mod.md' | wc -l | tr -d ' ')
+  | wc -l | tr -d ' ')
 [[ "$actual_total" == "$expected_total" ]] || fail "legacy runtime literals escaped the exact migration allowlist (expected $expected_total, got $actual_total)"
 
 echo "PASS: runtime rename contract is exact and cutover-safe"

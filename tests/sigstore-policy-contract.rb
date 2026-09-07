@@ -2,6 +2,37 @@ require 'yaml'
 require 'open3'
 require 'json'
 def check(x,m);abort("FAIL: #{m}") unless x;end
+Dir.chdir(File.expand_path('..', __dir__))
+workflow = 'play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main'
+issuer = 'https://token.actions.githubusercontent.com'
+predicates = ['https://slsa.dev/provenance/v1', 'https://spdx.dev/Document/v2.3']
+contract = YAML.load_file('contracts/platform-requirements.yaml').fetch('applicationAttestation')
+check(contract['repositoryId'] == 1352247019 && contract['issuer'] == issuer, 'immutable application identity mismatch')
+check(contract['predicates'].sort == predicates && contract['preCutoverWorkflows'] == [workflow], 'application attestation policy mismatch')
+check(contract['trustedEcrOutput'] == 'mini_commerce_ecr_repository_url' && contract['postCutoverWorkflow'] == workflow && contract['cutoverEvidenceSchema'] == 'playbuilder.rename-cutover/v1', 'typed ECR/cutover contract mismatch')
+trusted = YAML.load_file('tests/fixtures/source-integrity/platform-handoff.yaml').fetch('outputs').fetch(contract['trustedEcrOutput'])
+cutover = YAML.load_file('tests/fixtures/source-integrity/cutover-evidence.yaml')
+check(cutover['schemaVersion'] == contract['cutoverEvidenceSchema'] && cutover['evidenceGrade'] == 'CLOUD_RUNTIME' && cutover['repositoryId'] == 1352247019 && cutover['sourceSha'].match?(/\A[0-9a-f]{40}\z/), 'invalid cutover fixture')
+# Local fixture evaluation of the consumer contract; cryptographic verification
+# remains owned by admission and the application supply-chain verifier.
+accepts = lambda do |evidence, post = false|
+ evidence['issuer'] == issuer && evidence['repositoryId'] == 1352247019 &&
+ evidence['workflow'] == workflow && evidence['imageRepository'] == trusted &&
+ evidence.fetch('indexDigest', '').match?(/\Asha256:[0-9a-f]{64}\z/) &&
+ evidence.fetch('sourceSha', '').match?(/\A[0-9a-f]{40}\z/) &&
+ evidence.fetch('predicates', []).sort == predicates &&
+ (!post || evidence['sourceSha'] == cutover['sourceSha'])
+end
+fixture = lambda { |name| JSON.parse(File.read("tests/fixtures/source-integrity/#{name}.json")) }
+check(accepts.call(fixture.call('pre-cutover-valid')), 'pre-cutover fixture rejected')
+check(accepts.call(fixture.call('post-cutover-valid'), true), 'post-cutover fixture rejected')
+check(!accepts.call(fixture.call('pre-cutover-valid'), true), 'post-cutover accepted a different revision')
+%w[public-image wrong-issuer wrong-workflow wrong-repository-id wrong-source-sha wrong-digest missing-spdx].each do |name|
+ check(!accepts.call(fixture.call(name)), "consumer accepted #{name}")
+end
+application = JSON.parse(File.read('tests/fixtures/application-evidence/pre-cutover-valid.json'))
+check(application['issuer'] == issuer && application['repositoryId'] == 1352247019 && application['workflow'] == workflow && application['indexDigest'].match?(/\Asha256:[0-9a-f]{64}\z/) && application['sourceSha'].match?(/\A[0-9a-f]{40}\z/) && application['predicates'].sort == predicates, 'application fixture rejected')
+check(JSON.parse(File.read('tests/fixtures/application-evidence/wrong-repository-id.json'))['repositoryId'] != contract['repositoryId'], 'wrong repository fixture is valid')
 %w[dev prod].each do |env|
  docs=YAML.load_stream(Open3.capture2('kubectl','kustomize',"argocd/bootstrap/#{env}")[0])
  p=docs.find{|d|d['kind']=='AppProject' && d['metadata']['name']=="platform-#{env}"}
@@ -19,8 +50,7 @@ def check(x,m);abort("FAIL: #{m}") unless x;end
   check(d['spec']['authorities'].map{|a|a['name']}.sort==['github','public-good'],'public GitHub attestations need public-good trust authority')
   check(d['spec']['images']==[{'glob'=>'REPLACE_FROM_EKS_MINI_COMMERCE_ECR@sha256:*'}],'trusted digest scope missing')
   d['spec']['authorities'].each do |auth|
-  check(auth['signatureFormat']=='bundle' && auth.dig('keyless','identities').length==2,'bundle cutover identity pair missing')
-  check(auth['keyless']['identities'].all?{|i|i['issuer']=='https://token.actions.githubusercontent.com' && i['subject'].start_with?('https://github.com/play-builder/')},'wrong issuer/workflow')
+  check(auth['signatureFormat']=='bundle' && auth.dig('keyless','identities')==[{'issuer'=>issuer, 'subject'=>"https://github.com/#{workflow}"}],'exact trusted workflow identity missing')
   check(auth['attestations']==d['spec']['authorities'][0]['attestations'],'public authority must enforce the same predicate')
   end
  end

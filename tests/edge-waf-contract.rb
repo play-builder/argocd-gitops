@@ -1,3 +1,4 @@
+abort 'FAIL: release mesh input validator missing' unless File.file?('scripts/validate-mesh-inputs.rb')
 require 'yaml'
 require 'json'
 require 'open3'
