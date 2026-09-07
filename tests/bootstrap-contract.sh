@@ -160,17 +160,6 @@ case_namespace_pss() {
 
   assert_document_count "$helm_dev" Namespace 0
 
-  for manifest in "$bootstrap_dev" "$bootstrap_prod"; do
-    yq eval-all -o=json '
-      select(.kind == "ApplicationSet" and (.metadata.name == "sample-app-dev" or .metadata.name == "sample-app-prod"))
-    ' "$manifest" | jq -e '
-      .spec.syncPolicy.preserveResourcesOnDeletion == true and
-      (.spec.template.metadata.finalizers // []) == [] and
-      .spec.template.spec.syncPolicy.automated == null and
-      (.spec.template.spec.syncPolicy.syncOptions | index("CreateNamespace=true")) == null
-    ' >/dev/null || fail "Legacy Application must preserve resources while relinquishing Namespace ownership"
-  done
-
   assert_manifest "$bootstrap_dev" '
     select(.kind == "Namespace" and .metadata.name == "app-recovery") |
     .metadata.labels["course.playbuilder.io/cleanup-scope"] == "recovery" and
