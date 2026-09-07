@@ -23,7 +23,7 @@ invalid_arns=(
   'arn:aws-cn:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev'
   'arn:aws:eks:ap-northeast-2:123456789012:cluster/'
   'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev/extra'
-  'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev'
+  'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini commerce-dev'
   'arn:aws:eks:ap-northeast-2:123456789012:cluster/playbuilder.dev'
   'arn:aws:eks:ap-northeast-2:123456789012:cluster/-mini-commerce-dev'
   'arn:aws:eks:ap-northeast-2:123456789012:cluster/mini-commerce-dev '

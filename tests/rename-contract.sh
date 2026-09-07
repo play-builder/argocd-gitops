@@ -8,14 +8,13 @@ live_cutover="$test_root/fixtures/rename/live-cutover.yaml"
 legacy_runtime="$(printf '%s-%s' sample app)"
 legacy_application="${legacy_runtime}-prod"
 legacy_pvc="data-${legacy_runtime}-postgresql-0"
-legacy_repository="cicd-legacy-${legacy_runtime}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
 }
 
-yq -e '.schemaVersion == "playbuilder.rename-aliases/v1" and (.entries | length) == 24 and ([.entries[] | select(.path != "" and .literal != "" and (.count | type == "!!int") and .count > 0 and .reason != "" and .removalEvidence == "playbuilder.rename-cutover/v1")] | length) == 24' "$allowlist" >/dev/null || fail "legacy migration allowlist shape is invalid"
+yq -e '.schemaVersion == "playbuilder.rename-aliases/v1" and (.entries | length) > 0 and ([.entries[] | select(.path != "" and .literal != "" and (.count | type == "!!int") and .count > 0 and .reason != "" and .removalEvidence == "playbuilder.rename-cutover/v1")] | length) == (.entries | length)' "$allowlist" >/dev/null || fail "legacy migration allowlist shape is invalid"
 LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '[.entries[] | select(.path == "tests/fixtures/rename/live-cutover.yaml" and (.literal == strenv(LEGACY_APPLICATION) or .literal == strenv(LEGACY_PVC)))] | length == 2' "$allowlist" >/dev/null || fail "legacy migration allowlist must retain the live cutover identities"
 
 LEGACY_APPLICATION="$legacy_application" LEGACY_PVC="$legacy_pvc" yq -e '

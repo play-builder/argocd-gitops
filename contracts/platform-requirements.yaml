@@ -57,7 +57,6 @@ applicationAttestation:
     - https://spdx.dev/Document/v2.3
   preCutoverWorkflows:
     - play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main
-    - play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main
   postCutoverWorkflow: play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main
 argoConfigMap: argocd-cm
 argoHealthCustomizations:

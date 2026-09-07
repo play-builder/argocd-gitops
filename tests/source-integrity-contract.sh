@@ -19,7 +19,7 @@ validate() {
     (.indexDigest | test("^sha256:[0-9a-f]{64}$")) and
     (.sourceSha | test("^[0-9a-f]{40}$")) and
     ((.predicates | sort | join(",")) == "https://slsa.dev/provenance/v1,https://spdx.dev/Document/v2.3") and
-    (if env.MODE == "pre" then (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" or .workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main") else (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" and .sourceSha == env.CUTOVER_SOURCE_SHA) end)
+    (if env.MODE == "pre" then (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main") else (.workflow == "play-builder/mini-commerce/.github/workflows/ci.yml@refs/heads/main" and .sourceSha == env.CUTOVER_SOURCE_SHA) end)
   ' "$evidence" >/dev/null
 }
 
@@ -27,7 +27,7 @@ validate pre "$fixture_root/pre-cutover-valid.json" || fail "pre-cutover valid e
 yq -e '.schemaVersion == "playbuilder.rename-cutover/v1" and .evidenceGrade == "CLOUD_RUNTIME" and .repositoryId == 1352247019 and (.sourceSha | test("^[0-9a-f]{40}$"))' "$fixture_root/cutover-evidence.yaml" >/dev/null || fail "fresh cutover evidence fixture is invalid"
 cutover_source_sha=$(yq -r '.sourceSha' "$fixture_root/cutover-evidence.yaml")
 validate post "$fixture_root/post-cutover-valid.json" || fail "post-cutover evidence is not bound to fresh cutover evidence"
-if validate post "$fixture_root/pre-cutover-valid.json"; then fail "post-cutover accepts legacy workflow"; fi
+if validate post "$fixture_root/pre-cutover-valid.json"; then fail "post-cutover accepts evidence from before the cutover revision"; fi
 if validate pre "$fixture_root/public-image.json"; then fail "untrusted image repository is accepted"; fi
 for invalid_fixture in wrong-issuer wrong-workflow wrong-repository-id wrong-source-sha wrong-digest missing-spdx; do
   if validate pre "$fixture_root/$invalid_fixture.json"; then
