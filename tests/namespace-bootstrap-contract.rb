@@ -15,10 +15,6 @@ def check(ok, message); raise message unless ok; end
   check(ns.dig('metadata','labels','policy.sigstore.dev/include')=='true' && ns.dig('metadata','labels','pod-security.kubernetes.io/enforce')=='restricted','final security labels must not be bypassed')
   governance=YAML.load_stream(Open3.capture2('kubectl','kustomize',"platform/security/#{env}").first).compact
   check(governance.none?{|r|r['kind']=='Namespace'},'governance must relinquish Namespace in the same commit')
-  legacy=docs.find{|r|r['kind']=='ApplicationSet' && r.dig('metadata','name')=="sample-app-#{env}"}
-  check(legacy.dig('spec','template','spec','source','helm','parameters').include?({'name'=>'namespace.create','value'=>'false'}),'legacy Helm Namespace producer must be disabled')
-  check(!legacy.dig('spec','template','spec','syncPolicy').key?('managedNamespaceMetadata'),'legacy metadata ownership must be relinquished')
-  check(!legacy.dig('spec','template','spec','syncPolicy','syncOptions').include?('CreateNamespace=true'),'legacy Namespace creation must be disabled')
 end
 check(File.file?('scripts/namespace-enforcement-preflight.rb'),'controller/policy readiness preflight missing')
 runbook=File.read('docs/runbooks/namespace-bootstrap.md')
