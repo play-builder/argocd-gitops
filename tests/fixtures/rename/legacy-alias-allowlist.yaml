@@ -85,35 +85,10 @@ entries:
     count: 5
     reason: current GitHub repository identity remains canonical before remote cutover
     removalEvidence: course.rename-cutover/v1
-  - path: "argocd/bootstrap/dev/legacy-sample\u002dapp.yaml"
-    literal: "sample\u002dapp"
-    count: 4
-    reason: immutable pre-cutover ApplicationSet retains legacy rendered ownership
-    removalEvidence: course.rename-cutover/v1
-  - path: "argocd/bootstrap/prod/legacy-sample\u002dapp.yaml"
-    literal: "sample\u002dapp"
-    count: 4
-    reason: immutable pre-cutover ApplicationSet retains legacy rendered ownership
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/bootstrap/dev/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: bootstrap retains legacy desired state alongside the renamed ApplicationSet
-    removalEvidence: course.rename-cutover/v1
-  - path: argocd/bootstrap/prod/kustomization.yaml
-    literal: "sample\u002dapp"
-    count: 1
-    reason: bootstrap retains legacy desired state alongside the renamed ApplicationSet
-    removalEvidence: course.rename-cutover/v1
   - path: tests/rename-cutover-contract.sh
     literal: "sample\u002dapp"
     count: 6
-    reason: executable pre-cutover ownership guard validates the immutable legacy source
-    removalEvidence: course.rename-cutover/v1
-  - path: tests/bootstrap-contract.sh
-    literal: "sample\u002dapp"
-    count: 2
-    reason: bootstrap contract verifies that the legacy Application preserves resources while relinquishing namespace
+    reason: executable post-cutover guard proves the legacy ApplicationSet and chart are no longer deployed
     removalEvidence: course.rename-cutover/v1
   - path: tests/source-integrity-contract.sh
     literal: "sample\u002dapp"
@@ -124,11 +99,6 @@ entries:
     literal: "cicd-course-sample\u002dapp"
     count: 1
     reason: pre-cutover trust fixture preserves the authorized legacy workflow identity
-    removalEvidence: course.rename-cutover/v1
-  - path: tests/namespace-bootstrap-contract.rb
-    literal: "sample\u002dapp"
-    count: 1
-    reason: legacy Namespace producer must be disabled before root adoption
     removalEvidence: course.rename-cutover/v1
   - path: tests/lib/resolve-sample-verifier.sh
     literal: "SAMPLE\u005fAPP"
