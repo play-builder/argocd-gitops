@@ -3,7 +3,6 @@ set -Eeuo pipefail
 
 test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository_root=$(cd -- "$test_root/.." && pwd)
-base_revision=2db9276ce171babd87047eb778a3a39cc0585619
 render_root=$(mktemp -d "${TMPDIR:-/tmp}/gitops-rename-cutover.XXXXXX")
 trap 'rm -rf -- "$render_root"' EXIT
 
@@ -64,31 +63,24 @@ write_shared_ownership_overlap() {
 }
 
 for environment in dev prod; do
-  legacy_render="$render_root/$environment-legacy.yaml"
   current_render="$render_root/$environment-current.yaml"
-  overlap="$render_root/$environment-overlap.tsv"
+  root_overlap="$render_root/$environment-root-overlap.tsv"
   negative_render="$render_root/$environment-negative.yaml"
   negative_overlap="$render_root/$environment-negative-overlap.tsv"
-  legacy_appset="$repository_root/argocd/bootstrap/$environment/legacy-sample-app.yaml"
   current_appset="$repository_root/argocd/bootstrap/$environment/mini-commerce.yaml"
-  legacy_revision=$(yq -r '.spec.template.spec.source.targetRevision' "$legacy_appset")
-  [[ "$legacy_revision" == "$base_revision" ]] || fail "legacy revision is not the immutable base"
-  legacy_root="$render_root/legacy-$environment"
-  mkdir -p "$legacy_root"
-  git archive "$legacy_revision" charts envs | tar -x -C "$legacy_root"
   namespace=$(yq -r '.spec.generators[0].list.elements[0].namespace' "$current_appset")
+  root_namespace="$repository_root/argocd/bootstrap/$environment/application-namespace.yaml"
 
-  render_application_source "$legacy_appset" "$legacy_root" "$legacy_render"
+  # The course deploys only mini-commerce: its render must not claim bootstrap-owned shared resources.
   render_application_source "$current_appset" "$repository_root" "$current_render"
-  write_shared_ownership_overlap "$legacy_render" "$current_render" "$overlap" "$namespace"
-  [[ ! -s "$overlap" ]] || {
-    cat "$overlap" >&2
-    fail "$environment legacy and current Applications render the same resource identity"
+  write_shared_ownership_overlap "$root_namespace" "$current_render" "$root_overlap" "$namespace"
+  [[ ! -s "$root_overlap" ]] || {
+    cat "$root_overlap" >&2
+    fail "$environment mini-commerce Application renders a resource identity owned by the bootstrap namespace"
   }
 
   render_application_source "$current_appset" "$repository_root" "$negative_render" \
     --values "$test_root/fixtures/rename/shared-ownership-overlap.yaml"
-  root_namespace="$repository_root/argocd/bootstrap/$environment/application-namespace.yaml"
   write_shared_ownership_overlap "$root_namespace" "$negative_render" "$negative_overlap" "$namespace"
   [[ "$(wc -l <"$negative_overlap" | tr -d ' ')" == "1" ]] || {
     cat "$negative_overlap" >&2
@@ -99,20 +91,13 @@ done
 for environment in dev prod; do
   legacy_manifest="$repository_root/argocd/bootstrap/$environment/legacy-sample-app.yaml"
   kustomization="$repository_root/argocd/bootstrap/$environment/kustomization.yaml"
-  git show "$base_revision:argocd/bootstrap/$environment/sample-app.yaml" >/dev/null || fail "$environment immutable base lacks legacy ApplicationSet"
-  [[ -f "$legacy_manifest" ]] || fail "$environment pre-cutover legacy ApplicationSet is absent"
-  grep -Fqx '  - legacy-sample-app.yaml' "$kustomization" || fail "$environment bootstrap does not retain legacy ownership"
-  BASE_REVISION="$base_revision" yq -e '
-    .kind == "ApplicationSet" and
-    .metadata.name == ("sample-app-" + .spec.generators[0].list.elements[0].environment) and
-    .metadata.annotations["argocd.argoproj.io/sync-options"] == "Prune=confirm" and
-    .spec.template.metadata.annotations["argocd.argoproj.io/sync-options"] == "Prune=confirm" and
-    .spec.syncPolicy.preserveResourcesOnDeletion == true and
-    (.spec.template.metadata | has("finalizers") | not) and
-    (.spec.template.spec.syncPolicy | has("automated") | not) and
-    .spec.template.spec.source.targetRevision == strenv(BASE_REVISION) and
-    .spec.template.spec.source.path == "charts/sample-app"
-  ' "$legacy_manifest" >/dev/null || fail "$environment legacy ApplicationSet is not immutable and prune-protected"
+  [[ ! -e "$legacy_manifest" ]] || fail "$environment bootstrap still carries the retired legacy sample-app ApplicationSet"
+  ! grep -Fq 'legacy-sample-app' "$kustomization" || fail "$environment bootstrap kustomization still references the legacy ApplicationSet"
+  # Inspect the rendered bootstrap, not the directory listing, so a re-added legacy ApplicationSet under any
+  # filename or subdirectory is caught.
+  legacy_chart_count=$(kubectl kustomize "$repository_root/argocd/bootstrap/$environment" | yq eval-all -N \
+    '[select(.kind == "ApplicationSet") | select(.spec.template.spec.source.path == "charts/sample-app" or (.metadata.name | test("^sample-app-")))] | length')
+  [[ "$legacy_chart_count" == "0" ]] || fail "$environment bootstrap still renders the legacy sample-app ApplicationSet"
 
   current_manifest="$repository_root/argocd/bootstrap/$environment/mini-commerce.yaml"
   ownership_values="envs/$environment/pre-cutover-ownership-values.yaml"
@@ -126,4 +111,4 @@ for environment in dev prod; do
   ' "$current_manifest" >/dev/null || fail "$environment current ApplicationSet does not reference legacy-owned shared resources"
 done
 
-echo "PASS: pre-cutover desired state has one owner for every shared resource"
+echo "PASS: post-cutover desired state deploys only mini-commerce with one owner for every shared resource"
