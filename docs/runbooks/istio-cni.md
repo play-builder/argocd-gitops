@@ -87,22 +87,10 @@ rollback은 승인된 호환 CNI version으로 복구하고 node coverage 및 �
 
 ## 검증과 한계
 
-핵심 요약: 실제 고정 Helm chart와 실제 Mini Commerce pod template를 두 revision injector에 입력하여 검증한다.
-Kubernetes API server의 PodSecurity admission을 실행한 결과는 아니므로 static 결과를 별도 표시한다.
+핵심 요약: `make validate`는 잠긴 chart와 CRD로 렌더링·스키마를 검사한다. 실제 CNI 설치와 신규 node 동작은 클러스터에서 확인한다.
 
 ```bash
-CHART_CACHE_DIR=/path/to/verified/charts ruby tests/istio-cni-contract.rb
-ruby tests/istio-cni-readiness-contract.rb
-ruby tests/istio-platform-contract.rb
+make validate test
 ```
 
-첫 검사는 Dev/Prod × 1.30.4/1.31.0 실제 kube-inject 결과의 host namespace/hostPath,
-runAsNonRoot, UID, seccomp, capability drop/add 및 privilege escalation을 검사한다.
-이어 CNI official chart identity/checksum, singleton, 프로젝트 허용 리소스, node pool/architecture 범위,
-sync 순서와 repair 모드를 확인한다.
-
-필요한 로컬 도구는 Helm, kubectl kustomize, lock에 맞는 istioctl, Ruby다.
-chart archive는 `versions.lock.yaml`에 등록된 공식 URL/해시로 미리 준비한다.
-`tests/platform-mirror-contract.rb`는 추가로 locked CUE를 사용하여
-CNI validation/proxy 및 gateway의 ECR image와 기존 Sigstore predicate 계약을 검사한다.
-실제 signature verification, admission, CNI 설치와 repair, mesh 트래픽/성능 및 upgrade는 미실행이다.
+운영에서는 위 readiness 명령과 `kubectl -n istio-system get daemonset,pods -o wide`로 node별 준비 상태를 확인한다. 정적 schema 통과는 packet path나 CNI 실행을 증명하지 않는다.

@@ -41,7 +41,8 @@ flowchart LR
 | `envs/{dev,prod}` | 이미지, 환경 설정, 승인된 migration·cleanup 단계 |
 | `platform/istio`, `platform/security` | mesh·ALB Gateway API·입장 정책·quota |
 | `scripts` | 설정 렌더링, 승격 검증, 증빙 수집·복구 안전장치 |
-| `tests`, `contracts` | 동작 회귀·schema·저장소 간 명시적 인터페이스 |
+| `tests` | activation과 이미지 승격 정책 두 가지 검사 |
+| `contracts` | 플랫폼 image mirror에 필요한 고정 인터페이스 |
 | `docs/runbooks` | sync, incident, 소유권 인계, 복구 절차 |
 | `versions.lock.yaml`, `.github` | 호환 버전·checksum, 독립 CI, 리뷰 소유권 |
 
@@ -58,27 +59,27 @@ ruby scripts/validate-activation.rb prod
 
 ## 로컬·CI 검증
 
-`versions.lock.yaml`의 도구를 설치한다: Helm 4.2.4, kubectl 1.36.0, yq 4.53.6, kubeconform 0.7.0, CUE 0.12.1, istioctl 1.31.0, promtool 3.14.0. Ruby, Node.js, Python 3, jq, Git, curl, ripgrep도 필요하다. `CHART_CACHE_DIR`의 archive는 사용 전에 lock의 checksum과 chart identity를 검사한다.
+핵심 요약: Helm/Kustomize 렌더링과 엄격한 CRD 스키마 검사, 두 가지 정책 회귀 검사로 구성한다.
+
+도구: Helm 4.2.4, kubectl 1.36.0, yq 4.53.6, kubeconform 0.7.0, Ruby, jq, Git, curl. `CHART_CACHE_DIR` archive는 lock의 checksum과 chart identity를 검증한다.
 
 ```bash
-bash tests/test-all.sh
+make validate test
+make package
 ```
 
-CI는 같은 suite에서 chart와 CRD schema, 실제 PromQL 평가, tenancy, admission, migration·snapshot·rollback·증빙 수집 실패 경로를 검증한다. AWS/Kubernetes 리소스를 변경하지 않는다. 앱 저장소를 제공하지 않은 기본 실행에서는 **앱의 rollback verifier 호출만 명시적으로 생략**하며 GitOps 자체 테스트는 모두 실행한다.
+`validate`는 chart lint와 실제 Helm/Kustomize 렌더링, kubeconform 검사를 수행한다. `test`는 미설정 입력·잘못된 경로 활성화와 Prod digest 우회를 거부하는지 확인한다. 클러스터에는 접속하지 않는다. `package`는 세 chart와 SHA-256 sidecar를 생성한다.
 
-호환성을 릴리스 단위로 확인할 때는 검토한 앱 checkout의 정확한 commit을 지정한다. `SAMPLE_APP_*`는 기존 자동화와 호환되는 인터페이스 이름이다.
+## 앱 변경이 배포되는 과정
 
-```bash
-CROSS_REPO_CONTRACT_MODE=exact-sha \
-SAMPLE_APP_REPO_ROOT=/absolute/path/to/clean/mini-commerce \
-SAMPLE_APP_EXPECTED_SHA=FULL_40_CHARACTER_APPLICATION_COMMIT_SHA \
-bash tests/test-all.sh
-```
+핵심 요약: Actions가 이미지를 만들고 GitOps를 갱신한다. Argo CD는 이 저장소의 변경을 감지한다.
 
-GitHub의 `validate` workflow 수동 실행에도 `application_sha` 입력을 제공했다. SHA를 비우면 저장소 단독 검사, 지정하면 그 commit을 checkout해 추가 검증한다. private 앱 저장소는 읽기 전용 `CROSS_REPO_READ_TOKEN`이 필요할 수 있다. 일반 PR/main CI가 다른 저장소의 최신 상태에 의존하지 않도록 유지한다.
+1. `mini-commerce` main CI가 테스트·이미지 빌드·ECR push·scan·attestation을 수행한다.
+2. GitHub App이 이 저장소의 `envs/dev/values.yaml`에 app/migration digest 변경 PR을 만든다. 검증을 통과한 PR을 자동 merge한다.
+3. Dev Argo CD가 main을 감지해 자동 sync한다. 운영자는 Deployment·요청·Istio·지표/로그/trace를 확인한다.
+4. Prod는 성공한 CI run/attempt를 선택해 승인 PR을 만든다. PR 검사는 **base main에 이미 있던 Dev digest**와 최종 Helm render를 비교한다.
+5. 승인·merge 후 운영자가 Argo CD를 수동 sync한다. Rollouts가 Istio 가중치와 AMP 분석으로 canary를 진행한다.
 
-```bash
-bash scripts/package-chart.sh /tmp/mini-commerce-package
-```
+Dev 건강 상태·SLO는 승인자가 확인한다. 별도 JSON 증빙 조립이나 증빙 게시 PR은 없다. CI 성공만으로 Dev 배포가 정상이라고 판단하지 않는다. 상세 명령은 [운영 절차](docs/operations.md)에 있다.
 
-세 chart package와 SHA-256 sidecar가 생성된다. `evidence/`의 실제 incident·cluster metadata와 로컬 package는 Git에서 제외하며, 승인된 보관 경로에 원본·checksum·companion을 함께 보존한다.
+[Argo CD 자동 동기화](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)는 Git의 desired state를 감지하므로 앱 CI에 Kubernetes 배포 자격 증명을 넣을 필요가 없다.

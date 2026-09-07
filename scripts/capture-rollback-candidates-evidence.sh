@@ -10,37 +10,17 @@ if [[ ${1:-} == cleanup ]]; then
   mode=cleanup
   shift
 fi
-fixture=
-publish_fixture=
-now_override=
-runtime_override=false
-adapter_dir=${PLATFORM_CHECK_BIN_DIR:-}
 configmap_name=mini-commerce-rollback-candidates
 namespace=app-prod
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-usage() {
-  echo "Usage: $0 [--fixture file | --publish-fixture file | --source file --output file --now UTC] | cleanup [--fixture file --now UTC]" >&2
-  exit 2
-}
+[[ $# -eq 0 && -z ${PLATFORM_CHECK_BIN_DIR:-} ]] || fail "Usage: $0 [cleanup]; test transports are not supported"
 require_regular_file() { [[ -f "$1" && ! -L "$1" ]] || fail "$2 must be a regular non-symlink file"; }
 physical_file() {
   local parent
   parent=$(cd -- "$(dirname -- "$1")" && pwd -P) || return 1
   echo "$parent/$(basename -- "$1")"
 }
-
-while (($#)); do
-  case "$1" in
-    --fixture) fixture=${2:?missing fixture}; shift 2 ;;
-    --publish-fixture) publish_fixture=${2:?missing publication fixture}; shift 2 ;;
-    --source) source_record=${2:?missing source}; runtime_override=true; shift 2 ;;
-    --output) output=${2:?missing output}; runtime_override=true; shift 2 ;;
-    --now) now_override=${2:?missing clock}; runtime_override=true; shift 2 ;;
-    *) usage ;;
-  esac
-done
-[[ -z "$fixture" || -z "$publish_fixture" ]] || usage
 
 source_json=
 source_digest=
@@ -67,19 +47,12 @@ validate_source() {
     ([ $eligible[] | select(.observed < $stable[0].observed) ] |
       sort_by(.revision) | reverse | .[0:$rollback.rollbackWindow.revisions] |
       map({hash,revision}) | sort_by(.revision)) as $expected |
-    ((keys | sort) == ["completedRollback","releaseLineage"] or
-     (keys | sort) == ["completedRollback","inProgressStableReapply","releaseLineage"]) and
+    (keys == ["completedRollback"]) and
     ($rollback | keys | sort) == ["candidates","replicaSetList","rollbackWindow","rolloutName","rolloutUid","stableHash","targetHash"] and
     ($rollback.rolloutName | nonblank) and ($rollback.rolloutUid | nonblank) and
     ($rollback.stableHash | nonblank) and ($rollback.targetHash | nonblank) and
     ($rollback.rollbackWindow | keys) == ["revisions"] and
     ($rollback.rollbackWindow.revisions | type == "number" and floor == . and . >= 1) and
-    ($root.releaseLineage | keys | sort) == ["v1Compatible","v201HotfixOrderTotal","v2FaultyOrderTotal","v2PrimeContractCompatible"] and
-    all($root.releaseLineage[];
-      (keys | sort) == ["indexDigest","sourceSha"] and
-      (.sourceSha | test("^[0-9a-f]{40}$")) and (.indexDigest | test("^sha256:[0-9a-f]{64}$"))) and
-    ([$root.releaseLineage[].sourceSha] | unique | length) == 4 and
-    ([$root.releaseLineage[].indexDigest] | unique | length) == 4 and
     ($rollback.replicaSetList | keys | sort) == ["apiVersion","items","kind"] and
     $rollback.replicaSetList.apiVersion == "apps/v1" and $rollback.replicaSetList.kind == "ReplicaSetList" and
     ($rollback.replicaSetList.items | type == "array" and length > 0) and
@@ -108,23 +81,13 @@ validate_source() {
       (.imageDigest | test("^sha256:[0-9a-f]{64}$")) and
       (.gitRevertSha | test("^[0-9a-f]{40}$")) and
       (.podTemplateHash | nonblank) and
-      (.rolloutRevision | type == "number" and floor == . and . >= 1) and
-      .imageDigest == $root.releaseLineage.v2PrimeContractCompatible.indexDigest and
-      .gitRevertSha == $root.releaseLineage.v2PrimeContractCompatible.sourceSha) and
+      (.rolloutRevision | type == "number" and floor == . and . >= 1)) and
     ([ $rollback.candidates[].podTemplateHash ] | unique | length) == ($rollback.candidates | length) and
     ([ $rollback.candidates[].rolloutRevision ] | unique | length) == ($rollback.candidates | length) and
     any($rollback.candidates[]; .podTemplateHash == $rollback.targetHash) and
     ($stable | length) == 1 and
     ([ $eligible[] | select(.hash == $rollback.targetHash) ] | length) == 1 and
-    ([ $rollback.candidates[] | {hash:.podTemplateHash,revision:.rolloutRevision} ] | sort_by(.revision)) == $expected and
-    ($root | if has("inProgressStableReapply") then
-      (.inProgressStableReapply | keys | sort) == ["action","candidateDigest","requiresDesiredStateReconcile","stableDigest"] and
-      .inProgressStableReapply.action == "git-reapply-stable-digest" and
-      .inProgressStableReapply.requiresDesiredStateReconcile == true and
-      (.inProgressStableReapply.stableDigest | test("^sha256:[0-9a-f]{64}$")) and
-      (.inProgressStableReapply.candidateDigest | test("^sha256:[0-9a-f]{64}$")) and
-      .inProgressStableReapply.stableDigest != .inProgressStableReapply.candidateDigest
-    else true end)
+    ([ $rollback.candidates[] | {hash:.podTemplateHash,revision:.rolloutRevision} ] | sort_by(.revision)) == $expected
   ' <<<"$source_json" >/dev/null || fail 'rollback compatibility source is not canonical or exhaustive'
   source_digest="sha256:$digest_before"
 }
@@ -354,75 +317,23 @@ validate_source "$source_record"
 if [[ "$mode" == cleanup ]]; then
   cleanup_evidence=$output
   cleanup_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  if [[ -n "$adapter_dir" ]]; then
-    [[ -n "$fixture" && -z "$publish_fixture" && -n "$now_override" ]] ||
-      fail 'static cleanup simulation requires a CLOUD_RUNTIME fixture and explicit clock'
-    [[ "$source_record" == "$repository_root/envs/prod/rollback-compatibility.yaml" &&
-       "$output" == "$repository_root/evidence/prod/rollback-candidates.json" ]] ||
-      fail 'cleanup simulation does not accept source or output overrides'
-    PATH="$adapter_dir:$PATH"
-    cleanup_evidence=$fixture
-    cleanup_now=$now_override
-  else
-    [[ -z "$fixture" && -z "$publish_fixture" && "$runtime_override" == false ]] ||
-      fail 'runtime cleanup uses only canonical evidence and the current clock'
-    require_regular_file "$cleanup_evidence" 'canonical rollback candidate evidence'
-    [[ "$(physical_file "$cleanup_evidence")" == "$repository_root/evidence/prod/rollback-candidates.json" ]] ||
-      fail 'runtime cleanup evidence escaped its canonical path'
-  fi
+  require_regular_file "$cleanup_evidence" 'canonical rollback candidate evidence'
+  [[ "$(physical_file "$cleanup_evidence")" == "$repository_root/evidence/prod/rollback-candidates.json" ]] ||
+    fail 'runtime cleanup evidence escaped its canonical path'
   [[ ${AWS_REGION:-} == ap-northeast-2 || ${AWS_REGION:-} == us-east-1 ]] ||
     fail 'AWS_REGION must be ap-northeast-2 or us-east-1 for rollback ConfigMap cleanup'
   [[ ${EKS_CLUSTER_NAME:-} =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] ||
     fail 'EKS_CLUSTER_NAME is invalid for rollback ConfigMap cleanup'
   for command in argocd aws git kubectl; do command -v "$command" >/dev/null || fail "$command is required for rollback ConfigMap cleanup"; done
   cleanup_configmap "$cleanup_evidence" "$cleanup_now"
-  if [[ -n "$adapter_dir" ]]; then
-    echo '[STATIC] simulated UID-bound rollback ConfigMap cleanup; no live cluster was changed.'
-  else
-    echo "[CLOUD_RUNTIME] removed $namespace/$configmap_name after successful finalize migration"
-  fi
-  exit 0
-fi
-
-if [[ -n "$fixture" ]]; then
-  [[ -z "$adapter_dir" && "$runtime_override" == false ]] ||
-    fail 'fixture validation cannot be combined with adapters, clocks, or runtime overrides'
-  validate_record "$fixture" CLOUD_RUNTIME
-  echo '[STATIC] validated rollback candidate fixture; no runtime evidence or ConfigMap was written.'
-  exit 0
-fi
-
-if [[ -n "$publish_fixture" ]]; then
-  [[ -n "$adapter_dir" && "$runtime_override" == true && -n "$now_override" ]] ||
-    fail 'publication fixture simulation requires a fake adapter and explicit clock'
-  PATH="$adapter_dir:$PATH"
-  validate_record "$publish_fixture" CLOUD_RUNTIME "$now_override"
-  publish_configmap "$publish_fixture"
-  echo '[STATIC] simulated exact immutable ConfigMap publication; no live cluster was changed.'
+  echo "[CLOUD_RUNTIME] removed $namespace/$configmap_name after successful finalize migration"
   exit 0
 fi
 
 evidence_grade=CLOUD_RUNTIME
-if [[ -z "$adapter_dir" ]]; then
-  : "${PLATFORM_INCIDENT_EVIDENCE:?reviewed live incident binding is required}"
-  : "${PLATFORM_DR_METADATA:?live encrypted export/isolated restore metadata is required}"
-  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
-fi
 clock_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-if [[ -n "$adapter_dir" ]]; then
-  [[ "$runtime_override" == true && -n "$now_override" ]] ||
-    fail 'static runtime adapter requires explicit source, output, and clock'
-  [[ "$source_record" != "$repository_root/envs/prod/rollback-compatibility.yaml" &&
-     "$output" != "$repository_root/evidence/"* && "$output" != *'/tests/fixtures/'* ]] ||
-    fail 'static runtime adapter requires noncanonical source and output paths'
-  PATH="$adapter_dir:$PATH"
-  evidence_grade=STATIC
-  clock_now=$now_override
-else
-  [[ "$runtime_override" == false ]] || fail 'runtime producer source, output, and clock are fixed'
-  [[ "$(physical_file "$source_record")" == "$repository_root/envs/prod/rollback-compatibility.yaml" ]] ||
-    fail 'runtime rollback compatibility source escaped its canonical path'
-fi
+[[ "$(physical_file "$source_record")" == "$repository_root/envs/prod/rollback-compatibility.yaml" ]] ||
+  fail 'runtime rollback compatibility source escaped its canonical path'
 jq -en --arg now "$clock_now" '
   $now | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and
   (try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $now) catch false)
@@ -547,13 +458,7 @@ jq -n --arg grade "$evidence_grade" --arg region "$AWS_REGION" --arg arn "$clust
 ' >"$tmp" || fail 'unable to construct rollback candidate evidence'
 chmod 600 "$tmp"
 validate_record "$tmp" "$evidence_grade" "$clock_now"
-if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
-  ruby "$script_dir/verify-incident-binding.rb" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA" "$tmp"
-fi
-if [[ "$evidence_grade" == CLOUD_RUNTIME ]]; then
-  ruby "$script_dir/publish-incident-capture.rb" "$tmp" "$output" "$PLATFORM_INCIDENT_EVIDENCE" "$PLATFORM_DR_METADATA"
-  rm -f -- "$tmp"
-elif [[ -e "$output" ]]; then
+if [[ -e "$output" ]]; then
   require_regular_file "$output" 'existing rollback candidate evidence'
   cmp -s "$tmp" "$output" || fail 'existing rollback candidate evidence differs from the immutable capture'
   rm -f -- "$tmp"

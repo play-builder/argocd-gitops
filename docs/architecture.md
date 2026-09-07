@@ -18,8 +18,8 @@
 | 소유자 | 소유 리소스·코드 | 이 저장소의 소비 방식 |
 |---|---|---|
 | `EKS-infra` | VPC/EKS/IAM, Network ECR·OIDC, RDS, AMP/ADOT/X-Ray, Argo CD/Rollouts·LBC controller, Sigstore controller | 실제 outputs, controller/CRD, RBAC·IRSA handoff |
-| `mini-commerce` | Node.js API·health/metrics, SQL migration ledger, 이미지·SLSA/SPDX attestation | 동일한 ECR index digest와 DEV_READY |
-| `argocd-gitops` | 앱 desired state, Istio 버전별 설치·정책, AWS Gateway API 리소스, workload admission·quota, promotion/incident binding | Git PR → Argo CD render/reconcile |
+| `mini-commerce` | Node.js API·health/metrics, SQL migration ledger, 이미지·SLSA/SPDX attestation | 검증된 ECR index digest와 성공한 CI run |
+| `argocd-gitops` | 앱 desired state, Istio 버전별 설치·정책, AWS Gateway API 리소스, workload admission·quota, Dev/Prod 이미지 승격 정책 | Git PR → Argo CD render/reconcile |
 | 운영자 | 계정 접근, source signing keys, DNS·인증서, GitHub 규칙, 승인·runtime 증빙·복구 훈련 | 명시적인 입력과 runbook |
 
 각 클러스터의 Argo CD가 자신의 `https://kubernetes.default.svc`로 배포한다. 이 주소가 같다고 Dev·Prod 클러스터가 같은 것은 아니다. 클러스터 경계는 EKS ARN과 실제 Kubernetes API endpoint로 검증한다. 중앙 ECR repository URL은 별도로 승인된 Network 계정 output과 대조한다.
@@ -85,7 +85,7 @@ Dev snapshot 검사는 retained EBS snapshot을 별도 `app-recovery` PVC로 연
 
 ## 빌드에서 Prod 승격까지
 
-**핵심 요약:** 애플리케이션 CI가 이미지를 만들고, GitOps는 승인된 digest를 배포한다. Repo별 CI는 독립적이며 릴리스의 교차 호환성 검사는 정확한 앱 SHA를 명시할 때 추가된다.
+**핵심 요약:** 애플리케이션 CI가 이미지를 만들고, GitOps는 승인된 digest를 배포한다. 앱 CI는 image/source SHA를 검증하고 GitOps CI는 최종 렌더와 Dev/Prod image 일치를 확인한다.
 
 ```mermaid
 sequenceDiagram
@@ -99,19 +99,19 @@ sequenceDiagram
     CI->>G: Dev digest PR
     G->>D: merge 후 자동 sync
     O->>D: 실제 배포/이미지/telemetry 확인
-    O->>G: DEV_READY와 동일한 Prod digest PR
-    G->>G: 실제 valueFiles render · image/expiry binding
+    O->>G: 성공한 CI와 Dev digest의 Prod PR
+    G->>G: 실제 valueFiles render · base Dev image 일치
     O->>P: 승인한 Git SHA 수동 sync
     P->>P: 5% → analysis → 20% → 50% → human pause
     O->>P: runtime 결과 확인 후 promote 또는 abort
-    P->>P: 100% 수렴 · SLO/incident 증빙
+    P->>P: 100% 수렴 · 실제 지표 확인
 ```
 
 이 그림에서 봐야 할 핵심: Git merge와 Prod traffic promotion은 별개 승인이다. GitHub의 초록색 CI 표시는 Dev 실제 관측이나 Prod 복구 완료를 대신하지 않는다.
 
-`scripts/verify-prod-promotion-binding.sh`는 PR base와 현재 chart를 ApplicationSet의 실제 valueFiles 순서로 렌더링한다. 앱/migration 이미지 변경은 유효한 DEV_READY와 일치해야 하며, inline Helm parameters/valuesObject는 이 앱의 승인된 인터페이스가 아니므로 거부한다. 구성-only 변경, 동일 이미지의 migration 활성화, cleanup은 새 이미지 승격과 구분한다. [Argo CD Helm 우선순위](https://argo-cd.readthedocs.io/en/latest/user-guide/helm/) 때문에 기본 values 파일만 검사하는 것으로는 충분하지 않다.
+`scripts/verify-prod-promotion-binding.sh`는 PR base와 현재 chart를 ApplicationSet의 실제 valueFiles 순서로 렌더링한다. 앱/migration 이미지 변경은 PR base의 Dev digest와 일치해야 하며, inline Helm parameters/valuesObject는 이 앱의 승인된 인터페이스가 아니므로 거부한다. 구성-only 변경, 동일 이미지의 migration 활성화, cleanup은 새 이미지 승격과 구분한다. [Argo CD Helm 우선순위](https://argo-cd.readthedocs.io/en/latest/user-guide/helm/) 때문에 기본 values 파일만 검사하는 것으로는 충분하지 않다.
 
-Prod AnalysisTemplate은 canary hash로 제한한 request-rate, success-rate, p95 latency를 AMP에 질의한다. 측정 빈도·횟수·허용 실패 수는 values에 선언돼 있다. `capture-prod-slo-evidence.sh`는 terminal Rollout, 실제 ReplicaSet 소유권·이미지, 100/0 routing, AnalysisRun revision·latest-hash, 완료된 최근 측정값을 검증한다. Prometheus singleton vector를 기존 evidence v1 scalar string으로 정규화한다. [Argo Rollouts v1.9.1의 실제 직렬화 구현](https://github.com/argoproj/argo-rollouts/blob/v1.9.1/metricproviders/prometheus/prometheus.go)을 기준으로 처리한다.
+Prod AnalysisTemplate은 canary hash로 제한한 request-rate, success-rate, p95 latency를 AMP에 질의한다. 측정 주기와 허용 실패 수는 values에 선언돼 있다. 운영자는 실제 AnalysisRun과 지표를 확인한다. Dev 상태와 SLO 확인은 GitHub environment 승인 절차로 수행한다. 별도 증빙 JSON 조립은 배포 경로에 포함하지 않는다.
 
 ## 폴더와 코드 읽기 순서
 
@@ -125,8 +125,8 @@ Prod AnalysisTemplate은 canary hash로 제한한 request-rate, success-rate, p9
 | 4 | `argocd/bootstrap/prod/mini-commerce.yaml`, `project.yaml` | 실제 repo URL, valueFiles, sync/RBAC 경계 |
 | 5 | `scripts/verify-prod-promotion-binding.sh`, `render-prod-release.rb` | override를 포함한 release identity 검증 |
 | 6 | `migration-job.yaml`, `scripts/capture-rollback-candidates-evidence.sh` | DDL credential·rollback 후보 binding |
-| 7 | `scripts/capture-prod-slo-evidence.sh`, `scripts/lib/publish-incident-capture.rb` | 실제 provider 응답과 write-once incident/DR binding |
-| 8 | `tests/test-all.sh`, `.github/workflows/validate.yml` | 로컬·CI 동일 suite, exact-SHA opt-in |
+| 7 | `charts/mini-commerce/templates/analysistemplate.yaml` | AMP canary 지표·실패 판정 |
+| 8 | `Makefile`, `.github/workflows/validate.yml` | Helm/Kustomize/schema와 두 가지 정책 검사 |
 
 삭제한 항목은 사용되지 않는 이전 network-policy/recovery fixture 10개, 앱 chart에서 소비하지 않던 DB 서버·networkPolicy·manualPromotion 설정과 helper 3개, 별도 suite와 겹치던 CI의 textual rollback-window 검사를 포함한다. Namespace/PVC/snapshot 및 실제 소유권 인계 guard는 삭제하지 않았다. cleanup flag는 앱 소유 desired resources를 실제로 제거하도록 연결했고, retained Namespace와 별도 데이터 chart는 보존한다.
 
@@ -157,6 +157,5 @@ Prod AnalysisTemplate은 canary hash로 제한한 request-rate, success-rate, p9
 | activation 입력 검사 | placeholder, ECR identity, hostname·RDS egress 설정 | 인증서 소유·DNS·network route·AWS 권한 |
 | live 승인 gate | 별도 운영자가 기록한 배포·알림·복구 결과 | 실행하지 않은 환경이나 미래 변경 |
 
-최초 baseline collector는 revision 1 onboarding 증빙이다. 재설치·다른 Rollout UID·기존 baseline 교체를 일상적인 재실행으로 처리하지 않고 원본을 보관한 뒤 승인된 재기준 설정 절차를 거친다. SLO 성공 측정값은 capture 시각 기준 30분 이내여야 하며 오래된 결과를 다시 찍어 최신 runtime 증빙으로 만들지 않는다.
 
 전체 환경 teardown 수집기는 단일 AWS 계정의 ownership inventory 계약을 유지한다. **분리된 Dev/Prod 계정 전체 삭제 도구로 사용할 수 없다.** 기존 guard를 해제하지 말고 계정별 Terraform/state·provider-secret 보존 계획을 따로 검토한다. 일반 배포·승격의 cross-account ECR 지원과 전체 teardown의 계정 범위는 별개의 계약이다.
