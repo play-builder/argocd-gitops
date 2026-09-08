@@ -33,43 +33,19 @@ if [[ "$base_image_identity" == "$current_image_identity" && "$new_images" == '[
   exit 0
 fi
 
-evidence="$repository_root/envs/prod/promotion-evidence.yaml"
-[[ -f "$evidence" && ! -L "$evidence" ]] ||
-  fail "changed Prod image identity requires canonical non-symlink DEV_READY evidence"
-
-physical_parent=$(cd -- "$(dirname -- "$evidence")" && pwd -P) ||
-  fail "cannot resolve canonical DEV_READY parent"
-[[ "$physical_parent/$(basename -- "$evidence")" == "$evidence" ]] ||
-  fail "canonical DEV_READY evidence escaped the repository"
-
-yq -o=json '.' "$evidence" | jq -e --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -f "$script_dir/lib/dev-ready.jq" >/dev/null || fail "DEV_READY schema, identity, or expiry is invalid"
-
-evidence_repository=$(yq -er '.image.repository' "$evidence") ||
-  fail "DEV_READY image repository is missing"
-evidence_digest=$(yq -er '.image.indexDigest' "$evidence") ||
-  fail "DEV_READY image digest is missing"
-application_repository=$(yq -er '.image.repository' "$values") ||
-  fail "Prod application repository is missing"
-application_digest=$(yq -er '.image.digest' "$values") ||
-  fail "Prod application digest is missing"
-migration_repository=$(yq -er '.database.migrationImage.repository' "$values") ||
-  fail "Prod migration repository is missing"
-migration_digest=$(yq -er '.database.migrationImage.digest' "$values") ||
-  fail "Prod migration digest is missing"
-
-evidence_repository_name=${evidence_repository#*/}
-[[ "$evidence_repository" =~ ^[0-9]{12}\.dkr\.ecr\.(ap-northeast-2|us-east-1)\.amazonaws\.com/[a-z0-9]+([._/-][a-z0-9]+)*$ &&
-   ${#evidence_repository_name} -ge 2 && ${#evidence_repository_name} -le 256 ]] ||
-  fail "DEV_READY repository is not canonical ECR identity"
-[[ "$evidence_digest" =~ ^sha256:[0-9a-f]{64}$ ]] ||
-  fail "DEV_READY digest is not canonical"
-[[ "$application_repository" == "$evidence_repository" && "$migration_repository" == "$evidence_repository" ]] ||
-  fail "Prod application and migration repositories must match current DEV_READY"
-[[ "$application_digest" == "$evidence_digest" && "$migration_digest" == "$evidence_digest" ]] ||
-  fail "Prod application and migration digests must match current DEV_READY"
-
-jq -e --arg image "$evidence_repository@$evidence_digest" 'length > 0 and all(.[]; .[4] == $image)' \
-  <<<"$current_rendered" >/dev/null || fail "rendered Prod workload/migration image differs from DEV_READY"
-
-echo "PASS: changed Prod image identity matches current canonical DEV_READY evidence."
+# Compare with Dev on the PR base, not a Dev value modified in this same PR.
+dev_identity=$(git -C "$repository_root" show "${base_sha}:envs/dev/values.yaml" |
+  yq -o=json -I=0 "$image_identity_query" -) || fail "cannot read approved Dev image identity"
+repository=$(jq -er '.[0]' <<<"$dev_identity")
+digest=$(jq -er '.[1]' <<<"$dev_identity")
+repository_name=${repository#*/}
+[[ "$repository" =~ ^[0-9]{12}\.dkr\.ecr\.(ap-northeast-2|us-east-1)\.amazonaws\.com/[a-z0-9]+([._/-][a-z0-9]+)*$ &&
+   ${#repository_name} -ge 2 && ${#repository_name} -le 256 ]] || fail "Dev must use an explicit ECR repository"
+[[ "$digest" =~ ^sha256:[0-9a-f]{64}$ && "$digest" != sha256:0000000000000000000000000000000000000000000000000000000000000000 ]] ||
+  fail "Dev must use a real immutable image digest"
+jq -e '.[0] == .[2] and .[1] == .[3]' <<<"$dev_identity" >/dev/null ||
+  fail "Dev application and migration images must match"
+[[ "$current_image_identity" == "$dev_identity" ]] || fail "Prod must promote the image already committed to Dev"
+jq -e --arg image "$repository@$digest" 'length > 0 and all(.[]; .[4] == $image)' \
+  <<<"$current_rendered" >/dev/null || fail "rendered Prod image differs from approved Dev"
+echo "PASS: Prod image matches reviewed Dev; environment approval and runtime observation remain required."

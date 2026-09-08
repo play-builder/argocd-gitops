@@ -1,7 +1,0 @@
-database:
-  migration:
-    phase: contract
-    target: 003_contract_product_name
-    rollbackCandidates:
-      enabled: false
-      configMapName: ""

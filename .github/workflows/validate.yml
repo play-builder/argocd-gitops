@@ -6,11 +6,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      application_sha:
-        description: Optional full mini-commerce commit SHA for cross-repository verification
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -26,38 +21,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Validate optional application revision
-        if: github.event_name == 'workflow_dispatch' && inputs.application_sha != ''
-        env:
-          APPLICATION_SHA: ${{ inputs.application_sha }}
-        run: |
-          [[ "$APPLICATION_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Full lowercase application SHA required' >&2; exit 1; }
-
-      - name: Checkout exact application revision
-        if: github.event_name == 'workflow_dispatch' && inputs.application_sha != ''
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: play-builder/mini-commerce
-          ref: ${{ inputs.application_sha }}
-          path: .cross-repo/mini-commerce
-          persist-credentials: false
-          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
-
-      - name: Enable exact application verifier binding
-        if: github.event_name == 'workflow_dispatch' && inputs.application_sha != ''
-        env:
-          APPLICATION_SHA: ${{ inputs.application_sha }}
-        run: |
-          echo "CROSS_REPO_CONTRACT_MODE=exact-sha" >> "$GITHUB_ENV"
-          echo "SAMPLE_APP_REPO_ROOT=$GITHUB_WORKSPACE/.cross-repo/mini-commerce" >> "$GITHUB_ENV"
-          echo "SAMPLE_APP_EXPECTED_SHA=$APPLICATION_SHA" >> "$GITHUB_ENV"
-
-      - name: Install required host tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ripgrep
-          rg --version
 
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
@@ -75,53 +38,11 @@ jobs:
           echo "$RUNNER_TEMP/yq-bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/yq-bin/yq" --version | grep -Fq 'v4.53.6'
 
-      - name: Assert compatibility pins
-        run: |
-          yq -e '.tooling.yq == "4.53.6" and .tooling.kubectl == "1.36.0" and .delivery.runtime.name == "mini-commerce" and .delivery.runtime.repositoryId == 1352247019 and .delivery.helmCli == "4.2.4" and .delivery.argoCdController == "3.5.2" and .delivery.argoRolloutsController == "1.9.1" and .delivery.externalSecretsChart == "2.10.0" and .delivery.gatewayApi == "1.6.0"' versions.lock.yaml
-
-      - name: Bind changed Prod values to current DEV_READY
+      - name: Bind changed Prod values to approved Dev image
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash scripts/verify-prod-promotion-binding.sh "$BASE_SHA"
-
-      - name: Lint Helm chart
-        run: |
-          helm lint charts/mini-commerce \
-            --values envs/dev/values.yaml \
-            --set-string image.repository=example.invalid/mini-commerce \
-            --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          helm lint charts/mini-commerce \
-            --values envs/prod/values.yaml \
-            --set-string image.repository=example.invalid/mini-commerce \
-            --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-      - name: Render Dev and Prod Helm releases
-        run: |
-          helm template mini-commerce charts/mini-commerce \
-            --values envs/dev/values.yaml \
-            --set-string image.repository=example.invalid/mini-commerce \
-            --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-            > /tmp/mini-commerce-dev.yaml
-          helm template mini-commerce charts/mini-commerce \
-            --values envs/prod/values.yaml \
-            --set-string image.repository=example.invalid/mini-commerce \
-            --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-            > /tmp/mini-commerce-prod.yaml
-
-      - name: Render Argo CD bootstrap resources
-        run: |
-          kubectl kustomize argocd/bootstrap/dev > /tmp/argocd-dev.yaml
-          kubectl kustomize argocd/bootstrap/prod > /tmp/argocd-prod.yaml
-
-      - name: Verify External Secrets Chart authorization
-        run: |
-          helm repo add external-secrets https://charts.external-secrets.io
-          helm template external-secrets external-secrets/external-secrets --version 2.10.0 \
-            --namespace external-secrets --set installCRDs=true --set serviceMonitor.enabled=false \
-            > "$RUNNER_TEMP/external-secrets-2.10.0.yaml"
-          EXTERNAL_SECRETS_RENDERED_MANIFEST="$RUNNER_TEMP/external-secrets-2.10.0.yaml" \
-            bash tests/bootstrap-contract.sh --case external-secrets-project
 
       - name: Install pinned kubeconform
         run: |
@@ -130,36 +51,10 @@ jobs:
           export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
           echo "$RUNNER_TEMP/schema-bin" >> "$GITHUB_PATH"
 
-      - name: Install locked Istio, CUE and Prometheus validation tools
-        run: |
-          mkdir -p "$RUNNER_TEMP/istio-bin"
-          curl -fsSL "$(yq -r '.tooling.istioctl.linuxAmd64Url' versions.lock.yaml)" -o "$RUNNER_TEMP/istioctl.tgz"
-          printf '%s  %s\n' "$(yq -r '.tooling.istioctl.linuxAmd64Sha256' versions.lock.yaml)" "$RUNNER_TEMP/istioctl.tgz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/istioctl.tgz" -C "$RUNNER_TEMP/istio-bin"
-          export PATH="$RUNNER_TEMP/istio-bin:$PATH"
-          export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
-          echo "$RUNNER_TEMP/istio-bin" >> "$GITHUB_PATH"
-          curl -fsSL "$(yq -r '.tooling.cue.linuxAmd64Url' versions.lock.yaml)" -o "$RUNNER_TEMP/cue.tgz"
-          printf '%s  %s\n' "$(yq -r '.tooling.cue.linuxAmd64Sha256' versions.lock.yaml)" "$RUNNER_TEMP/cue.tgz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/cue.tgz" -C "$RUNNER_TEMP/istio-bin" cue
-          curl -fsSL https://github.com/prometheus/prometheus/releases/download/v3.14.0/prometheus-3.14.0.linux-amd64.tar.gz -o "$RUNNER_TEMP/prometheus.tgz"
-          printf '%s  %s\n' f665c6da19eb7ba399c915d30c7d9793c9b417bf8a749b504bc470678631478d "$RUNNER_TEMP/prometheus.tgz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/prometheus.tgz" -C "$RUNNER_TEMP/istio-bin" --strip-components=1 prometheus-3.14.0.linux-amd64/promtool
-
-      - name: Validate isolated operation charts
-        run: |
-          helm lint charts/mini-commerce-db-dev
-          helm lint charts/mini-commerce-recovery --set-string snapshotHandle=snap-0123456789abcdef0
-          helm template mini-commerce charts/mini-commerce-db-dev >/dev/null
-          helm template mini-commerce charts/mini-commerce-recovery --set-string snapshotHandle=snap-0123456789abcdef0 >/dev/null
-
-      - name: Verify repository governance contract
-        run: bash tests/governance-contract.sh docs/github-ruleset.example.json
-
-      - name: Run complete static delivery contracts
+      - name: Validate rendered manifests and promotion policy
         env:
           CHART_CACHE_DIR: ${{ runner.temp }}/locked-charts
-        run: bash tests/test-all.sh
+        run: make validate test
 
       - name: Package chart
         run: scripts/package-chart.sh "$RUNNER_TEMP/chart-package"

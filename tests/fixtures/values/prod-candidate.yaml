@@ -1,6 +1,0 @@
-image:
-  digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-database:
-  enabled: true
-  migrationImage:
-    digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc

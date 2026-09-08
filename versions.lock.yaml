@@ -2,16 +2,6 @@ schemaVersion: 1
 verifiedAt: "2026-09-03"
 
 tooling:
-  cue:
-    version: 0.12.1
-    darwinArm64Url: https://github.com/cue-lang/cue/releases/download/v0.12.1/cue_v0.12.1_darwin_arm64.tar.gz
-    darwinArm64Sha256: 3eb7180adc231503b519cfa0934c0f856a2ad850d84ad3f6988bf86f6b2ace9f
-    linuxAmd64Url: https://github.com/cue-lang/cue/releases/download/v0.12.1/cue_v0.12.1_linux_amd64.tar.gz
-    linuxAmd64Sha256: 40ef0a84594494c953945fb297842d3168c92170694928c9565cc0b581235ac5
-  istioctl:
-    version: 1.31.0
-    linuxAmd64Url: https://github.com/istio/istio/releases/download/1.31.0/istioctl-1.31.0-linux-amd64.tar.gz
-    linuxAmd64Sha256: ef3f4368122c9008d344b7c824e563dae6fec9078eb2b90e87836063887d15a8
   yq: "4.53.6"
   kubectl: "1.36.0"
   setupKubectlAction: "5.1.0"

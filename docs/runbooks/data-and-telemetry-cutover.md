@@ -67,31 +67,10 @@ destination_rollout_hash from the Rollouts pod label. Runtime validation must sh
 both istio_requests_total and istio_request_duration_milliseconds_bucket before canary promotion.
 No default Istio hash label is assumed. See [Telemetry customization](https://istio.io/latest/docs/tasks/observability/metrics/telemetry-api/).
 
-## Dev snapshot phases and isolated restore
+## Dev snapshot과 격리 복구
 
-The snapshot is owned by mini-commerce-db-dev, not the main app chart.
-For each approved A1/A2/A3 commit select the same phase overlay in both owners:
-the mini-commerce-dev generator phaseValuesFile and the manual DB Application
-spec.source.helm.valueFiles (a single ../../envs/dev/PHASE-values.yaml entry).
-Keep the main Application's ownership overlay last. A1 uses snapshot-maintenance-values.yaml
-with writersStopped=true and DB replicas=1; capture the checksum. A2 changes only replicas
-to 0 in that same file, then manually sync the DB owner and observe clean shutdown/detach.
-A3 selects snapshot-capture-values.yaml in both owners; the DB chart creates the retained
-VolumeSnapshot only with writers stopped and replicas=0. Never switch A3 before A2 proof.
+핵심 요약: 선택적 snapshot/recovery chart는 앱 배포와 독립적으로 승인·실행한다.
 
-`capture-snapshot-evidence.sh prepare|capture|ready` verifies both Application owners at
-the same reviewed SHA and phase, then binds actual PVC/PV/content identities and EBS handle.
-The ready receipt is valid for at most one hour. `render-recovery-values.sh` writes values
-only for charts/mini-commerce-recovery in app-recovery; normal reader-role reuse and guessed
-handles are rejected. That inspection Job has no database/secret-reader identity. Restore
-does not authorize database promotion or writes to the source PVC.
+writer 정지, volume detach, `VolumeSnapshot.status.readyToUse`, 실제 EBS snapshot과 원본 volume identity를 확인한다. 확인한 snapshotHandle과 recovery 전용 IAM role을 `envs/dev/recovery-values.yaml`에 설정하고 별도 namespace에서 복구한다. metadata 검사 후 실제 DB 연결·row/constraint 검사도 수행한다.
 
-## Immutable incident evidence retries
-
-Canonical baseline/SLO/rollback source and .platform.json companion are published as a
-write-once pair after incident/DR validation. Identical byte retries are idempotent; changed
-captures (including a new observedAt) are rejected without altering the existing valid pair.
-Archive both files together under approved evidence retention before a fresh canonical capture.
-A failed first publication removes only its own partial output; a crash may leave a
-.publish-lock or orphan companion. Inspect and quarantine that incomplete capture under
-operator approval before retrying; never overwrite a valid source or infer runtime grade.
+자동 snapshot receipt와 incident/DR companion 조립 단계는 없다. CloudWatch·Argo·AWS의 실제 결과와 승인 기록을 보관한다.
