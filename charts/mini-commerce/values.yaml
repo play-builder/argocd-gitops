@@ -29,9 +29,7 @@ serviceAccount:
   name: mini-commerce
 
 app:
-  readyDelayMs: "0"
-  shutdownDelayMs: "5000"
-  secretKeys: "DB_HOST,DB_PASSWORD,API_KEY"
+  shutdownDeadlineMs: 30000
 
 resources:
   requests:
@@ -41,7 +39,7 @@ resources:
     cpu: 500m
     memory: 256Mi
 
-terminationGracePeriodSeconds: 30
+terminationGracePeriodSeconds: 60
 
 probes:
   liveness:

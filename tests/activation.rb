@@ -4,6 +4,38 @@ require 'fileutils'
 require 'yaml'
 
 root = File.expand_path('..', __dir__)
+
+# Check the rendered Pod contract, including options that were previously ignored
+# by the application. Image build metadata must remain owned by the image.
+%w[dev prod].each do |environment|
+  command = ['helm', 'template', 'mini-commerce', File.join(root, 'charts/mini-commerce'),
+             '-f', File.join(root, "envs/#{environment}/values.yaml")]
+  output, status = Open3.capture2e(*command)
+  raise "runtime rendering failed: #{output}" unless status.success?
+  workload = YAML.load_stream(output).compact.find { |doc| %w[Deployment Rollout].include?(doc['kind']) }
+  pod = workload.dig('spec', 'template', 'spec')
+  env = pod.fetch('containers').find { |item| item['name'] == 'mini-commerce' }.fetch('env').to_h { |item| [item['name'], item['value']] }
+  raise 'trace export must be explicitly disabled' unless env['OTEL_TRACES_EXPORTER'] == 'none'
+  raise 'shutdown budget must leave Pod grace time' unless env['SHUTDOWN_DEADLINE_MS'] == '30000' && pod['terminationGracePeriodSeconds'] > 30
+  raise 'image metadata or removed runtime options overridden' unless (env.keys & %w[APP_VERSION READY_DELAY_MS SHUTDOWN_DELAY_MS SECRET_KEYS NODE_NAME]).empty?
+  [
+    ['--set', 'terminationGracePeriodSeconds=30'],
+    ['--set', 'app.shutdownDeadlineMs=0'],
+    ['--set', 'app.shutdownDelayMs=5000']
+  ].each do |invalid|
+    _output, status = Open3.capture2e(*command, *invalid)
+    raise "invalid runtime settings accepted: #{invalid}" if status.success?
+  end
+  output, status = Open3.capture2e(*command,
+    '--set', 'telemetry.enabled=true,telemetry.platformXrayEnabled=true',
+    '--set-string', 'telemetry.otlpEndpoint=http://adot-collector.opentelemetry-operator-system.svc.cluster.local:4318/v1/traces',
+    '--set-string', 'telemetry.otlpTracesPath=/v1/traces')
+  raise "enabled telemetry rendering failed: #{output}" unless status.success?
+  workload = YAML.load_stream(output).compact.find { |doc| %w[Deployment Rollout].include?(doc['kind']) }
+  env = workload.dig('spec', 'template', 'spec', 'containers').find { |item| item['name'] == 'mini-commerce' }.fetch('env')
+  raise 'enabled telemetry must select OTLP' unless env.any? { |item| item['name'] == 'OTEL_TRACES_EXPORTER' && item['value'] == 'otlp' }
+end
+
 Dir.mktmpdir('activation-inputs-') do |tmp|
   %w[argocd platform charts envs scripts .github].each { |name| FileUtils.cp_r(File.join(root, name), tmp) }
   run = lambda { Open3.capture2e('ruby', File.join(tmp, 'scripts/validate-activation.rb'), 'prod') }
