@@ -2,6 +2,15 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shutdownDeadlineMs"],
+      "properties": {
+        "shutdownDeadlineMs": {"type": "integer", "minimum": 1, "maximum": 600000}
+      }
+    },
+    "terminationGracePeriodSeconds": {"type": "integer", "minimum": 1},
     "platformCleanup": {
       "type": "object",
       "properties": {"workloadsDisabled": {"type": "boolean"}}

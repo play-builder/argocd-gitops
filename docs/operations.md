@@ -15,6 +15,19 @@
 `docs/github-ruleset.example.json`을 실제 조직의 reviewer와 `validate` required check로 적용한다. GitHub App에 ruleset bypass를 주지 않는다. Prod는 승인자와 수동 sync를 유지한다.
 기존 리소스 인계는 [플랫폼 소유권](../argocd/bootstrap/PLATFORM-OWNERSHIP-HANDOFF.md)을 먼저 따른다.
 
+## 앱 실행 설정
+
+핵심 요약: chart values는 앱이 실제 읽는 환경 변수와 연결된다. 이미지 버전은 CI가 이미지에 기록한 값을 유지한다.
+
+| values | 앱·Pod 동작 |
+| --- | --- |
+| `app.shutdownDeadlineMs: 30000` | `SHUTDOWN_DEADLINE_MS=30000`; 앱이 연결·DB·telemetry를 정리하는 최대 시간 |
+| `terminationGracePeriodSeconds: 60` | 앱 deadline보다 길어야 하며 같거나 짧으면 렌더링 실패 |
+| `telemetry.enabled: false` | `OTEL_TRACES_EXPORTER=none`; trace 전송 비활성화 |
+| `telemetry.enabled: true` | `OTEL_TRACES_EXPORTER=otlp`; 검증된 cluster-local OTLP endpoint 필요 |
+
+`APP_VERSION`은 이미지 build metadata를 사용한다. `Chart.yaml`의 `appVersion`으로 덮어쓰지 않는다. 제거된 `app.readyDelayMs`, `app.shutdownDelayMs`, `app.secretKeys`는 현재 앱에서 사용하지 않던 입력이다. 기존 private values에서도 제거하며, 종료 시간 변경은 `app.shutdownDeadlineMs`로 지정한다. `make test`가 Dev/Prod의 실제 렌더링과 잘못된 입력 거부를 확인한다.
+
 ## 로컬 검증과 최초 배포
 
 핵심 요약: 렌더링 검사 후 실제 입력 검사를 통과시키고, 승인된 SHA를 sync한다.

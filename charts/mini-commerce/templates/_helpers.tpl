@@ -38,10 +38,6 @@ app.kubernetes.io/component: application
 {{- printf "%s@%s" $repository $digest -}}
 {{- end -}}
 
-{{- define "mini-commerce.version" -}}
-{{- .Chart.AppVersion -}}
-{{- end -}}
-
 {{- define "mini-commerce.runtimeSecretName" -}}
 {{- required "externalSecrets.runtime.targetSecretName is required when External Secrets is enabled" .Values.externalSecrets.runtime.targetSecretName -}}
 {{- end -}}
@@ -127,6 +123,9 @@ app.kubernetes.io/component: application
 {{- end -}}
 
 {{- define "mini-commerce.podTemplate" -}}
+{{- if le (mul (int64 .Values.terminationGracePeriodSeconds) 1000) (int64 .Values.app.shutdownDeadlineMs) -}}
+{{- fail "terminationGracePeriodSeconds must exceed app.shutdownDeadlineMs to leave time for Pod termination" -}}
+{{- end -}}
 metadata:
   labels:
     {{- include "mini-commerce.selectorLabels" . | nindent 4 }}
@@ -199,22 +198,14 @@ spec:
           value: {{ .Values.service.publicPort | quote }}
         - name: MANAGEMENT_PORT
           value: {{ .Values.service.managementPort | quote }}
-        - name: APP_VERSION
-          value: {{ include "mini-commerce.version" . | quote }}
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
-        - name: READY_DELAY_MS
-          value: {{ .Values.app.readyDelayMs | quote }}
-        - name: SHUTDOWN_DELAY_MS
-          value: {{ .Values.app.shutdownDelayMs | quote }}
-        - name: SECRET_KEYS
-          value: {{ .Values.app.secretKeys | quote }}
+        - name: SHUTDOWN_DEADLINE_MS
+          value: {{ .Values.app.shutdownDeadlineMs | quote }}
+        - name: OTEL_TRACES_EXPORTER
+          value: {{ ternary "otlp" "none" .Values.telemetry.enabled | quote }}
         - name: DATABASE_ENABLED
           value: {{ ternary "true" "false" .Values.database.enabled | quote }}
         {{- if .Values.telemetry.enabled }}
