@@ -1,7 +1,11 @@
+# Root-owned audit/warn stage of the workload security policy. The enforced (Deny) policy with the
+# same rules plus hostPath/privileged checks is owned by the mini-commerce-governance Application
+# (platform/security/base/admission.yaml) under the name mini-commerce-workload-security; the two
+# objects must keep distinct names so no cluster-scoped resource has two Argo CD owners.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: mini-commerce-workload-security
+  name: mini-commerce-workload-security-audit
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
@@ -65,11 +69,11 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: mini-commerce-workload-security
+  name: mini-commerce-workload-security-audit
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
-  policyName: mini-commerce-workload-security
+  policyName: mini-commerce-workload-security-audit
   validationActions:
     - Audit
     - Warn
