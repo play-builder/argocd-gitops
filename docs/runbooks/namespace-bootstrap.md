@@ -64,3 +64,15 @@ the final enterprise bootstrap, not a safe in-place Phase-A label migration by i
 If preflight or handoff fails, leave the existing Namespace and applications unchanged.
 Rollback must be a reviewed ownership transfer; deleting the root Namespace is forbidden
 (Prune=false). No runtime handoff or admission test has been performed by local contracts.
+
+The root-owned audit/warn ValidatingAdmissionPolicy and Binding are named
+`mini-commerce-workload-security-audit`; the enforced (Deny) pair named
+`mini-commerce-workload-security` is owned only by the `mini-commerce-governance-{env}`
+Application (`platform/security/base/admission.yaml`). On a cluster that was bootstrapped
+before this split, the root still tracks the enforced name: on Prod sync
+`mini-commerce-governance-prod` first so the enforced objects carry governance tracking
+metadata, then sync the root; on Dev, where the root auto-syncs with prune, sync
+`mini-commerce-governance-dev` immediately after the root sync so the enforced policy is not
+absent for longer than that window. Verify with
+`kubectl get validatingadmissionpolicy,validatingadmissionpolicybinding` that both names exist
+and that the enforced binding's `validationActions` is `[Deny]`.
