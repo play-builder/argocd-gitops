@@ -152,8 +152,7 @@ Prod AnalysisTemplate은 canary hash로 제한한 request-rate, success-rate, p9
 | 검증 | 확정할 수 있는 것 | 확정하지 못하는 것 |
 |---|---|---|
 | Helm·Kustomize·upstream CRD schema | 렌더링, 타입·필드, chart checksum | controller reconcile·webhook 집행 |
-| Promtool·CLI fixtures | PromQL 결과, malformed/stale/foreign evidence 거부 | 실제 AMP label·IAM·접속·시간 지연 |
-| exact-SHA 앱 검사 | 해당 앱 migration verifier와 GitOps 계약 호환 | 실제 PostgreSQL/RDS schema·데이터 |
+| 승격 정책 검사(`tests/promotion.sh`) | PR base의 Dev digest와 Prod 렌더 일치, inline override·우회 경로 거부 | 실제 ECR digest 존재·클러스터 rollout 결과 |
 | activation 입력 검사 | placeholder, ECR identity, hostname·RDS egress 설정 | 인증서 소유·DNS·network route·AWS 권한 |
 | live 승인 gate | 별도 운영자가 기록한 배포·알림·복구 결과 | 실행하지 않은 환경이나 미래 변경 |
 
