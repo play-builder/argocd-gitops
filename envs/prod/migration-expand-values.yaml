@@ -1,0 +1,7 @@
+database:
+  migration:
+    phase: expand
+    target: 002_expand_product_display_name
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""

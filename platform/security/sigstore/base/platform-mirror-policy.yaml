@@ -1,0 +1,76 @@
+{
+  "apiVersion": "policy.sigstore.dev/v1beta1",
+  "kind": "ClusterImagePolicy",
+  "metadata": {
+    "name": "platform-istio-mirror",
+    "annotations": {
+      "argocd.argoproj.io/sync-wave": "-11"
+    }
+  },
+  "spec": {
+    "images": [
+      {
+        "glob": "REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR@sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9"
+      },
+      {
+        "glob": "REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR@sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17"
+      }
+    ],
+    "authorities": [
+      {
+        "name": "github",
+        "signatureFormat": "bundle",
+        "keyless": {
+          "trustRootRef": "github",
+          "insecureIgnoreSCT": true,
+          "url": "https://fulcio.githubapp.com",
+          "identities": [
+            {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": "https://github.com/play-builder/EKS-infra/.github/workflows/publish-platform-images.yml@refs/heads/main"
+            }
+          ]
+        },
+        "rfc3161timestamp": {
+          "trustRootRef": "github"
+        },
+        "attestations": [
+          {
+            "name": "require-platform-mirror",
+            "predicateType": "https://github.com/play-builder/EKS-infra/attestations/platform.image-mirror/v1",
+            "policy": {
+              "type": "cue",
+              "data": "\"_type\"!: \"https://in-toto.io/Statement/v1\"\npredicateType!: \"https://github.com/play-builder/EKS-infra/attestations/platform.image-mirror/v1\"\nsubject!: [{name!: \"REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR\", digest!: {sha256!: string}}]\npredicate!: {\n  schemaVersion!: \"platform.image-mirror/v1\"\n  publisher!: {\n    repositoryId!: \"405337777\"\n    workflow!: \"https://github.com/play-builder/EKS-infra/.github/workflows/publish-platform-images.yml@refs/heads/main\"\n  }\n}\n({\n  subject!: [{digest!: {sha256!: \"43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"}}]\n  predicate!: {\n    version!: \"1.30.4\"\n    upstreamReference!: \"registry.istio.io/release/proxyv2@sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"\n    upstreamDigest!: \"sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"\n    mirroredDigest!: \"sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"\n  }\n} | {\n  subject!: [{digest!: {sha256!: \"e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"}}]\n  predicate!: {\n    version!: \"1.31.0\"\n    upstreamReference!: \"docker.io/istio/proxyv2@sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"\n    upstreamDigest!: \"sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"\n    mirroredDigest!: \"sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"\n  }\n})\n"
+            }
+          }
+        ]
+      },
+      {
+        "name": "public-good",
+        "signatureFormat": "bundle",
+        "keyless": {
+          "url": "https://fulcio.sigstore.dev",
+          "identities": [
+            {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": "https://github.com/play-builder/EKS-infra/.github/workflows/publish-platform-images.yml@refs/heads/main"
+            }
+          ]
+        },
+        "ctlog": {
+          "url": "https://rekor.sigstore.dev"
+        },
+        "attestations": [
+          {
+            "name": "require-platform-mirror",
+            "predicateType": "https://github.com/play-builder/EKS-infra/attestations/platform.image-mirror/v1",
+            "policy": {
+              "type": "cue",
+              "data": "\"_type\"!: \"https://in-toto.io/Statement/v1\"\npredicateType!: \"https://github.com/play-builder/EKS-infra/attestations/platform.image-mirror/v1\"\nsubject!: [{name!: \"REPLACE_FROM_EKS_PLATFORM_ISTIO_PROXY_ECR\", digest!: {sha256!: string}}]\npredicate!: {\n  schemaVersion!: \"platform.image-mirror/v1\"\n  publisher!: {\n    repositoryId!: \"405337777\"\n    workflow!: \"https://github.com/play-builder/EKS-infra/.github/workflows/publish-platform-images.yml@refs/heads/main\"\n  }\n}\n({\n  subject!: [{digest!: {sha256!: \"43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"}}]\n  predicate!: {\n    version!: \"1.30.4\"\n    upstreamReference!: \"registry.istio.io/release/proxyv2@sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"\n    upstreamDigest!: \"sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"\n    mirroredDigest!: \"sha256:43b6aeab7428470d3d0ea6b6f0bc217e5b36df2b279bba337643df48590226d9\"\n  }\n} | {\n  subject!: [{digest!: {sha256!: \"e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"}}]\n  predicate!: {\n    version!: \"1.31.0\"\n    upstreamReference!: \"docker.io/istio/proxyv2@sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"\n    upstreamDigest!: \"sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"\n    mirroredDigest!: \"sha256:e3b973cce2442c2883188d8cf839dff8a21075fab0e00e5079df6ef28c9caf17\"\n  }\n})\n"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

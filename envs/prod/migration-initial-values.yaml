@@ -1,0 +1,8 @@
+# Legacy-v1-compatible artifact or isolated migration only; current V2-prime requires expand/002.
+database:
+  migration:
+    phase: initial
+    target: 001_initial_commerce
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""

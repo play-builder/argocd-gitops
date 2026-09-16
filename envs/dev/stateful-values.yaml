@@ -1,0 +1,3 @@
+# Enables app clients after the separate Dev DB owner and expand/002 migration are ready.
+database:
+  enabled: false

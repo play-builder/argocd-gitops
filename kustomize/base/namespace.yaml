@@ -1,8 +1,0 @@
-# Namespace - Logical isolation boundary
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: app
-  labels:
-    app.kubernetes.io/name: app
-    pod-security.kubernetes.io/enforce: restricted

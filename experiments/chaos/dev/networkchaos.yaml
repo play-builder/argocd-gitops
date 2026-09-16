@@ -1,0 +1,16 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: mini-commerce-dev-delay
+  namespace: app-dev
+  labels: {operations.mini-commerce.io/cleanup: manual-dev}
+spec:
+  action: delay
+  mode: one
+  duration: 5m
+  delay: {latency: 100ms, correlation: '0', jitter: 10ms}
+  selector:
+    namespaces: [app-dev]
+    labelSelectors:
+      app.kubernetes.io/name: mini-commerce
+      app.kubernetes.io/component: application

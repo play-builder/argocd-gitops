@@ -1,0 +1,60 @@
+name: validate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v4.2.4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+        with:
+          version: v1.36.0
+
+      - name: Install exact yq
+        run: |
+          GOBIN="$RUNNER_TEMP/yq-bin" go install github.com/mikefarah/yq/v4@v4.53.6
+          echo "$RUNNER_TEMP/yq-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/yq-bin/yq" --version | grep -Fq 'v4.53.6'
+
+      - name: Bind changed Prod values to approved Dev image
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/verify-prod-promotion-binding.sh "$BASE_SHA"
+
+      - name: Install pinned kubeconform
+        run: |
+          GOBIN="$RUNNER_TEMP/schema-bin" go install github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0
+          export PATH="$RUNNER_TEMP/schema-bin:$PATH"
+          export CHART_CACHE_DIR="$RUNNER_TEMP/locked-charts"
+          echo "$RUNNER_TEMP/schema-bin" >> "$GITHUB_PATH"
+
+      - name: Validate rendered manifests and promotion policy
+        env:
+          CHART_CACHE_DIR: ${{ runner.temp }}/locked-charts
+        run: make validate test
+
+      - name: Package chart
+        run: scripts/package-chart.sh "$RUNNER_TEMP/chart-package"

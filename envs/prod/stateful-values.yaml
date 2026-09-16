@@ -1,0 +1,3 @@
+# Enables external RDS clients only after TLS/secrets handoff and expand/002 migration.
+database:
+  enabled: false

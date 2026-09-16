@@ -1,0 +1,177 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-bootstrap-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+spec:
+  description: Bootstrap and Phase A platform handoff resources in the dev cluster
+  sourceRepos:
+  # Git signing key distribution is EKS-owned; HEAD precedes strict/seal migration.
+  - https://github.com/play-builder/argocd-gitops.git
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/play-builder/argocd-gitops.git}]
+          gpg: {mode: head, keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]}
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  - server: https://kubernetes.default.svc
+    namespace: cosign-system
+  clusterResourceWhitelist:
+  - group: policy.sigstore.dev
+    kind: ClusterImagePolicy
+  - group: policy.sigstore.dev
+    kind: TrustRoot
+  - group: ''
+    kind: Namespace
+  - group: admissionregistration.k8s.io
+    kind: ValidatingAdmissionPolicy
+  - group: admissionregistration.k8s.io
+    kind: ValidatingAdmissionPolicyBinding
+  namespaceResourceWhitelist:
+  - group: argoproj.io
+    kind: AppProject
+  - group: argoproj.io
+    kind: Application
+  - group: argoproj.io
+    kind: ApplicationSet
+  orphanedResources:
+    warn: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mini-commerce-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  description: Platform application resources in app-dev and app-recovery only
+  sourceRepos:
+  - https://github.com/play-builder/argocd-gitops.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: app-dev
+  - server: https://kubernetes.default.svc
+    namespace: app-recovery
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: gateway.networking.k8s.io
+      kind: GatewayClass
+    - group: snapshot.storage.k8s.io
+      kind: VolumeSnapshotContent
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: Service
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: batch
+      kind: Job
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: policy
+      kind: PodDisruptionBudget
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: external-secrets.io
+      kind: SecretStore
+    - group: external-secrets.io
+      kind: ExternalSecret
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+    - group: gateway.k8s.aws
+      kind: TargetGroupConfiguration
+    - group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+    - group: snapshot.storage.k8s.io
+      kind: VolumeSnapshot
+    - group: chaos-mesh.org
+      kind: PodChaos
+    - group: chaos-mesh.org
+      kind: NetworkChaos
+    - group: argoproj.io
+      kind: Rollout
+    - group: argoproj.io
+      kind: AnalysisTemplate
+  orphanedResources:
+    warn: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  sourceIntegrity:
+    git:
+      policies:
+        - repos: [{url: https://github.com/play-builder/argocd-gitops.git}]
+          gpg:
+            mode: head
+            keys: [REPLACE_WITH_APPROVED_GPG_KEY_ID]
+  description: Mini Commerce namespaced workload resources; legacy ownership remains
+    in mini-commerce-dev
+  sourceRepos:
+  - https://github.com/play-builder/argocd-gitops.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: app-dev
+  - server: https://kubernetes.default.svc
+    namespace: app-recovery
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: Service
+  - group: apps
+    kind: Deployment
+  - group: batch
+    kind: Job
+  - group: autoscaling
+    kind: HorizontalPodAutoscaler
+  - group: policy
+    kind: PodDisruptionBudget
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: external-secrets.io
+    kind: ExternalSecret
+  - group: networking.istio.io
+    kind: VirtualService
+  - group: telemetry.istio.io
+    kind: Telemetry
+  - group: ''
+    kind: ConfigMap
+  - group: argoproj.io
+    kind: Rollout
+  - group: argoproj.io
+    kind: AnalysisTemplate
+  orphanedResources:
+    warn: true
+  roles:
+  - name: developer
+    description: Read and sync Dev applications without delete permission
+    groups:
+    - playbuilder:dev-developers
+    policies:
+    - p, proj:platform-dev:developer, applications, get, platform-dev/*, allow
+    - p, proj:platform-dev:developer, applications, sync, platform-dev/*, allow
+    - p, proj:platform-dev:developer, applications, action/argoproj.io/Rollout/promote,
+      platform-dev/*, allow

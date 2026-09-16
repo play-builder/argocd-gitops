@@ -1,0 +1,58 @@
+environment: dev
+
+namespace:
+  name: app-dev
+  labels:
+    gateway-access: "true"
+    environment: dev
+
+image:
+  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+database:
+  enabled: false
+  migrationImage:
+    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+workload:
+  kind: Deployment
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: false
+
+externalSecrets:
+  enabled: true
+  awsRegion: "REPLACE_ME_REGION"
+  readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/dev-REPLACE_ME_PROJECT-external-secrets-reader-role"
+  runtime:
+    remoteSecretName: "REPLACE_FROM_EKS_dev_mini_commerce_secrets_sources_runtime_sourceArn"
+    targetSecretName: mini-commerce-runtime
+  database:
+    remoteSecretName: "REPLACE_FROM_EKS_dev_mini_commerce_secrets_sources_database_sourceArn"
+    targetSecretName: mini-commerce-database
+  migration:
+    remoteSecretName: "REPLACE_FROM_EKS_dev_mini_commerce_secrets_sources_migration_sourceArn"
+    targetSecretName: mini-commerce-migration
+
+routing:
+  hostname: "mini-commerce.dev.example.com"
+
+rollout:
+  analysis:
+    enabled: false
+
+telemetry:
+  enabled: false
+  platformXrayEnabled: false
+  otlpEndpoint: ""
+  otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""

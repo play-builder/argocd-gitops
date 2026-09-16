@@ -1,0 +1,95 @@
+environment: prod
+
+namespace:
+  name: app-prod
+  labels:
+    gateway-access: "true"
+    environment: prod
+
+image:
+  repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+database:
+  enabled: false
+  migrationImage:
+    repository: "REPLACE_ME_ACCOUNT_ID.dkr.ecr.REPLACE_ME_REGION.amazonaws.com/REPLACE_ME_PROJECT/mini-commerce"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  migration:
+    rollbackCandidates:
+      enabled: false
+      configMapName: ""
+
+workload:
+  kind: Rollout
+
+replicaCount: 3
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 65
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+externalSecrets:
+  enabled: true
+  awsRegion: "REPLACE_ME_REGION"
+  readerRoleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/prod-REPLACE_ME_PROJECT-external-secrets-reader-role"
+  runtime:
+    remoteSecretName: "REPLACE_FROM_EKS_prod_mini_commerce_secrets_sources_runtime_sourceArn"
+    targetSecretName: mini-commerce-runtime
+  database:
+    remoteSecretName: "REPLACE_FROM_EKS_prod_mini_commerce_secrets_sources_database_sourceArn"
+    targetSecretName: mini-commerce-database
+  migration:
+    remoteSecretName: "REPLACE_FROM_EKS_prod_mini_commerce_secrets_sources_migration_sourceArn"
+    targetSecretName: mini-commerce-migration
+
+routing:
+  hostname: "mini-commerce.prod.example.com"
+
+rollout:
+  rollbackWindow:
+    revisions: 2
+  analysis:
+    enabled: true
+    prometheusAddress: "https://aps-workspaces.REPLACE_ME_REGION.amazonaws.com/workspaces/ws-REPLACE_ME"
+    awsRegion: "REPLACE_ME_REGION"
+    interval: 30s
+    count: 5
+    failureLimit: 3
+    consecutiveErrorLimit: 5
+    minimumRequestRate: 0.1
+    successRateThreshold: 99
+  canary:
+    steps:
+      - setWeight: 5
+      - pause:
+          duration: 1m
+      - analysis:
+          templates:
+            - templateName: mini-commerce-success-rate
+          args:
+            - name: latest-hash
+              valueFrom:
+                podTemplateHashValue: Latest
+      - setWeight: 20
+      - pause:
+          duration: 1m
+      - setWeight: 50
+      - pause:
+          duration: 2m
+      - pause: {}
+      - setWeight: 100
+
+telemetry:
+  enabled: false
+  platformXrayEnabled: false
+  otlpEndpoint: ""
+  otlpProtocol: http/protobuf
+  otlpPort: 4318
+  otlpTracesPath: ""

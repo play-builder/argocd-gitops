@@ -1,0 +1,8 @@
+# Populated only by the validated snapshot-ready receipt renderer.
+environment: dev
+namespace: app-recovery
+snapshotHandle: ""
+source:
+  namespace: app-dev
+  pvcName: data-mini-commerce-postgresql-0
+snapshotClassName: mini-commerce-ebs-snapshots

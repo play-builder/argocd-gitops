@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../../bootstrap/dev]
+# First run verify-platform-mirror-activation.rb HANDOFF.json dev --verify-live.
+# It never activates namespaces: operator admission/traffic approval is still required.
+# Explicit opt-in only after controller, TrustRoot and both CIPs are Ready.
+# Final enterprise Namespace is root-owned; complete non-cascading handoff before sync.
+patches:
+  - target: {kind: Namespace, name: app-dev}
+    patch: |-
+      - op: add
+        path: /metadata/labels/policy.sigstore.dev~1include
+        value: "true"

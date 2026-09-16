@@ -1,0 +1,11 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "mini-commerce.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    {{- include "mini-commerce.labels" . | nindent 4 }}
+    {{- toYaml .Values.namespace.labels | nindent 4 }}
+{{- end }}

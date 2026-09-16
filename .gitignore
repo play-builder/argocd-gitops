@@ -19,5 +19,9 @@ Thumbs.db
 # Temp
 tmp/
 *.bak
-scripts
 _BACKUP_SOURCE
+
+# Local captures contain incident/cluster metadata; publish through reviewed storage.
+/evidence/
+/.cross-repo/
+*.tgz

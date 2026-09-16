@@ -1,0 +1,15 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: mini-commerce-dev-pod-failure
+  namespace: app-dev
+  labels: {operations.mini-commerce.io/cleanup: manual-dev}
+spec:
+  action: pod-failure
+  mode: one
+  duration: 5m
+  selector:
+    namespaces: [app-dev]
+    labelSelectors:
+      app.kubernetes.io/name: mini-commerce
+      app.kubernetes.io/component: application

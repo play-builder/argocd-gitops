@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shutdownDeadlineMs"],
+      "properties": {
+        "shutdownDeadlineMs": {"type": "integer", "minimum": 1, "maximum": 600000}
+      }
+    },
+    "terminationGracePeriodSeconds": {"type": "integer", "minimum": 1},
+    "platformCleanup": {
+      "type": "object",
+      "properties": {"workloadsDisabled": {"type": "boolean"}}
+    },
+    "maintenance": {
+      "type": "object",
+      "properties": {"writersStopped": {"type": "boolean"}}
+    },
+    "namespace": {
+      "type": "object",
+      "properties": {"create": {"type": "boolean"}}
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "allowedCidrs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "networkPolicy": false,
+    "rollout": {
+      "type": "object",
+      "properties": {
+        "canary": {
+          "type": "object",
+          "properties": {"manualPromotion": false}
+        }
+      }
+    }
+  }
+}

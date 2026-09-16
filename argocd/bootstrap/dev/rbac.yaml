@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mini-commerce-dev
+  namespace: argocd
+spec:
+  roles:
+    - name: developer
+      description: Read and sync Dev applications without delete permission
+      groups:
+        - playbuilder:dev-developers
+      policies:
+        - p, proj:mini-commerce-dev:developer, applications, get, mini-commerce-dev/*, allow
+        - p, proj:mini-commerce-dev:developer, applications, sync, mini-commerce-dev/*, allow
+        - p, proj:mini-commerce-dev:developer, applications, action/argoproj.io/Rollout/promote, mini-commerce-dev/*, allow
