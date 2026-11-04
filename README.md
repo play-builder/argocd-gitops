@@ -1,6 +1,6 @@
 # Mini Commerce GitOps
 
-Mini Commerce의 Kubernetes 배포 상태와 운영 정책을 관리하는 저장소다. **Dev는 Deployment와 자동 동기화, Prod는 Rollout과 승인된 수동 동기화**를 사용한다. 애플리케이션 빌드와 AWS 인프라 상태는 각각 `mini-commerce`, `EKS-infra` 저장소가 소유한다.
+Mini Commerce의 Kubernetes 배포 상태와 운영 정책을 관리하는 저장소다. **Dev는 Deployment와 자동 동기화, Prod는 Rollout과 승인된 수동 동기화**를 사용한다. 애플리케이션 빌드와 AWS 인프라 상태는 각각 `mini-commerce`(private), [`EKS-infra`](https://github.com/play-builder/EKS-infra) 저장소가 소유한다.
 
 GitHub 원본은 [play-builder/argocd-gitops](https://github.com/play-builder/argocd-gitops)다. AWS 계정·ARN·인증서·서비스 도메인은 운영자가 실제 환경 출력으로 등록해야 한다. 현재의 미설정 입력을 실제 서비스 설정으로 간주하면 안 된다. 배포 전 검사는 누락된 입력을 출력하고 실패한다.
 
@@ -83,3 +83,11 @@ make package
 Dev 건강 상태·SLO는 승인자가 확인한다. 별도 JSON 증빙 조립이나 증빙 게시 PR은 없다. CI 성공만으로 Dev 배포가 정상이라고 판단하지 않는다. 상세 명령은 [운영 절차](docs/operations.md)에 있다.
 
 [Argo CD 자동 동기화](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)는 Git의 desired state를 감지하므로 앱 CI에 Kubernetes 배포 자격 증명을 넣을 필요가 없다.
+
+## 관련 저장소
+
+| 저장소 | 역할 |
+|---|---|
+| [EKS-infra](https://github.com/play-builder/EKS-infra) | Network·Dev·Prod 계정의 VPC, EKS, IAM, RDS, ECR을 Terraform으로 관리 |
+| argocd-gitops (이 저장소) | 클러스터에 배포될 desired state — ApplicationSet, Rollouts, Istio, 정책 |
+| mini-commerce (private) | 애플리케이션 코드와 이미지 빌드 CI — 검증된 digest를 이 저장소의 `envs/dev`로 PR |
